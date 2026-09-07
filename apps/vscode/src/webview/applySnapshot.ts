@@ -1,3 +1,4 @@
+import { readStored } from '@/lib/storage';
 import { useConnectionStore } from '@/store/connectionStore';
 import { useLogStore } from '@/store/logStore';
 import { useUiStore } from '@/store/uiStore';
@@ -32,7 +33,12 @@ export function applySnapshot(snapshot: Extract<HostEvent, { type: 'snapshot' }>
     })),
   );
 
-  useUiStore.setState({ language: snapshot.language.startsWith('zh') ? 'zh' : 'en' });
+  // 宿主的 vscode.env.language 只当默认值：用户在工具栏上手动切过之后，那才是他的选择。
+  // 面板一隐藏 webview 就被销毁，每次重新显示都会重放快照 —— 无条件覆盖等于每切一次
+  // 标签页就把用户的选择打回去一次。浏览器版没这毛病，那边语言只在 store 初始化时定一次。
+  if (readStored('lang') === null) {
+    useUiStore.setState({ language: snapshot.language.startsWith('zh') ? 'zh' : 'en' });
+  }
 }
 
 /**
