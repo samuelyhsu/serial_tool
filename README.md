@@ -7,7 +7,7 @@
 | 形态             | 入口                                                                                                                                         |
 | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | **在线版**       | <https://samuelyhsu.github.io/web_serial_tool/> 或 <https://serial.uplume.com/> —— 打开就能用，无需安装                                      |
-| **VS Code 扩展** | [serial-assistant.vsix](https://github.com/samuelyhsu/web_serial_tool/releases/latest/download/serial-assistant.vsix)                        |
+| **VS Code 扩展** | [serial-tool.vsix](https://github.com/samuelyhsu/web_serial_tool/releases/latest/download/serial-tool.vsix)                                  |
 | **离线网页包**   | [web-serial-tool.zip](https://github.com/samuelyhsu/web_serial_tool/releases/latest/download/web-serial-tool.zip) —— 给内网 / 没有外网的机器 |
 
 上面两个链接永远指向最新一次发布（`releases/latest/download/…`）。

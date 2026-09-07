@@ -105,7 +105,7 @@ function collectDependencies() {
   return [...topLevel].sort();
 }
 
-const staging = mkdtempSync(join(tmpdir(), 'serial-assistant-'));
+const staging = mkdtempSync(join(tmpdir(), 'serial-tool-'));
 
 try {
   for (const name of EXTENSION_FILES) {
@@ -136,7 +136,7 @@ try {
   console.log(`已搬入 ${dependencies.length} 个运行时依赖：`);
   for (const name of dependencies) console.log('  ' + name.split(sep).join('/'));
 
-  const output = join(root, 'serial-assistant.vsix');
+  const output = join(root, 'serial-tool.vsix');
   await createVSIX({
     cwd: staging,
     packagePath: output,

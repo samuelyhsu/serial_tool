@@ -1,7 +1,7 @@
 import type { Messages } from './types';
 
 export const en: Messages = {
-  app: 'Serial Assistant',
+  app: 'Serial Tool',
 
   port: 'Port',
   baud: 'Baud',

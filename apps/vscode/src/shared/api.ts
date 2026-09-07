@@ -7,7 +7,7 @@
  *
  * 取用方式与其他扩展一致：
  * ```ts
- * const api = await vscode.extensions.getExtension('samuelyhsu.web-serial-tool-vscode')?.activate();
+ * const api = await vscode.extensions.getExtension('uplume.serial-tool')?.activate();
  * ```
  */
 

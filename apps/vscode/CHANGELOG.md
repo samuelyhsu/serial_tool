@@ -1,6 +1,6 @@
 # 更新日志 · Changelog
 
-本文件记录「串口助手 · Serial Assistant」扩展的变更。
+本文件记录「Serial Tool」扩展的变更。
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循
 [语义化版本](https://semver.org/lang/zh-CN/)。
 

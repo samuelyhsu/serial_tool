@@ -60,8 +60,8 @@ jobs:
           #  带版本号的是存档，回头能一眼看出某个 release 里到底是哪一版；
           #  不带版本号的是给固定直链用的 —— releases/latest/download/<资产名>
           #  这个 URL 只在资产名不变时才成立，README 的下载按钮就指着它。
-          cp apps/vscode/serial-assistant.vsix "serial-assistant-$VERSION.vsix"
-          cp apps/vscode/serial-assistant.vsix serial-assistant.vsix
+          cp apps/vscode/serial-tool.vsix "serial-tool-$VERSION.vsix"
+          cp apps/vscode/serial-tool.vsix serial-tool.vsix
 
       # 静态网站也打一份可下载的。
       #
@@ -89,8 +89,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release create "$GITHUB_REF_NAME" \
-            "serial-assistant-$VERSION.vsix" \
-            "serial-assistant.vsix" \
+            "serial-tool-$VERSION.vsix" \
+            "serial-tool.vsix" \
             "web-serial-tool-$VERSION.zip" \
             "web-serial-tool.zip" \
             --title "$GITHUB_REF_NAME" \
@@ -104,7 +104,7 @@ jobs:
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
         if: env.VSCE_PAT != ''
-        run: npx --no-install vsce publish --packagePath "serial-assistant-$VERSION.vsix"
+        run: npx --no-install vsce publish --packagePath "serial-tool-$VERSION.vsix"
 
       # Open VSX 是 VSCodium / Cursor / Gitpod 等用的源。
       # 只发 Marketplace 的话，那些用户根本装不到。
@@ -112,7 +112,7 @@ jobs:
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
         if: env.OVSX_PAT != ''
-        run: npx --no-install ovsx publish "serial-assistant-$VERSION.vsix" --pat "$OVSX_PAT"
+        run: npx --no-install ovsx publish "serial-tool-$VERSION.vsix" --pat "$OVSX_PAT"
 
       - name: Report missing tokens
         env:

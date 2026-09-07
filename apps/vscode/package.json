@@ -1,11 +1,11 @@
 {
-  "name": "web-serial-tool-vscode",
-  "displayName": "串口助手 · Serial Assistant",
-  "description": "Serial port assistant inside VS Code: multiple panels, one port each.",
+  "name": "serial-tool",
+  "displayName": "Serial Tool",
+  "description": "Serial port tool inside VS Code: multiple panels, one port each.",
   "license": "MIT",
   "version": "0.1.0",
   "private": true,
-  "publisher": "samuelyhsu",
+  "publisher": "uplume",
   "engines": {
     "vscode": "^1.75.0"
   },
@@ -29,41 +29,41 @@
       {
         "command": "serialTool.newPanel",
         "title": "%cmd.newPanel%",
-        "category": "Serial Assistant",
+        "category": "Serial Tool",
         "icon": "$(add)"
       },
       {
         "command": "serialTool.showPanels",
         "title": "%cmd.showPanels%",
-        "category": "Serial Assistant",
+        "category": "Serial Tool",
         "icon": "$(plug)"
       },
       {
         "command": "serialTool.toggleConnection",
         "title": "%cmd.toggleConnection%",
-        "category": "Serial Assistant"
+        "category": "Serial Tool"
       },
       {
         "command": "serialTool.refreshPorts",
         "title": "%cmd.refreshPorts%",
-        "category": "Serial Assistant",
+        "category": "Serial Tool",
         "icon": "$(refresh)"
       },
       {
         "command": "serialTool.openPort",
         "title": "%cmd.openPort%",
-        "category": "Serial Assistant",
+        "category": "Serial Tool",
         "icon": "$(plug)"
       },
       {
         "command": "serialTool.openPortInNewPanel",
         "title": "%cmd.openPortInNewPanel%",
-        "category": "Serial Assistant",
+        "category": "Serial Tool",
         "icon": "$(add)"
       }
     ],
     "configuration": {
-      "title": "Serial Assistant",
+      "title": "Serial Tool",
       "properties": {
         "serialTool.portPollIntervalMs": {
           "type": "number",

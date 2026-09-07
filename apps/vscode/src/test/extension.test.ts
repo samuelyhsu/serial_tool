@@ -14,7 +14,7 @@ import type { SerialToolApi } from '../shared/api';
  * 这类问题在 jsdom 里永远测不出来，因为它们根本不是代码的问题，是**清单和时机**的问题。
  */
 
-const EXTENSION_ID = 'samuelyhsu.web-serial-tool-vscode';
+const EXTENSION_ID = 'uplume.serial-tool';
 
 function extension(): vscode.Extension<SerialToolApi> {
   // 带上类型参数：不带的话拿到的是 Extension<any>，activate() 返回的 API
