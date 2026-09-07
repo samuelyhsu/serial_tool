@@ -54,3 +54,9 @@ export class TreeItem {
     readonly collapsibleState: number = TreeItemCollapsibleState.None,
   ) {}
 }
+
+/**
+ * hostText() 按它在中英两份文案之间选择。默认中文，与既有断言一致；
+ * 想验证英文那一半的用例自己改这个字段。
+ */
+export const env = { language: 'zh-cn' };

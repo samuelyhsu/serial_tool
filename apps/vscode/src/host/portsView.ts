@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import type { PortDescriptor } from '@/core/transport/portDescriptor';
+import { hostText } from './hostText';
 import type { PortLeases } from './portLeases';
 import type { PortWatcher } from './portWatcher';
 
@@ -57,17 +58,18 @@ export class PortsTreeProvider implements vscode.TreeDataProvider<PortDescriptor
   getTreeItem(port: PortDescriptor): vscode.TreeItem {
     const item = new vscode.TreeItem(port.label, vscode.TreeItemCollapsibleState.None);
     const holder = this.deps.holderLabel(port.key);
+    const t = hostText();
 
     item.id = port.key;
-    item.description = holder !== undefined ? '已连接' : port.identity;
+    item.description = holder !== undefined ? t.stateOpen : port.identity;
     item.tooltip = new vscode.MarkdownString(
       [
         `**${port.label}**`,
         '',
-        `- 设备标识：\`${port.identity}\``,
-        port.chip ? `- 芯片：${port.chip}` : null,
-        port.vendor ? `- 厂商：${port.vendor}` : null,
-        holder !== undefined ? `- 正被面板「${holder}」使用` : null,
+        `- ${t.deviceId}: \`${port.identity}\``,
+        port.chip ? `- ${t.chip}: ${port.chip}` : null,
+        port.vendor ? `- ${t.vendor}: ${port.vendor}` : null,
+        holder !== undefined ? `- ${t.heldByPanel(holder)}` : null,
       ]
         .filter((line) => line !== null)
         .join('\n'),
@@ -83,7 +85,7 @@ export class PortsTreeProvider implements vscode.TreeDataProvider<PortDescriptor
 
     item.command = {
       command: 'serialTool.openPort',
-      title: '打开',
+      title: t.open,
       arguments: [port],
     };
     return item;

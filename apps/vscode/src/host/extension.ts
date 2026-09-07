@@ -6,6 +6,7 @@ import type { PortDescriptor } from '@/core/transport/portDescriptor';
 import type { ConnectionOptions } from '@/core/transport/types';
 import type { SerialToolApi } from '../shared/api';
 import type { HostEvent, HostRequest } from '../shared/protocol';
+import { hostText } from './hostText';
 import { NodeSerialTransport, type OpenNodePort } from './nodeSerialTransport';
 import { PortLeases } from './portLeases';
 import { PortsTreeProvider } from './portsView';
@@ -105,22 +106,21 @@ export function activate(context: vscode.ExtensionContext): SerialToolApi {
 
     const hosts = [...panels.values()];
     const open = hosts.filter((host) => host.state === 'open');
+    const t = hostText();
 
     if (panels.size === 0) {
-      status.text = '$(plug) 串口';
-      status.tooltip = '新建串口面板';
+      status.text = `$(plug) ${t.statusIdle}`;
+      status.tooltip = t.statusNewPanel;
     } else {
       status.text =
         panels.size === 1
-          ? `$(plug) ${hosts[0]?.portKey ?? '串口'}`
+          ? `$(plug) ${hosts[0]?.portKey ?? t.statusIdle}`
           : `$(plug) ${open.length}/${panels.size}`;
       status.tooltip = new vscode.MarkdownString(
         [
-          ...hosts.map(
-            (host) => `- ${host.portKey ?? '（未选端口）'} · ${describeState(host.state)}`,
-          ),
+          ...hosts.map((host) => `- ${host.portKey ?? t.noPort} · ${describeState(host.state)}`),
           '',
-          '_点击可切换面板或新建_',
+          t.statusHint,
         ].join('\n'),
       );
     }
@@ -131,11 +131,9 @@ export function activate(context: vscode.ExtensionContext): SerialToolApi {
     if (watcher) return watcher;
     const loaded = await loadBinding();
     if (!loaded.ok) {
-      const open = '打开浏览器版';
-      const choice = await vscode.window.showErrorMessage(
-        `串口原生模块加载失败：${loaded.message}。当前平台可能缺少 @serialport/bindings-cpp 的预编译产物。`,
-        open,
-      );
+      const t = hostText();
+      const open = t.openWebVersion;
+      const choice = await vscode.window.showErrorMessage(t.bindingFailed(loaded.message), open);
       if (choice === open) {
         await vscode.env.openExternal(
           vscode.Uri.parse('https://samuelyhsu.github.io/web_serial_tool/'),
@@ -167,16 +165,17 @@ export function activate(context: vscode.ExtensionContext): SerialToolApi {
       return;
     }
 
+    const t = hostText();
     const items: { label: string; description?: string; panel: vscode.WebviewPanel | null }[] = [
-      { label: '$(add) 新建串口面板', panel: null },
+      { label: `$(add) ${t.statusNewPanel}`, panel: null },
       ...[...panels.entries()].map(([panel, host]) => ({
-        label: `$(plug) ${host.portKey ?? '（未选端口）'}`,
+        label: `$(plug) ${host.portKey ?? t.noPort}`,
         description: describeState(host.state),
         panel,
       })),
     ];
 
-    const picked = await vscode.window.showQuickPick(items, { title: '串口面板' });
+    const picked = await vscode.window.showQuickPick(items, { title: t.panelPickTitle });
     if (!picked) return;
     if (picked.panel) picked.panel.reveal();
     else await createPanel();
@@ -184,8 +183,9 @@ export function activate(context: vscode.ExtensionContext): SerialToolApi {
 
   async function pickPort(current: PortWatcher): Promise<PortDescriptor | undefined> {
     const ports = await current.refresh();
+    const t = hostText();
     if (ports.length === 0) {
-      void vscode.window.showWarningMessage('没有找到任何串口设备。');
+      void vscode.window.showWarningMessage(t.noPortsFound);
       return undefined;
     }
     const holders = leases.holders();
@@ -193,10 +193,10 @@ export function activate(context: vscode.ExtensionContext): SerialToolApi {
       ports.map((port) => ({
         label: port.label,
         // 已被别的面板占着的口直接标出来，省得用户选完才发现打不开
-        description: holders[port.key] !== undefined ? '已被其他面板占用' : port.identity,
+        description: holders[port.key] !== undefined ? t.portBusy : port.identity,
         port,
       })),
-      { title: '选择串口', matchOnDescription: true },
+      { title: t.portPickTitle, matchOnDescription: true },
     );
     return picked?.port;
   }
@@ -210,7 +210,7 @@ export function activate(context: vscode.ExtensionContext): SerialToolApi {
 
     const panel =
       restored ??
-      vscode.window.createWebviewPanel(VIEW_TYPE, '串口助手', vscode.ViewColumn.Active, {
+      vscode.window.createWebviewPanel(VIEW_TYPE, hostText().appName, vscode.ViewColumn.Active, {
         enableScripts: true,
         // 不保留隐藏时的上下文：会话本来就活在宿主进程里，面板只是个可重建的视图。
         // 开着 retainContextWhenHidden 只会白白吃内存。
@@ -253,7 +253,7 @@ export function activate(context: vscode.ExtensionContext): SerialToolApi {
     /** 面板标题跟着端口走 —— 多面板时标签页上只剩它能分辨谁是谁。 */
     function retitle(): void {
       const dot = host.state === 'open' ? '● ' : '';
-      panel.title = dot + (host.portKey ?? '串口助手');
+      panel.title = dot + (host.portKey ?? hostText().appName);
     }
 
     panels.set(panel, host);
@@ -392,13 +392,13 @@ export function activate(context: vscode.ExtensionContext): SerialToolApi {
     vscode.commands.registerCommand('serialTool.toggleConnection', async () => {
       const active = [...panels.entries()].find(([panel]) => panel.active);
       if (!active) {
-        void vscode.window.showInformationMessage('没有处于活动状态的串口面板。');
+        void vscode.window.showInformationMessage(hostText().noActivePanel);
         return;
       }
       // 参数不在这里拼：这条路径手里只有默认值，而面板自己知道用户调过什么
       const [, host] = active;
       if ((await host.toggle()) === 'no-port') {
-        void vscode.window.showInformationMessage('请先在面板里选择一个串口。');
+        void vscode.window.showInformationMessage(hostText().pickPortFirst);
       }
       refreshStatus();
     }),
@@ -431,7 +431,7 @@ export function activate(context: vscode.ExtensionContext): SerialToolApi {
     openPort: async (portKey, apiOptions) => {
       const current = await ensureWatcher();
       const port = current?.current().find((item) => item.key === portKey);
-      if (!port) throw new Error(`没有找到端口 ${portKey}`);
+      if (!port) throw new Error(hostText().portNotFound(portKey));
       await openPortIn(port, apiOptions?.newPanel === true);
     },
 
@@ -444,15 +444,16 @@ export function activate(context: vscode.ExtensionContext): SerialToolApi {
 }
 
 function describeState(state: SessionState): string {
+  const t = hostText();
   switch (state) {
     case 'open':
-      return '已连接';
+      return t.stateOpen;
     case 'opening':
-      return '连接中';
+      return t.stateOpening;
     case 'reconnecting':
-      return '重连中';
+      return t.stateReconnecting;
     case 'closed':
-      return '未连接';
+      return t.stateClosed;
   }
 }
 
