@@ -24,14 +24,17 @@
   min-height: 0;
 }
 
-/* 右栏：上面单条发送吃掉多余空间，下面多条发送按内容高度。
-   网格项默认 min-height: auto（= min-content），会拒绝收缩到内容高度以下，
-   不置 0 的话下面那个 minmax(0, 1fr) 形同虚设，列表会把整栏撑破。 */
+/* 右栏两块面板对高度的性质不同，所以两条轨道的写法也不同：
+   多条发送一页固定 10 行，内容高度是个定数（约 408px），给多了用不掉、只会在列表
+   下方留白；给少了它自己带 overflow，滚就是了 —— 所以是 minmax(0, auto)。
+   单条发送反过来，多给多少都能用在 textarea 上，但压到某个高度以下就没法用了
+   （报错行一出现就溢出）—— 所以是 minmax(200px, 1fr)：先保住下限，再吃掉全部富余。
+   关键在那个 200px 下限。曾经写成 minmax(0, 1fr)，grid 会先把 auto 轨道按内容撑满、
+   剩下的才轮到 1fr，窗口一矮单条发送就被挤没了；把两行对调又反过来浪费高窗口的空间。
+   min 不为 0 的轨道不需要再写 min-height: 0，另一行仍要 minmax(0, …) 才肯收缩。 */
 .right {
   display: grid;
-  /* 第二行用 minmax(0, auto)：正常按内容高度，窗口不够高时也能收缩，
-     由预设列表自己的 overflow 兜底，不会把整栏顶破。 */
-  grid-template-rows: minmax(0, 1fr) minmax(0, auto);
+  grid-template-rows: minmax(200px, 1fr) minmax(0, auto);
   min-width: 0;
   min-height: 0;
   border-left: 1px solid var(--line);

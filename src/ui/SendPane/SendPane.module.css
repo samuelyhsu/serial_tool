@@ -1,4 +1,4 @@
-/* 单条发送吃掉右栏的多余空间：标题行按内容，编辑区占满剩余 */
+/* 单条发送吃掉右栏的全部富余（见 App.module.css 的 .right）：标题行按内容，编辑区占满剩余 */
 .pane {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
@@ -26,7 +26,9 @@
 }
 
 .textarea {
-  /* 不设固定高度，由 grid 拉伸；min-height 保证短窗口下也还能打字 */
+  /* 不设高度，由 grid 拉伸吃掉右栏的全部富余（App.module.css 的 .right 里定的规则）。
+     min-height 是最后一道保险：窗口矮到连 .right 的 200px 下限都保不住时，
+     至少还能打得下三行字。 */
   min-height: 68px;
   resize: none;
   background: var(--sunk);
