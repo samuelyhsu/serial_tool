@@ -139,45 +139,47 @@ export function PresetPane(): React.JSX.Element {
         ))}
       </div>
 
+      {/* 底部压成一行：说明 · 间隔 · 循环 · 全部停止。
+          原来分两行（说明+间隔 / 两个大按钮）要 ~85px，窗口一矮就把预设列表挤没了。 */}
       <div className={styles.footer}>
-        <div className={styles.footerRow}>
-          <span className="label">{t.sequenceLoop}</span>
-          <span className={styles.count}>{t.sequenceHint(inSequenceCount)}</span>
-          <div className={styles.footerRight}>
-            <label className="label" htmlFor={gapId}>
-              {t.gap}
-            </label>
-            <input
-              id={gapId}
-              type="number"
-              className={`field field--sunk field--sm ${styles.gapInput}`}
-              value={gapMs}
-              min={10}
-              step={10}
-              onChange={(event) => setGapMs(Number(event.target.value))}
-            />
-            <span className="label">ms</span>
-          </div>
-        </div>
+        <span className={`label ${styles.footerTitle}`}>{t.sequenceLoop}</span>
+        {/* 一行放不下时先让这条提示收省略号，右侧控件不换行、不压缩 */}
+        <span className={styles.count} title={t.sequenceHint(inSequenceCount)}>
+          {t.sequenceHint(inSequenceCount)}
+        </span>
 
-        <div className={styles.footerActions}>
+        <div className={styles.footerRight}>
+          <label className="label" htmlFor={gapId}>
+            {t.gap}
+          </label>
+          <input
+            id={gapId}
+            type="number"
+            className={`field field--sunk field--sm ${styles.gapInput}`}
+            value={gapMs}
+            min={10}
+            step={10}
+            onChange={(event) => setGapMs(Number(event.target.value))}
+          />
+          <span className="label">ms</span>
+          {/* 按钮上只放「循环 / 停止」，完整语义交给 aria-label，否则一行放不下 */}
           <button
             type="button"
             className={`btn ${styles.seqBtn} ${sequenceRunning ? 'btn--on' : ''}`}
             aria-pressed={sequenceRunning}
+            aria-label={sequenceRunning ? t.stopSequence : t.startSequence}
             disabled={!sequenceRunning && (!isOpen || inSequenceCount === 0)}
             onClick={() => toggleSequence()}
           >
-            {sequenceRunning ? t.stopSequence : t.startSequence}
+            {sequenceRunning ? t.stop : t.loop}
           </button>
-          <button
-            type="button"
-            className={`btn btn--danger ${styles.stopAllBtn}`}
-            disabled={running.length === 0}
-            onClick={onStopAll}
-          >
-            {t.stopAll}
-          </button>
+          {/* 有循环在跑时才出现。它管的是全局 52 个周期任务（单条 + 顺序 + 每条预设各一），
+              不是这一行的顺序循环 —— 常驻一个点不动的禁用红按钮既占位又容易被当成 Loop 的搭档。 */}
+          {running.length > 0 ? (
+            <button type="button" className="btn btn--danger" onClick={onStopAll}>
+              {t.stopAll}
+            </button>
+          ) : null}
         </div>
       </div>
     </aside>

@@ -1,8 +1,9 @@
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { __resetLogStoreForTests } from '@/store/logStore';
 import { PRESET_COUNT, PRESET_PAGE_SIZE, PRESET_PAGES, usePresetStore } from '@/store/presetStore';
+import { useTasksStore } from '@/store/tasksStore';
 import { useUiStore } from '@/store/uiStore';
 import { PresetPane } from '@/ui/PresetPane/PresetPane';
 
@@ -13,6 +14,7 @@ function rows(): HTMLElement[] {
 describe('多条发送', () => {
   beforeEach(() => {
     __resetLogStoreForTests();
+    useTasksStore.setState({ running: [] });
     useUiStore.setState({ language: 'zh' });
     usePresetStore.setState({
       presets: usePresetStore.getInitialState().presets,
@@ -158,6 +160,25 @@ describe('多条发送', () => {
     await userEvent.click(screen.getByRole('button', { name: '下一页' }));
     // 翻到没有勾选项的第二页，统计仍然是全局的
     expect(screen.getByText(`按序依次发送 ${checked} 条`)).toBeInTheDocument();
+  });
+
+  /**
+   * 「全部停止」管的是全局周期任务（单条发送 + 顺序循环 + 每条预设各一路），不是这一行的
+   * 顺序循环，所以它跟着「有没有任务在跑」出现，而不是跟着 Loop 按钮的状态走。
+   */
+  it('有周期任务在跑时才出现全部停止', async () => {
+    render(<PresetPane />);
+    expect(screen.queryByRole('button', { name: '全部停止' })).not.toBeInTheDocument();
+
+    // 单条发送区起的循环也算 —— 它不在这个面板里，同样得能被这个急停掐掉
+    act(() => {
+      useTasksStore.setState({ running: ['single'] });
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: '全部停止' }));
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: '全部停止' })).not.toBeInTheDocument();
+    });
   });
 
   it('翻页后编辑第二页的行不影响第一页', async () => {

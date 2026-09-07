@@ -11,13 +11,18 @@
   gap: 8px;
   padding: 7px 12px;
   background: var(--panel);
-  border-bottom: 1px solid var(--line);
 }
 
 .count {
   font-family: var(--font-mono);
   font-size: 10.5px;
   color: var(--faint);
+  /* 一行装不下时先牺牲这条提示（title 里有全文），控件一个都不能少 */
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .pager {
@@ -173,18 +178,18 @@
   font-size: 11px;
 }
 
+/* 单行：说明 · 提示 · 间隔 · 循环 · 全部停止。竖向只吃 ~40px */
 .footer {
-  padding: 10px 12px;
+  padding: 7px 12px;
   background: var(--panel);
-  border-top: 1px solid var(--line);
-  display: grid;
-  gap: 8px;
-}
-
-.footerRow {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+}
+
+.footerTitle {
+  flex: none;
 }
 
 .footerRight {
@@ -192,24 +197,14 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  /* 控件区不参与压缩：要挤先挤左边的提示文字 */
+  flex: none;
 }
 
 .gapInput {
   width: 66px;
 }
 
-.footerActions {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 8px;
-}
-
 .seqBtn {
-  padding: 8px;
-  font-size: 12.5px;
-}
-
-.stopAllBtn {
-  padding: 8px 16px;
-  font-size: 12.5px;
+  min-width: 54px;
 }
