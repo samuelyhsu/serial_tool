@@ -60,6 +60,14 @@ export const en: Messages = {
   noDataHint: 'Choose a port to grant access, then open it to start receiving',
   jumpToBottom: '↓ Back to bottom',
   scrollPaused: 'Auto-scroll paused',
+  logCapacity: 'Buffer',
+  logCapacityUnit: 'entries',
+  logCapacityHint: (min) =>
+    `Entries kept in the log buffer (at least ${min}, no upper limit). Each entry is up to 8 KB, ` +
+    `so a larger buffer costs more memory; shrinking drops the oldest immediately. ` +
+    `Applied on blur or Enter`,
+  hiddenEarlier: (count) =>
+    `${count} earlier entries are not shown here — they are still buffered; use Save to export the full log`,
 
   singleSend: 'Single send',
   eol: 'EOL',
@@ -154,6 +162,9 @@ export const en: Messages = {
   exportedLog: (lines) => `Log exported, ${lines} lines`,
   exportedPresets: 'Presets exported',
   clearedLog: 'Log and counters cleared',
+  capacityChanged: (capacity) => `Log buffer capacity set to ${capacity} entries`,
+  capacityDropped: (capacity, dropped) =>
+    `Log buffer capacity set to ${capacity} entries, dropped the ${dropped} oldest`,
   stoppedAll: 'All periodic sends stopped',
   openPortFirst: 'Open the port first',
   closePortFirst: 'Close the port before changing this',

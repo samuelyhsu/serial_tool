@@ -44,6 +44,11 @@
   width: 62px;
 }
 
+/* 容量是五位数，比空闲时长宽一点才不至于把数字挤没 */
+.capacityInput {
+  width: 74px;
+}
+
 /*
  * 当前分帧方式的说明。工具栏窄的时候第一个被牺牲掉 —— 它只是解释，
  * 控件本身已经足够表达状态。
@@ -138,6 +143,22 @@
 
 .emptyHint {
   font-size: 11.5px;
+}
+
+/*
+ * 列表顶部的「更早的还有 N 条」说明。
+ *
+ * 做成列表的第一个子元素而不是浮层：往上滚到头自然读到，不遮挡内容，
+ * 也不需要额外跟踪「是否在顶部」。虚线下边框把它和真正的日志行区分开 ——
+ * 它是说明，不是一条记录。
+ */
+.earlier {
+  padding: 8px 10px;
+  margin-bottom: 2px;
+  border-bottom: 1px dashed var(--line);
+  color: var(--faint);
+  font-size: 11.5px;
+  text-align: center;
 }
 
 /* 用户往上翻看历史时出现的回底按钮（缺陷 D15） */

@@ -5,6 +5,7 @@ import type { ConnectionOptions } from '@/core/transport/types';
 import type { HostEvent } from '../shared/protocol';
 import { PortLeases } from './portLeases';
 import { PortWatcher } from './portWatcher';
+import { DEFAULT_LOG_CAPACITY, LOG_CAPACITY_KEY } from '@/core/buffer/logCapacity';
 import { SessionHost } from './sessionHost';
 
 const OPTIONS: ConnectionOptions = {
@@ -32,7 +33,7 @@ let leases: PortLeases;
 let watcher: PortWatcher;
 const panels: Panel[] = [];
 
-function makePanel(id: string): Panel {
+function makePanel(id: string, prefs: Record<string, unknown> = {}): Panel {
   const events: HostEvent[] = [];
   const transports: FakeTransport[] = [];
 
@@ -47,8 +48,10 @@ function makePanel(id: string): Panel {
     },
     post: (event) => events.push(event),
     pickPort: () => Promise.resolve(undefined),
-    readPrefs: () => ({}),
-    writePref: () => undefined,
+    readPrefs: () => prefs,
+    writePref: (key, value) => {
+      prefs[key] = value;
+    },
     language: 'zh',
     defaultOptions: OPTIONS,
     now: () => 1_700_000_000_000,
@@ -409,5 +412,84 @@ describe('SessionHost（一个面板一条会话）', () => {
     await first.host.handle({ method: 'session.open', portKey: 'COM3', options: OPTIONS });
 
     expect(second.typed('ports').at(-1)?.holders).toEqual({ COM3: 'panel-1' });
+  });
+});
+
+/**
+ * 宿主自己持有一份日志环形缓冲，它是面板重建后回放历史的唯一来源。
+ * 界面那份在 webview 里，两份的容量必须一起走 —— 只改一边的话，
+ * 用户设了 20000、切个标签页回来却只剩默认那些，与「日志被吃掉了」无法区分。
+ */
+describe('SessionHost 的日志容量', () => {
+  async function feed(panel: Panel, count: number): Promise<void> {
+    await panel.host.handle({ method: 'session.open', portKey: 'COM3', options: OPTIONS });
+    for (let i = 0; i < count; i += 1) panel.transport().emitData([i & 0xff]);
+    await vi.advanceTimersByTimeAsync(100); // 让攒批提交跑完
+  }
+
+  function bufferedFrames(panel: Panel): number {
+    const snapshot = panel.host.snapshot();
+    if (snapshot.type !== 'snapshot') throw new Error('unreachable');
+    return snapshot.frames.length;
+  }
+
+  it('没存过偏好时用默认容量', () => {
+    const panel = makePanel('panel-1');
+    expect(panel.host.snapshot().type).toBe('snapshot');
+    expect(DEFAULT_LOG_CAPACITY).toBe(10000);
+  });
+
+  /**
+   * 构造时就要读到容量，而不是先按默认建再 resize：面板重建走的是同一条路，
+   * 晚一步就意味着白丢一次历史。
+   */
+  it('建面板时就按存量偏好定容量', async () => {
+    const panel = makePanel('panel-1', { [LOG_CAPACITY_KEY]: 1000 });
+    await feed(panel, 1500);
+    expect(bufferedFrames(panel)).toBe(1000);
+  });
+
+  it('webview 改容量时宿主这份跟着改', async () => {
+    const panel = makePanel('panel-1');
+    await feed(panel, 1500);
+    expect(bufferedFrames(panel)).toBe(1500);
+
+    await panel.host.handle({ method: 'prefs.write', key: LOG_CAPACITY_KEY, value: 1000 });
+    expect(bufferedFrames(panel)).toBe(1000);
+
+    // 扩容后继续收，能装到新容量为止
+    await panel.host.handle({ method: 'prefs.write', key: LOG_CAPACITY_KEY, value: 2000 });
+    for (let i = 0; i < 1500; i += 1) panel.transport().emitData([i & 0xff]);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(bufferedFrames(panel)).toBe(2000);
+  });
+
+  it('非法容量被忽略，缓冲不受影响', async () => {
+    const panel = makePanel('panel-1');
+    await feed(panel, 1200);
+    // 低于下限、非整数、非数字都不该动到缓冲；上限不限，所以这里没有「太大」这一档
+    for (const bad of [0, -5, 1.5, 999, 'many', null]) {
+      await panel.host.handle({ method: 'prefs.write', key: LOG_CAPACITY_KEY, value: bad });
+    }
+    expect(bufferedFrames(panel)).toBe(1200);
+  });
+
+  it('别的偏好键不会动到容量', async () => {
+    const panel = makePanel('panel-1', { [LOG_CAPACITY_KEY]: 1000 });
+    await feed(panel, 1500);
+    await panel.host.handle({ method: 'prefs.write', key: 'viewPrefs', value: { view: 'hex' } });
+    expect(bufferedFrames(panel)).toBe(1000);
+  });
+
+  it('容量偏好被写回宿主，下次建面板时还在', async () => {
+    const prefs: Record<string, unknown> = {};
+    const first = makePanel('panel-1', prefs);
+    await first.host.handle({ method: 'prefs.write', key: LOG_CAPACITY_KEY, value: 2500 });
+    expect(prefs[LOG_CAPACITY_KEY]).toBe(2500);
+
+    // 面板重建：同一份偏好，新的 SessionHost
+    const second = makePanel('panel-2', prefs);
+    await feed(second, 3000);
+    expect(bufferedFrames(second)).toBe(2500);
   });
 });

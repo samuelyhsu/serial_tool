@@ -58,6 +58,13 @@ export const zh: Messages = {
   noDataHint: '点「选择端口」授权设备，再打开串口开始接收',
   jumpToBottom: '↓ 回到底部',
   scrollPaused: '已暂停自动滚屏',
+  logCapacity: '缓冲',
+  logCapacityUnit: '条',
+  logCapacityHint: (min) =>
+    `日志缓冲保留的记录条数（不少于 ${min}，上不封顶）。每条最大 8 KB，条数越大越吃内存；` +
+    `改小会立即丢弃超出的旧记录。离开输入框或按回车后生效`,
+  hiddenEarlier: (count) =>
+    `更早的 ${count} 条未在此显示 —— 它们仍在缓冲里，点「保存」可导出完整日志`,
 
   singleSend: '单条发送',
   eol: '结束符',
@@ -150,6 +157,9 @@ export const zh: Messages = {
   exportedLog: (lines) => `日志已导出，共 ${lines} 行`,
   exportedPresets: '发送预设已导出',
   clearedLog: '日志与统计已清空',
+  capacityChanged: (capacity) => `日志缓冲容量已改为 ${capacity} 条`,
+  capacityDropped: (capacity, dropped) =>
+    `日志缓冲容量已改为 ${capacity} 条，丢弃了最旧的 ${dropped} 条记录`,
   stoppedAll: '已停止全部周期发送',
   openPortFirst: '请先打开串口',
   closePortFirst: '请先关闭串口再修改此项',

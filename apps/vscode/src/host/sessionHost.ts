@@ -1,4 +1,9 @@
 import { RingBuffer } from '@/core/buffer/ringBuffer';
+import {
+  DEFAULT_LOG_CAPACITY,
+  isValidLogCapacity,
+  LOG_CAPACITY_KEY,
+} from '@/core/buffer/logCapacity';
 import { TaskScheduler } from '@/core/scheduler/taskScheduler';
 import { SerialSession, type SessionState } from '@/core/session/serialSession';
 import { TransportError } from '@/core/transport/errors';
@@ -25,8 +30,13 @@ import type { PortWatcher } from './portWatcher';
  * 宿主拿 `Map<WebviewPanel, SessionHost>` 关联，一个 SessionHost 只服务一个面板。
  */
 
-/** 与 Web 版 logStore 一致的日志容量。 */
-export const LOG_CAPACITY = 5000;
+/**
+ * 宿主侧日志容量的默认值，与 Web 版 logStore 共用同一个常量。
+ *
+ * **两侧必须一致**：webview 存一份、宿主存一份，宿主那份是面板重建后回放的来源。
+ * 宿主留得比界面少，用户设了 10000 却在面板重建后只剩默认那些，会以为日志被吃掉了。
+ */
+export { DEFAULT_LOG_CAPACITY };
 
 export interface SessionHostDeps {
   /** 面板 id，同时是占用表里的持有者标识。 */
@@ -48,7 +58,7 @@ export interface SessionHostDeps {
 
 export class SessionHost {
   readonly #session: SerialSession<string>;
-  readonly #ring = new RingBuffer<FramePayload>(LOG_CAPACITY);
+  readonly #ring: RingBuffer<FramePayload>;
   readonly #scheduler = new TaskScheduler();
   /** 攒批中的帧。1 Mbps 下每帧一条 postMessage 会把消息通道打满。 */
   #pending: FramePayload[] = [];
@@ -72,6 +82,12 @@ export class SessionHost {
 
   constructor(private readonly deps: SessionHostDeps) {
     this.#options = deps.defaultOptions;
+    // 存量偏好里的容量在建 ring 时就要读到：面板重建走的是同一条路，
+    // 先按默认容量建再 resize 会把超出默认的那部分历史白丢一次。
+    const stored = deps.readPrefs()[LOG_CAPACITY_KEY];
+    this.#ring = new RingBuffer<FramePayload>(
+      isValidLogCapacity(stored) ? stored : DEFAULT_LOG_CAPACITY,
+    );
 
     this.#session = new SerialSession<string>({
       createTransport: (path) => deps.createTransport(path),
@@ -209,6 +225,9 @@ export class SessionHost {
 
       case 'prefs.write':
         this.deps.writePref(body.key, body.value);
+        // 容量是唯一一个宿主自己也要照做的偏好：界面那份 ring 在 webview 里，
+        // 这份在宿主里，只改一边的话面板一重建就回到旧容量。
+        if (body.key === LOG_CAPACITY_KEY) this.#applyCapacity(body.value);
         return undefined;
 
       case 'log.clear':
@@ -397,6 +416,12 @@ export class SessionHost {
       items,
       pendingBytes: this.pendingBytes,
     });
+  }
+
+  /** 容量偏好落到本地这份 ring 上。非法值忽略 —— 与 webview 侧的读取约定一致。 */
+  #applyCapacity(value: unknown): void {
+    if (!isValidLogCapacity(value)) return;
+    this.#ring.resize(value);
   }
 
   #describeConfig(options: ConnectionOptions): string {

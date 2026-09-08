@@ -1,4 +1,11 @@
 import { create } from 'zustand';
+import {
+  DEFAULT_LOG_CAPACITY,
+  isValidLogCapacity,
+  LOG_CAPACITY_CEILING,
+  LOG_CAPACITY_KEY,
+  LOG_CAPACITY_MIN,
+} from '@/core/buffer/logCapacity';
 import { RingBuffer } from '@/core/buffer/ringBuffer';
 import { escapeControlChars } from '@/core/codec/display';
 import { formatHex } from '@/core/codec/hex';
@@ -6,7 +13,17 @@ import { StreamingUtf8Decoder } from '@/core/codec/text';
 import type { SessionNotice } from '@/core/session/notices';
 import type { Direction } from '@/core/session/serialSession';
 import type { Language, Messages } from '@/i18n';
+import { saveSoon } from '@/lib/persist';
+import { readStoredJson } from '@/lib/storage';
 import { platform } from './platform';
+
+export {
+  DEFAULT_LOG_CAPACITY,
+  isValidLogCapacity,
+  LOG_CAPACITY_CEILING,
+  LOG_CAPACITY_KEY,
+  LOG_CAPACITY_MIN,
+};
 
 export type LogKind = Direction | 'sys';
 export type LogView = 'text' | 'hex';
@@ -24,11 +41,17 @@ export interface LogEntry {
   hexCache: string | null;
 }
 
-export const LOG_CAPACITY = 5000;
+function loadCapacity(): number {
+  // 单值键，直接校验即可 —— pickInt 那套是给对象型偏好逐字段兜底用的。
+  // 非法/陈旧的存量值一律回退默认，与 persist 的读取约定一致。
+  const raw = readStoredJson<unknown>(LOG_CAPACITY_KEY, null);
+  return isValidLogCapacity(raw) ? raw : DEFAULT_LOG_CAPACITY;
+}
+
 /** 攒批提交间隔：高波特率下把上千次 setState 压成每秒十几次。 */
 const FLUSH_INTERVAL_MS = 60;
 
-const ring = new RingBuffer<LogEntry>(LOG_CAPACITY);
+const ring = new RingBuffer<LogEntry>(loadCapacity());
 const decoders: Record<Direction, StreamingUtf8Decoder> = {
   rx: new StreamingUtf8Decoder(),
   tx: new StreamingUtf8Decoder(),
@@ -55,6 +78,8 @@ export function entryBody(entry: LogEntry, view: LogView, messages: Messages): s
 interface LogState {
   /** 每次提交自增，作为渲染选择器的缓存键。 */
   version: number;
+  /** 环形缓冲容量。超出后自动丢弃最旧的记录。 */
+  capacity: number;
   rxBytes: number;
   txBytes: number;
   rxFrames: number;
@@ -64,7 +89,7 @@ interface LogState {
    * 追加一帧。`at` 是帧的产生时刻（毫秒），不传就是此刻。
    *
    * 在 VS Code 里帧是从扩展宿主攒批送过来的，产生时刻在那边；用「收到消息的此刻」
-   * 会让时间戳系统性地偏晚，回放历史日志时更是会把 5000 条全打上同一个「现在」。
+   * 会让时间戳系统性地偏晚，回放历史日志时更是会把满缓冲的条目全打上同一个「现在」。
    */
   appendFrame: (direction: Direction, bytes: Uint8Array, at?: number) => void;
   /** 用一批历史帧整体替换当前日志。面板重建后回放宿主快照时用。 */
@@ -72,6 +97,13 @@ interface LogState {
   appendNotice: (notice: SessionNotice) => void;
   appendMessage: (text: string) => void;
   addThroughput: (direction: Direction, byteCount: number) => void;
+  /**
+   * 改变缓冲容量，返回因缩容被丢弃的记录条数。
+   *
+   * 返回值不是可有可无的：缩容不可撤销，界面要据此告诉用户「刚才没了多少条」，
+   * 否则日志凭空变短，看起来和数据丢失没有区别。
+   */
+  setCapacity: (value: number) => number;
   /** 丢弃本地环形缓冲与统计。快照回放前也会走它，因此**不**碰运行环境那份历史。 */
   clear: () => void;
   /**
@@ -85,6 +117,7 @@ interface LogState {
 
 export const useLogStore = create<LogState>()((set, get) => ({
   version: 0,
+  capacity: ring.capacity,
   rxBytes: 0,
   txBytes: 0,
   rxFrames: 0,
@@ -95,7 +128,7 @@ export const useLogStore = create<LogState>()((set, get) => ({
       id: nextId++,
       kind: direction,
       time: at === undefined ? new Date() : new Date(at),
-      // 环形缓冲要把这份字节留到被淘汰为止（最多 LOG_CAPACITY 条）。驱动交付的视图
+      // 环形缓冲要把这份字节留到被淘汰为止（最多 capacity 条）。驱动交付的视图
       // 可能只占一块大 backing buffer 的一小段，直接持有会把整块 buffer 一起 retain：
       // 高波特率下就是「每帧几字节、实际吃掉 bufferSize」的内存放大。
       // 视图已经独占整块 buffer 时不复制，常见情况下没有额外开销。
@@ -143,6 +176,18 @@ export const useLogStore = create<LogState>()((set, get) => ({
 
   addThroughput: (direction, byteCount) => {
     if (direction === 'rx') throughputWindow += byteCount;
+  },
+
+  setCapacity: (value) => {
+    if (!isValidLogCapacity(value) || value === ring.capacity) return 0;
+    // 先把攒批中的条目提交，否则缩容算的是「还没入库」的旧规模，
+    // 紧接着的 flush 又会把刚被让出的位置重新填满，用户看到的条数对不上设定值
+    flushNow();
+    const dropped = Math.max(0, ring.size - value);
+    ring.resize(value);
+    saveSoon(LOG_CAPACITY_KEY, value);
+    set((state) => ({ version: state.version + 1, capacity: value }));
+    return dropped;
   },
 
   clear: () => {
@@ -240,6 +285,17 @@ export interface LogRow {
   segments: RowSegment[];
 }
 
+export interface LogSelection {
+  rows: LogRow[];
+  /**
+   * 因为 limit 而没扫到的、更早的条目数。
+   *
+   * 界面用它在滚到顶时说明「上面还有，只是没渲染」—— 环形缓冲里存着 capacity 条，
+   * 渲染的只有 limit 条，这个差额此前对用户完全不可见，看起来就像数据丢了。
+   */
+  hiddenEarlier: number;
+}
+
 export interface RowQuery {
   version: number;
   language: Language;
@@ -252,7 +308,7 @@ export interface RowQuery {
 }
 
 let cacheKey = '';
-let cacheRows: LogRow[] = [];
+let cacheSelection: LogSelection = { rows: [], hiddenEarlier: 0 };
 
 /**
  * 计算要渲染的行 —— 缺陷 D7 的核心修复。
@@ -262,7 +318,7 @@ let cacheRows: LogRow[] = [];
  *  1. 从最新往回扫，凑够 limit 条就停 —— 无过滤时只碰 600 条，不是 2000 条；
  *  2. 结果按查询条件记忆化，输入框每敲一个字符只重算一次，重渲染不重算。
  */
-export function selectRows(query: RowQuery): LogRow[] {
+export function selectRows(query: RowQuery): LogSelection {
   const key = [
     query.version,
     query.language,
@@ -273,14 +329,15 @@ export function selectRows(query: RowQuery): LogRow[] {
     query.showTimestamp ? 1 : 0,
     query.limit,
   ].join('|');
-  if (key === cacheKey) return cacheRows;
+  if (key === cacheKey) return cacheSelection;
 
   const messages = messagesRef;
   const needle = query.filter.trim().toLowerCase();
   const rows: LogRow[] = [];
 
-  for (let i = ring.size - 1; i >= 0 && rows.length < query.limit; i -= 1) {
-    const entry = ring.at(i)!;
+  let scanned = ring.size - 1;
+  for (; scanned >= 0 && rows.length < query.limit; scanned -= 1) {
+    const entry = ring.at(scanned)!;
     if (entry.kind === 'tx' && !query.showTx) continue;
 
     const body = entryBody(entry, query.view, messages);
@@ -295,9 +352,12 @@ export function selectRows(query: RowQuery): LogRow[] {
   }
 
   rows.reverse();
+  // 循环因 limit 提前停下时 scanned 还指着未检查的那条，剩下的都比已渲染的更早。
+  // 它们仍在缓冲里、导出时拿得到，只是没渲染。
+  const selection: LogSelection = { rows, hiddenEarlier: Math.max(0, scanned + 1) };
   cacheKey = key;
-  cacheRows = rows;
-  return rows;
+  cacheSelection = selection;
+  return selection;
 }
 
 /**
@@ -346,8 +406,16 @@ export function __resetLogStoreForTests(): void {
   nextId = 1;
   throughputWindow = 0;
   cacheKey = '';
-  cacheRows = [];
+  cacheSelection = { rows: [], hiddenEarlier: 0 };
   decoders.rx.reset();
   decoders.tx.reset();
-  useLogStore.setState({ version: 0, rxBytes: 0, txBytes: 0, rxFrames: 0, txFrames: 0 });
+  ring.resize(DEFAULT_LOG_CAPACITY);
+  useLogStore.setState({
+    version: 0,
+    capacity: DEFAULT_LOG_CAPACITY,
+    rxBytes: 0,
+    txBytes: 0,
+    rxFrames: 0,
+    txFrames: 0,
+  });
 }

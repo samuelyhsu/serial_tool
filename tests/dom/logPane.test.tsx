@@ -1,7 +1,12 @@
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { __resetLogStoreForTests, useLogStore } from '@/store/logStore';
+import {
+  __resetLogStoreForTests,
+  DEFAULT_LOG_CAPACITY,
+  LOG_CAPACITY_MIN,
+  useLogStore,
+} from '@/store/logStore';
 import { useUiStore } from '@/store/uiStore';
 import { LogPane } from '@/ui/LogPane/LogPane';
 import { setSelectorMessages } from '@/store/logStore';
@@ -161,5 +166,149 @@ describe('LogPane', () => {
     await waitFor(() => {
       expect(currentRows()).toEqual([expect.stringContaining('Port closed')]);
     });
+  });
+});
+
+describe('LogPane 的缓冲容量与「更早的未显示」提示', () => {
+  beforeEach(() => {
+    __resetLogStoreForTests();
+    setSelectorMessages(messagesFor('zh'));
+    useUiStore.setState({
+      language: 'zh',
+      view: 'text',
+      filter: '',
+      onlyMatch: false,
+      showTx: true,
+      showTimestamp: false,
+      autoScroll: true,
+    });
+  });
+
+  afterEach(cleanup);
+
+  function capacityField(): HTMLInputElement {
+    return screen.getAllByLabelText('缓冲')[0] as HTMLInputElement;
+  }
+
+  it('容量输入框显示当前容量，只有下限没有上限', () => {
+    render(<LogPane />);
+    const field = capacityField();
+    expect(field.value).toBe(String(DEFAULT_LOG_CAPACITY));
+    expect(field.min).toBe(String(LOG_CAPACITY_MIN));
+    expect(field.max).toBe(''); // 上限交给使用者把握
+  });
+
+  /**
+   * 这条盯的是缩容不可逆带来的陷阱：把 10000 改成 12000 要途经「1」「12」「120」，
+   * 其中 120 是合法值。边打边提交的话，用户还没打完缓冲就已经被砍到 120 条了。
+   */
+  it('输入过程中不提交 —— 打字途经的合法值不会把缓冲砍掉', async () => {
+    const user = userEvent.setup();
+    render(<LogPane />);
+    const field = capacityField();
+
+    await user.clear(field);
+    await user.type(field, '120');
+    expect(useLogStore.getState().capacity).toBe(DEFAULT_LOG_CAPACITY); // 还没提交
+
+    await user.type(field, '00'); // 打完是 12000
+    expect(useLogStore.getState().capacity).toBe(DEFAULT_LOG_CAPACITY);
+
+    await user.tab(); // 失焦才提交
+    expect(useLogStore.getState().capacity).toBe(12000);
+  });
+
+  it('回车提交，Esc 放弃并回填生效值', async () => {
+    const user = userEvent.setup();
+    render(<LogPane />);
+    const field = capacityField();
+
+    await user.clear(field);
+    await user.type(field, '5000{Enter}');
+    expect(useLogStore.getState().capacity).toBe(5000);
+
+    await user.clear(field);
+    await user.type(field, '777{Escape}');
+    expect(useLogStore.getState().capacity).toBe(5000);
+    expect(capacityField().value).toBe('5000');
+  });
+
+  it('远大于默认的容量照收，不再被夹到某个上限', async () => {
+    const user = userEvent.setup();
+    render(<LogPane />);
+
+    await user.clear(capacityField());
+    await user.type(capacityField(), '99999{Enter}');
+    expect(useLogStore.getState().capacity).toBe(99999);
+    expect(capacityField().value).toBe('99999');
+  });
+
+  it('低于下限的输入被抬到下限，不会把非法值留在界面上', async () => {
+    const user = userEvent.setup();
+    render(<LogPane />);
+
+    await user.clear(capacityField());
+    await user.type(capacityField(), '1{Enter}');
+    expect(useLogStore.getState().capacity).toBe(LOG_CAPACITY_MIN);
+    expect(capacityField().value).toBe(String(LOG_CAPACITY_MIN));
+  });
+
+  it('空着失焦当作放弃编辑，回填当前值', async () => {
+    const user = userEvent.setup();
+    render(<LogPane />);
+    await user.clear(capacityField());
+    await user.tab();
+    expect(capacityField().value).toBe(String(DEFAULT_LOG_CAPACITY));
+    expect(useLogStore.getState().capacity).toBe(DEFAULT_LOG_CAPACITY);
+  });
+
+  it('缩容丢了记录时在日志里说清楚丢了多少', async () => {
+    const user = userEvent.setup();
+    render(<LogPane />);
+    act(() => {
+      for (let i = 0; i < 1500; i += 1) feed(`line-${i}`);
+    });
+    await rowTexts();
+
+    await user.clear(capacityField());
+    await user.type(capacityField(), '1000{Enter}');
+
+    await waitFor(() => {
+      expect(screen.getByText(/丢弃了最旧的 500 条记录/)).toBeTruthy();
+    });
+  });
+
+  it('没丢东西时只回执新容量，不吓唬人', async () => {
+    const user = userEvent.setup();
+    render(<LogPane />);
+    act(() => feed('one'));
+    await rowTexts();
+
+    await user.clear(capacityField());
+    await user.type(capacityField(), '5000{Enter}');
+
+    await waitFor(() => {
+      expect(screen.getByText(/日志缓冲容量已改为 5000 条/)).toBeTruthy();
+    });
+    expect(screen.queryByText(/丢弃了最旧的/)).toBeNull();
+  });
+
+  it('超出渲染上限时，列表顶部说明更早的还有多少条', async () => {
+    render(<LogPane />);
+    act(() => {
+      for (let i = 0; i < 1005; i += 1) feed(`line-${i}`);
+    });
+    // 渲染上限 1000，另外 5 条更早的仍在缓冲里
+    await waitFor(() => {
+      expect(screen.getByText(/更早的 5 条未在此显示/)).toBeTruthy();
+    });
+    expect(currentRows()).toHaveLength(1000);
+  });
+
+  it('条目没超过渲染上限时不显示这条提示', async () => {
+    render(<LogPane />);
+    act(() => feed('only-one'));
+    await rowTexts(1);
+    expect(screen.queryByText(/未在此显示/)).toBeNull();
   });
 });

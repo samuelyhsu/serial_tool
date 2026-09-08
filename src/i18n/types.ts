@@ -91,6 +91,11 @@ export interface Messages {
   readonly noDataHint: string;
   readonly jumpToBottom: string;
   readonly scrollPaused: string;
+  readonly logCapacity: string;
+  readonly logCapacityUnit: string;
+  readonly logCapacityHint: (min: number) => string;
+  /** 列表顶部的说明：更早的记录仍在缓冲里，只是没渲染。 */
+  readonly hiddenEarlier: (count: number) => string;
 
   // 发送区
   readonly singleSend: string;
@@ -156,6 +161,8 @@ export interface Messages {
   readonly exportedLog: (lines: number) => string;
   readonly exportedPresets: string;
   readonly clearedLog: string;
+  readonly capacityChanged: (capacity: number) => string;
+  readonly capacityDropped: (capacity: number, dropped: number) => string;
   readonly stoppedAll: string;
   readonly openPortFirst: string;
   readonly closePortFirst: string;

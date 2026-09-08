@@ -6,6 +6,7 @@ import {
   entryBody,
   flushPendingEntries,
   formatTime,
+  LOG_CAPACITY_MIN,
   selectRows,
   useLogStore,
   type LogRow,
@@ -13,12 +14,19 @@ import {
 import { useConnectionStore } from '@/store/connectionStore';
 import { useUiStore } from '@/store/uiStore';
 import { FormatToggle } from '../FormatToggle';
+import { CapacityInput } from './CapacityInput';
 import { IdleFrameInput } from './IdleFrameInput';
 import { useMessages } from '../useMessages';
 import styles from './LogPane.module.css';
 
-/** 最多渲染多少行。与原型一致；再多也超出一屏，只会拖慢渲染。 */
-const RENDER_LIMIT = 600;
+/**
+ * 最多渲染多少行。
+ *
+ * 没有虚拟滚动，这些行是实打实的 DOM 节点，且每次攒批提交（60ms）都要重新 reconcile
+ * 一遍，所以它挡的是渲染成本、而非存储量 —— 缓冲里存着 capacity 条（可配置），
+ * 超出这里的部分靠列表顶部的提示告诉用户「还在，导出可取」。
+ */
+const RENDER_LIMIT = 1000;
 /** 清空的二次确认窗口：这么久没有再按一次就当作放弃。 */
 const CONFIRM_WINDOW_MS = 3000;
 /** 距底部多少像素以内算作「贴底」。 */
@@ -31,6 +39,7 @@ export function LogPane(): React.JSX.Element {
   const filterId = useId();
   const modeId = useId();
   const idleId = useId();
+  const capacityId = useId();
   const listRef = useRef<HTMLDivElement>(null);
 
   const version = useLogStore((s) => s.version);
@@ -64,9 +73,11 @@ export function LogPane(): React.JSX.Element {
   }).mode;
 
   const sessionState = useConnectionStore((s) => s.sessionState);
+  const capacity = useLogStore((s) => s.capacity);
+  const setCapacity = useLogStore((s) => s.setCapacity);
 
   // 缺陷 D7：记忆化的选择器，重渲染不重算；输入过滤词时也只算一次
-  const rows = selectRows({
+  const { rows, hiddenEarlier } = selectRows({
     version,
     language,
     view,
@@ -139,6 +150,19 @@ export function LogPane(): React.JSX.Element {
 
   // 面板隐藏即销毁，别把定时器留给一个已经卸载的组件
   useEffect(() => resetConfirm, [resetConfirm]);
+
+  /**
+   * 缩容是破坏性的，所以结果必须回执到日志里：容量一改日志就短了一截，
+   * 不说明的话与「数据丢了」无法区分。
+   */
+  const onCapacityCommit = useCallback(
+    (value: number) => {
+      const dropped = setCapacity(value);
+      const { appendMessage } = useLogStore.getState();
+      appendMessage(dropped > 0 ? t.capacityDropped(value, dropped) : t.capacityChanged(value));
+    },
+    [setCapacity, t],
+  );
 
   const onClear = useCallback(() => {
     if (!confirmingClear) {
@@ -246,6 +270,21 @@ export function LogPane(): React.JSX.Element {
             />
             {t.onlyMatch}
           </label>
+
+          <span className={styles.divider} aria-hidden="true" />
+
+          <label className="label" htmlFor={capacityId}>
+            {t.logCapacity}
+          </label>
+          <CapacityInput
+            id={capacityId}
+            label={t.logCapacity}
+            title={t.logCapacityHint(LOG_CAPACITY_MIN)}
+            value={capacity}
+            onCommit={onCapacityCommit}
+          />
+          <span className="label">{t.logCapacityUnit}</span>
+
           <button type="button" className="btn" onClick={saveLog}>
             {t.saveLog}
           </button>
@@ -264,25 +303,30 @@ export function LogPane(): React.JSX.Element {
             ) : null}
           </div>
         ) : (
-          rows.map((row) => (
-            <div key={row.id} className={styles.row} data-kind={row.kind}>
-              {row.timestamp ? <span className={styles.time}>{row.timestamp}</span> : null}
-              <span className={styles.arrow} aria-hidden="true">
-                {ARROWS[row.kind]}
-              </span>
-              <span className={styles.body}>
-                {row.segments.map((segment, index) =>
-                  segment.hit ? (
-                    <mark key={index} className={styles.hit}>
-                      {segment.text}
-                    </mark>
-                  ) : (
-                    <span key={index}>{segment.text}</span>
-                  ),
-                )}
-              </span>
-            </div>
-          ))
+          <>
+            {hiddenEarlier > 0 ? (
+              <div className={styles.earlier}>{t.hiddenEarlier(hiddenEarlier)}</div>
+            ) : null}
+            {rows.map((row) => (
+              <div key={row.id} className={styles.row} data-kind={row.kind}>
+                {row.timestamp ? <span className={styles.time}>{row.timestamp}</span> : null}
+                <span className={styles.arrow} aria-hidden="true">
+                  {ARROWS[row.kind]}
+                </span>
+                <span className={styles.body}>
+                  {row.segments.map((segment, index) =>
+                    segment.hit ? (
+                      <mark key={index} className={styles.hit}>
+                        {segment.text}
+                      </mark>
+                    ) : (
+                      <span key={index}>{segment.text}</span>
+                    ),
+                  )}
+                </span>
+              </div>
+            ))}
+          </>
         )}
       </div>
 
