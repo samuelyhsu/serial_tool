@@ -186,3 +186,20 @@ webview 入口靠 `import './bootstrap'` 排在第一行来保证「先装环境
 - tsconfig 开了全套严格选项（含 `noUncheckedIndexedAccess`、`noUnusedLocals`、
   `verbatimModuleSyntax`），类型导入必须写成 `import type` / inline `type`（ESLint 也在管）。
 - 空 catch 块被 ESLint 禁掉：要么处理，要么写注释说明为何可以忽略。
+
+## 依赖冻结
+
+直接依赖在 `package.json` 里写死**精确版本**（没有 `^`），`.npmrc` 里的 `save-exact=true`
+保证 `npm install <pkg>` 不会又把范围放开。CI 一律 `npm ci`，锁文件是唯一真相。
+
+选版规则两条，缺一不可：
+
+1. **发布满 90 天**——刚出的版本缺乏真实世界验证；
+2. **上游仍在支持期内**——`npm view <pkg>@<ver> deprecated` 要为空。
+
+这两条会打架：eslint 9.39.x 全线成熟，但整条 9.x 已被上游标记 EOL，所以用的是 10.4.1。
+遇到冲突时第 2 条优先——留在没人修的版本上不叫稳定。
+
+升级是手动动作，一次只动一件事，跑完整 CI。不开 Dependabot 的 npm 例行升版
+（理由写在 `.github/dependabot.yml` 里），只留 github-actions 那条——action 版本不受
+锁文件保护，GitHub 会强制淘汰旧 runtime。

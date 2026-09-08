@@ -79,9 +79,11 @@ function loadOptions(raw: unknown): ConnectionOptions {
   return {
     baudRate: pickInt(raw, 'baudRate', DEFAULT_OPTIONS.baudRate, isValidBaudRate),
     dataBits: pickInt(raw, 'dataBits', DEFAULT_OPTIONS.dataBits, (v) => v === 7 || v === 8) as
-      7 | 8,
+      | 7
+      | 8,
     stopBits: pickInt(raw, 'stopBits', DEFAULT_OPTIONS.stopBits, (v) => v === 1 || v === 2) as
-      1 | 2,
+      | 1
+      | 2,
     parity: pickEnum(raw, 'parity', PARITIES, DEFAULT_OPTIONS.parity),
     flowControl: pickEnum(raw, 'flowControl', FLOW_CONTROLS, DEFAULT_OPTIONS.flowControl),
   };

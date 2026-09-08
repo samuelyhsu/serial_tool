@@ -77,7 +77,6 @@ async function loopback(): Promise<Loopback> {
   const watcher = new PortWatcher({ list: () => Promise.resolve(PORTS), intervalMs: 60_000 });
   await watcher.refresh();
 
-  let host: SessionHost | null = null;
   let hidden = false;
 
   // 宿主 → webview：VS Code 那边是 webview.postMessage，这里就是一个 message 事件
@@ -86,7 +85,7 @@ async function loopback(): Promise<Loopback> {
     window.dispatchEvent(new MessageEvent('message', { data: event }));
   };
 
-  host = new SessionHost({
+  const host = new SessionHost({
     id: 'panel-loopback',
     leases,
     watcher,

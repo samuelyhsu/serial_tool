@@ -142,7 +142,8 @@ export function presetLabel(preset: Preset, messages: Messages): string {
 }
 
 export type PresetIssue =
-  { id: string; kind: 'lossy' } | { id: string; kind: 'parse'; error: HexParseError };
+  | { id: string; kind: 'lossy' }
+  | { id: string; kind: 'parse'; error: HexParseError };
 
 interface PresetState {
   /** 恒为 PRESET_COUNT 条，按 PRESET_PAGE_SIZE 分页展示。 */
@@ -316,7 +317,8 @@ export const usePresetStore = create<PresetState>()((set, get) => {
 /* ---------------- 导入：显式校验（缺陷 D17） ---------------- */
 
 export type ImportResult =
-  { ok: true; presets: Preset[]; skipped: number } | { ok: false; reason: string };
+  | { ok: true; presets: Preset[]; skipped: number }
+  | { ok: false; reason: string };
 
 /**
  * 原型只检查「是不是数组」，字段一律 `String(p.name || 'cmd')` 硬转，

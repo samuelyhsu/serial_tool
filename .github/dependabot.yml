@@ -1,25 +1,26 @@
-# 依赖更新。
+# 依赖策略：**冻结**。
 #
-# 两个生态都要开：
-#  - npm：业务依赖；workspaces 由根目录这一条统管，apps/vscode 不必单列。
-#  - github-actions：**这条常被忘掉**，而它恰恰是把 workflow 里的 action 版本
-#    钉到 commit SHA 之后唯一能让它们继续更新的东西。没有它，SHA 固定
-#    就等于「永远不更新」，比用 tag 还糟。
+# 直接依赖在 package.json 里写死精确版本（无 `^`），选版规则是「发布满 90 天、
+# 且上游仍在支持期内」。锁文件随之固定，CI 一律 `npm ci`。
+# 理由：这个项目运行时依赖只有 4 个、无服务端、无用户数据，例行升版带来的收益
+# 远小于它带来的风险 —— npm 上真正出过事的投毒事件全都是靠「升级」传播的，
+# 冻住不动的人毫发无伤。想升级时手动升，一次一件事，跑完整 CI。
+#
+# 所以这里**不配 npm 生态**。已知依赖漏洞由仓库设置里的 Dependabot security
+# updates 兜底（那是独立开关，与本文件无关，也不受 open-pull-requests-limit 约束）。
+#
+# github-actions 是唯一例外，见下。
 version: 2
 updates:
-  - package-ecosystem: npm
-    directory: /
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
-    groups:
-      # 补丁与小版本合成一个 PR，免得每周被十几个 PR 淹掉
-      minor-and-patch:
-        update-types:
-          - minor
-          - patch
-
+  # 这条不能省。workflow 里引用的 action 不是被锁文件冻住的东西：
+  # GitHub 会强制淘汰旧的 action runtime（Node 16、Node 20 都经历过），
+  # 到期后 workflow 直接失败。冻结 action 版本 = 某天流水线突然全红且没人预告。
+  # 合成一个 PR，每月一次。
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
+    groups:
+      actions:
+        patterns:
+          - '*'

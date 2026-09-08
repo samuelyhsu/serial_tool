@@ -13,7 +13,8 @@
 const SEPARATORS = new Set([' ', '\t', '\n', '\r', '\f', '\v', ',', ';', ':', '-', '_']);
 
 export type HexParseError =
-  { kind: 'invalid-char'; char: string; index: number } | { kind: 'odd-length'; token: string };
+  | { kind: 'invalid-char'; char: string; index: number }
+  | { kind: 'odd-length'; token: string };
 
 export type HexParseResult = { ok: true; bytes: Uint8Array } | { ok: false; error: HexParseError };
 

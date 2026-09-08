@@ -160,16 +160,16 @@
     "test:integration": "node scripts/build.mjs && tsc -p tsconfig.test.json && vscode-test"
   },
   "dependencies": {
-    "serialport": "^13.0.0"
+    "serialport": "13.0.0"
   },
   "devDependencies": {
-    "@types/mocha": "^10.0.10",
-    "@types/vscode": "^1.75.0",
-    "@vscode/test-cli": "^0.0.15",
-    "@vscode/test-electron": "^3.1.0",
-    "@vscode/vsce": "^3.2.0",
-    "esbuild": "^0.28.2",
-    "ovsx": "^0.10.12"
+    "@types/mocha": "10.0.10",
+    "@types/vscode": "1.75.0",
+    "@vscode/test-cli": "0.0.12",
+    "@vscode/test-electron": "3.0.0",
+    "@vscode/vsce": "3.9.2",
+    "esbuild": "0.28.1",
+    "ovsx": "0.10.12"
   },
   "repository": {
     "type": "git",
