@@ -122,5 +122,8 @@ export function createWebPlatform(): Platform {
         navigator.serial.removeEventListener('disconnect', onChange);
       };
     },
+
+    // 浏览器里没有第二份历史：日志只在 logStore 的环形缓冲里，它清完就干净了
+    clearLog: () => undefined,
   };
 }

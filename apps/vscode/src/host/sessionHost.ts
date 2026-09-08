@@ -211,6 +211,13 @@ export class SessionHost {
         this.deps.writePref(body.key, body.value);
         return undefined;
 
+      case 'log.clear':
+        // 攒批中那批也要丢。它们已经不在 ring 里了，留着只会在下一次 flush 时
+        // 又推给界面 —— 用户看到的就是「清空后自己冒出来几行」。
+        this.#ring.clear();
+        this.#pending = [];
+        return undefined;
+
       case 'tasks.start':
         this.#startTask(body.taskId, body.frames, body.intervalMs);
         return undefined;

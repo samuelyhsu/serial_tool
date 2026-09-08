@@ -85,6 +85,8 @@ export interface Messages {
   readonly framingHint: Readonly<Record<'raw' | 'idle' | 'line', string>>;
   readonly saveLog: string;
   readonly clear: string;
+  /** 清空按钮按下一次后的二次确认文案。 */
+  readonly confirmClear: string;
   readonly noData: string;
   readonly noDataHint: string;
   readonly jumpToBottom: string;

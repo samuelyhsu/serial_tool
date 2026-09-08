@@ -19,6 +19,8 @@ import styles from './LogPane.module.css';
 
 /** 最多渲染多少行。与原型一致；再多也超出一屏，只会拖慢渲染。 */
 const RENDER_LIMIT = 600;
+/** 清空的二次确认窗口：这么久没有再按一次就当作放弃。 */
+const CONFIRM_WINDOW_MS = 3000;
 /** 距底部多少像素以内算作「贴底」。 */
 const BOTTOM_THRESHOLD = 24;
 
@@ -32,7 +34,7 @@ export function LogPane(): React.JSX.Element {
   const listRef = useRef<HTMLDivElement>(null);
 
   const version = useLogStore((s) => s.version);
-  const clear = useLogStore((s) => s.clear);
+  const clearAll = useLogStore((s) => s.clearAll);
 
   const language = useUiStore((s) => s.language);
   const view = useUiStore((s) => s.view);
@@ -119,10 +121,38 @@ export function LogPane(): React.JSX.Element {
     useLogStore.getState().appendMessage(t.exportedLog(entries.length));
   }, [view, t]);
 
+  /**
+   * 清空要按两下。它不可撤销 —— 环形缓冲里最多 5000 条采集数据连同统计一起丢，
+   * 而按钮就紧挨着「保存日志」。
+   *
+   * 没有用 window.confirm：VS Code 的 webview 跑在没有 `allow-modals` 的 iframe 里，
+   * 原生弹窗会被直接吞掉。浏览器里好用、扩展里静默失效是最糟的一种组合。
+   */
+  const [confirmingClear, setConfirmingClear] = useState(false);
+  const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const resetConfirm = useCallback(() => {
+    if (confirmTimer.current !== null) clearTimeout(confirmTimer.current);
+    confirmTimer.current = null;
+    setConfirmingClear(false);
+  }, []);
+
+  // 面板隐藏即销毁，别把定时器留给一个已经卸载的组件
+  useEffect(() => resetConfirm, [resetConfirm]);
+
   const onClear = useCallback(() => {
-    clear();
+    if (!confirmingClear) {
+      setConfirmingClear(true);
+      confirmTimer.current = setTimeout(() => {
+        confirmTimer.current = null;
+        setConfirmingClear(false);
+      }, CONFIRM_WINDOW_MS);
+      return;
+    }
+    resetConfirm();
+    clearAll();
     useLogStore.getState().appendMessage(t.clearedLog);
-  }, [clear, t]);
+  }, [confirmingClear, resetConfirm, clearAll, t]);
 
   const showJump = !atBottom && rows.length > 0;
 
@@ -220,7 +250,7 @@ export function LogPane(): React.JSX.Element {
             {t.saveLog}
           </button>
           <button type="button" className="btn btn--danger" onClick={onClear}>
-            {t.clear}
+            {confirmingClear ? t.confirmClear : t.clear}
           </button>
         </div>
       </div>

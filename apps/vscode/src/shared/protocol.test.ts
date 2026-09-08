@@ -48,6 +48,7 @@ const REQUESTS: Record<RequestMethod, RequestBody> = {
   'session.setFraming': { method: 'session.setFraming', framing: { mode: 'line' } },
   'session.setReconnect': { method: 'session.setReconnect', enabled: false },
   'prefs.write': { method: 'prefs.write', key: 'wst.theme', value: 'dark' },
+  'log.clear': { method: 'log.clear' },
   'tasks.start': {
     method: 'tasks.start',
     taskId: 't1',

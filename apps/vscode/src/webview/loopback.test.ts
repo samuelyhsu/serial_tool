@@ -222,6 +222,45 @@ describe('webview ⇄ 扩展宿主 回环', () => {
   });
 
   /**
+   * 「清空」曾经只清 webview 这一侧，宿主的环形缓冲毫不知情 —— 面板一隐藏再显示，
+   * snapshot() 就把用户明确清掉的日志原样灌了回来。
+   *
+   * 又一个只长在接缝上的缺陷：clear() 有测试、snapshot() 有测试，两侧各自都对，
+   * 错的是没人把「清空之后面板重建」这条路走一遍。
+   */
+  it('清空日志会连宿主保留的那份一起丢，面板重建后不会又冒出来', async () => {
+    const app = await loopback();
+    app.connection.useConnectionStore.getState().selectPort('COM3');
+    await app.connection.useConnectionStore.getState().toggleConnection();
+    await app.settle();
+
+    app.transport().emitData([0x68, 0x69]);
+    await app.settle();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await app.settle();
+    app.log.flushPendingEntries();
+    expect(app.log.allEntries()).not.toHaveLength(0);
+
+    app.log.useLogStore.getState().clearAll();
+    await app.settle();
+
+    // 界面这一侧空了。这部分本来就是对的，真正的问题在下面
+    expect(app.log.allEntries()).toHaveLength(0);
+
+    // 宿主那一侧也必须空 —— 它才是面板重建后日志的来源
+    const snapshot = app.host.snapshot();
+    if (snapshot.type !== 'snapshot') throw new Error('unreachable');
+    expect(snapshot.frames).toHaveLength(0);
+
+    // 走一遍真实的重建路径：隐藏，然后把快照回放回来。清掉的东西不该复活
+    app.hidePanel();
+    const view = await import('./applySnapshot');
+    view.applySnapshot(snapshot);
+    app.log.flushPendingEntries();
+    expect(app.log.allEntries()).toHaveLength(0);
+  });
+
+  /**
    * 这一条是整个回环测试存在的理由。
    *
    * 周期任务必须真的跑在宿主那一侧 —— 面板被隐藏时 webview 连同定时器一起销毁，

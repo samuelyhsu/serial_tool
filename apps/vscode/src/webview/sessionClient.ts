@@ -141,6 +141,11 @@ export class SessionClient {
     void this.#call({ method: 'prefs.write', key, value }).catch(() => undefined);
   }
 
+  /** 让宿主也丢掉它那份日志历史，否则面板重建时 snapshot 会把它灌回来。 */
+  clearLog(): Promise<void> {
+    return this.#call({ method: 'log.clear' }).then(() => undefined);
+  }
+
   /* ---------------- 周期发送（在宿主进程里跑） ---------------- */
 
   startTask(taskId: string, frames: Uint8Array[], intervalMs: number): Promise<void> {

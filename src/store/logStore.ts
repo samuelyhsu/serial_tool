@@ -6,6 +6,7 @@ import { StreamingUtf8Decoder } from '@/core/codec/text';
 import type { SessionNotice } from '@/core/session/notices';
 import type { Direction } from '@/core/session/serialSession';
 import type { Language, Messages } from '@/i18n';
+import { platform } from './platform';
 
 export type LogKind = Direction | 'sys';
 export type LogView = 'text' | 'hex';
@@ -71,10 +72,18 @@ interface LogState {
   appendNotice: (notice: SessionNotice) => void;
   appendMessage: (text: string) => void;
   addThroughput: (direction: Direction, byteCount: number) => void;
+  /** 丢弃本地环形缓冲与统计。快照回放前也会走它，因此**不**碰运行环境那份历史。 */
   clear: () => void;
+  /**
+   * 用户点「清空」。除了本地那份，还要让运行环境丢掉它自己保留的历史。
+   *
+   * 与 clear() 分开不是洁癖：clear() 还被 resetFrames() 用来给快照回放让位，
+   * 那条路径上要是顺手清了宿主，面板每重建一次就会把历史清一次。
+   */
+  clearAll: () => void;
 }
 
-export const useLogStore = create<LogState>()((set) => ({
+export const useLogStore = create<LogState>()((set, get) => ({
   version: 0,
   rxBytes: 0,
   txBytes: 0,
@@ -149,6 +158,11 @@ export const useLogStore = create<LogState>()((set) => ({
       rxFrames: 0,
       txFrames: 0,
     }));
+  },
+
+  clearAll: () => {
+    platform().clearLog();
+    get().clear();
   },
 }));
 

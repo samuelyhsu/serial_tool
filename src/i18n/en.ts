@@ -55,6 +55,7 @@ export const en: Messages = {
   },
   saveLog: 'Save log',
   clear: 'Clear',
+  confirmClear: 'Confirm clear?',
   noData: 'No data',
   noDataHint: 'Choose a port to grant access, then open it to start receiving',
   jumpToBottom: '↓ Back to bottom',

@@ -103,6 +103,11 @@ webview 入口靠 `import './bootstrap'` 排在第一行来保证「先装环境
   时历史日志会跟着重新翻译。`Messages` 接口在 `src/i18n/types.ts`，zh / en 两份目录必须同构。
 - **日志渲染有两级缓冲**：`RingBuffer`（容量 5000）+ 60ms 攒批提交，文本视图在入库时算好，
   HEX 视图惰性计算并缓存在条目上。不要在渲染路径上重新解码字节。
+  **VS Code 里日志有两份**：webview 一份、宿主一份（`sessionHost` 的 `#ring`，面板重建后
+  靠它回放）。所以「清空」必须两侧一起清，走 `logStore.clearAll()` → `Platform.clearLog()`；
+  `logStore.clear()` 是**回放专用**的，`resetFrames()` 靠它腾地方 —— 在那条路径上顺手通知
+  宿主，等于面板每重建一次就把历史清一次。这个 bug 真的发生过：两侧各自的测试全绿，
+  错的是没人把「清空之后面板重建」这条路走一遍。
 - **持久化统一走 `src/lib/persist.ts`**：写用 `saveSoon`（250ms 攒批，`pagehide` /
   `visibilitychange` 时立即落盘），读用 `pickInt` / `pickEnum` / `pickBoolean` / `pickString`
   逐字段校验、非法值回退默认。键名前缀 `wst.` 由 `src/lib/storage.ts` 统一加。

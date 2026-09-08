@@ -67,6 +67,7 @@ function fakePlatform(recorded: Recorded): Platform {
     listPorts: () => Promise.resolve([]),
     requestPort: () => Promise.reject(new Error('not used')),
     watchPorts: () => () => undefined,
+    clearLog: () => undefined,
   };
 }
 

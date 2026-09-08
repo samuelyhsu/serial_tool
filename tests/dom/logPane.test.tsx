@@ -114,17 +114,40 @@ describe('LogPane', () => {
     expect(remaining[0]).toContain('OK');
   });
 
-  it('清空后统计归零并给出反馈', async () => {
+  it('清空要按两下，第一下只是征询', async () => {
     render(<LogPane />);
     feed('data\n');
-    await rowTexts();
+    const before = await rowTexts();
 
     await userEvent.click(screen.getByRole('button', { name: '清空' }));
+    // 第一下什么都不该发生 —— 这一步不可撤销，最多 5000 条采集数据连同统计一起丢
+    expect(currentRows()).toEqual(before);
+    expect(useLogStore.getState().rxBytes).toBeGreaterThan(0);
+
+    await userEvent.click(screen.getByRole('button', { name: '确认清空？' }));
     await waitFor(() => {
       expect(useLogStore.getState().rxBytes).toBe(0);
       expect(useLogStore.getState().rxFrames).toBe(0);
     });
     expect(await rowTexts()).toEqual([expect.stringContaining('日志与统计已清空')]);
+
+    // 清完就复位，下一次仍然要按两下
+    expect(screen.getByRole('button', { name: '清空' })).toBeTruthy();
+  });
+
+  it('征询状态会自己超时复原，不会一直吊着一个危险按钮', async () => {
+    render(<LogPane />);
+    feed('data\n');
+    await rowTexts();
+
+    await userEvent.click(screen.getByRole('button', { name: '清空' }));
+    expect(screen.getByRole('button', { name: '确认清空？' })).toBeTruthy();
+
+    // 3 秒的征询窗口是产品行为，如实等一次
+    await waitFor(() => expect(screen.getByRole('button', { name: '清空' })).toBeTruthy(), {
+      timeout: 5000,
+    });
+    expect(useLogStore.getState().rxBytes).toBeGreaterThan(0);
   });
 
   it('系统消息随语言切换重新翻译（保留结构化事件的好处）', async () => {

@@ -42,6 +42,14 @@ export type RequestBody =
   | { method: 'session.setReconnect'; enabled: boolean }
   | { method: 'prefs.write'; key: string; value: unknown }
   /**
+   * 清空宿主保留的日志历史。
+   *
+   * 界面上的「清空」曾经只清 webview 这一侧，宿主的环形缓冲毫不知情：面板一隐藏
+   * 再显示，snapshot() 就把清掉的日志连同统计原样灌了回来。清空是用户的明确意图，
+   * 两侧的历史必须一起丢。
+   */
+  | { method: 'log.clear' }
+  /**
    * 周期发送。它必须由宿主执行而不是 webview：面板一旦被隐藏就会被销毁，
    * 定时器随之消失 —— 而「挂个心跳跑一下午」正是这类工具最常见的用法。
    *

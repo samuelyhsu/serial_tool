@@ -100,6 +100,17 @@ export interface Platform {
   requestPort: () => Promise<PortDescriptor>;
   /** 订阅设备插拔。返回取消订阅函数。 */
   watchPorts: (onChange: () => void) => () => void;
+  /**
+   * 丢弃运行环境自己保留的那份日志历史。
+   *
+   * 浏览器里日志只活在页面内存里，logStore 清掉就没了，这里是空操作；
+   * VS Code 里宿主另存了一份用于面板重建后回放，不一起清的话，隐藏再显示
+   * 就会把用户明确清掉的日志原样带回来。
+   *
+   * 它不在 SessionLike 上：那个接口刻意与 core 的 SerialSession 同形，
+   * 而日志历史归宿主编排层所有，不是会话的一部分。
+   */
+  clearLog: () => void;
 }
 
 let installed: Platform | null = null;

@@ -53,6 +53,7 @@ export const zh: Messages = {
   },
   saveLog: '保存日志',
   clear: '清空',
+  confirmClear: '确认清空？',
   noData: '无数据',
   noDataHint: '点「选择端口」授权设备，再打开串口开始接收',
   jumpToBottom: '↓ 回到底部',

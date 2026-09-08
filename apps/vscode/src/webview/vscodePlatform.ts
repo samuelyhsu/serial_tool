@@ -205,5 +205,10 @@ export function createVsCodePlatform(deps: VsCodePlatformDeps): VsCodePlatform {
         onPortsChange = null;
       };
     },
+
+    // 宿主另存着一份历史用于面板重建后回放，不一起清就等于没清
+    clearLog: () => {
+      void client.clearLog().catch(() => undefined);
+    },
   };
 }
