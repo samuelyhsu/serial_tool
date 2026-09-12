@@ -1,0 +1,40 @@
+# serial.uplume.com —— 自建部署的 Caddy 站点配置
+#
+# 装法见同目录的 README.md。放到主 Caddyfile import 的位置，
+# 例如 /etc/caddy/sites/serial.uplume.com.conf。
+#
+# 关键约束：**必须是 https**。Web Serial API 只在安全上下文下可用，
+# 纯 http 的站点上 navigator.serial 根本不存在。这里只写域名、不写 http://，
+# Caddy 会自动签发证书，并把 http 308 到 https。
+
+serial.uplume.com {
+	root * /var/www/serial.uplume.com
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+	}
+
+	# 带内容哈希的产物长缓存；只给 2xx，别把部署途中的 404 缓存一年
+	header /assets/* Cache-Control "public, max-age=31536000, immutable" {
+		match status 2xx
+	}
+
+	# 其余（主要是 index.html）每次回源校验：它引用的是带哈希的文件名，
+	# 缓存住就意味着用户停在旧版本上，而旧版引用的资源已被 rsync --delete 删掉了
+	@unhashed not path /assets/*
+	header @unhashed Cache-Control "no-cache"
+
+	# 没有 SPA 回退（try_files … /index.html）：应用没有前端路由，
+	# 缺失的资源就该是 404，而不是拿 index.html 顶上
+	file_server
+
+	log {
+		output file /var/log/caddy/serial.uplume.com.log {
+			roll_size 10MiB
+			roll_keep 3
+		}
+	}
+}
