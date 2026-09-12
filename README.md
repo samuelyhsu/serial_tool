@@ -406,20 +406,25 @@ linux x64 / arm / arm64（musl 与 glibc 各一份）、darwin 通用二进制�
 
 ## 发布
 
-### 网页版
+**一个 tag 发布全部四样东西**，`.github/workflows/release.yml` 依次做：
 
-推送到 `main` 即自动部署（见下节）。
+1. 跑完整 CI（typecheck / lint / format / 测试 / 构建 / 打包扩展）；
+2. 校验 tag 与 `apps/vscode/package.json` 的版本号一致；
+3. 打 VSIX 与网页离线包，建 GitHub Release 并挂上它们；
+4. 发布到 VS Code Marketplace 与 Open VSX；
+5. 部署网页版 —— GitHub Pages 一份、自建服务器一份（调用 `deploy.yml`，见下节）。
 
-### VS Code 扩展
-
-打 tag 就发布，`.github/workflows/release.yml` 会依次做：跑完整 CI → 校验 tag 与
-`apps/vscode/package.json` 的版本号一致 → 打 VSIX → 建 GitHub Release 并挂上它 →
-发布到 VS Code Marketplace 与 Open VSX。
+顺序是刻意的：**不可逆的排在可重来的前面**。商店那两步发错了收不回来，
+而部署随时能重跑（`deploy.yml` 留了 workflow_dispatch 手动入口）。
 
 ```bash
 # 先改 apps/vscode/package.json 的 version 与 CHANGELOG.md，提交
 git tag v0.2.0 && git push origin v0.2.0
 ```
+
+推送到 `main` **只跑 CI，不发布也不部署**。线上那份对应的是某个发布版本，
+而不是最新提交 —— 这个工具是给别人装到内网机器上用的，两者对不上时
+连「你现在用的是哪一版」都问不清楚。
 
 版本号对不上会**在打包之前**失败 —— Marketplace 认的是清单里那个版本，
 发错了收不回来。
@@ -439,11 +444,23 @@ git tag v0.2.0 && git push origin v0.2.0
 
 ## 部署
 
-推送到 `main` 后由 GitHub Actions 构建并发布到 GitHub Pages。项目页部署在 `/<repo>/` 子路径下，构建时通过 `BASE_PATH` 环境变量注入。
+网页版有两份，由 `.github/workflows/deploy.yml` 一起发出去，**触发方式只有两种**：
+打 tag 发布时被 `release.yml` 调用，或者到 Actions 页手动 dispatch（补救用 ——
+首次开 Pages、把线上回滚到某个旧 tag）。
 
-另有一份部署在自建服务器 <https://serial.uplume.com/>，同一条流水线里的 `self-hosted`
-job 通过 rsync 同步。两份的唯一区别是 base 路径：Pages 在 `/<repo>/` 子路径下，
-自有域名就是站点根。服务器端的配置与首次安装步骤见 [docs/deploy/](docs/deploy/)。
+- **GitHub Pages**：项目页部署在 `/<repo>/` 子路径下，构建时通过 `BASE_PATH` 环境变量注入。
+- **自建服务器** <https://serial.uplume.com/>：`self-hosted` job 通过 rsync 同步。
+
+两份的唯一区别就是这个 base 路径：Pages 在子路径下，自有域名就是站点根，所以
+后者用默认构建、不传 `BASE_PATH`。服务器端的配置与首次安装步骤见 [docs/deploy/](docs/deploy/)。
+
+自建部署的连接信息全走 secrets（仓库是公开的，非标准 SSH 端口没必要主动登出去）：
+`SSH_KEY` / `SSH_HOST` / `SSH_PORT` / `SSH_USER` / `SSH_KNOWN_HOSTS` / `DEPLOY_PATH`。
+这六个必须配成**仓库级** secret，不能塞进 `marketplace` 环境 —— `release.yml` 靠
+`secrets: inherit` 把它们传给 `deploy.yml`，而 inherit 传的只有仓库/组织级的那批
+（商店令牌不受影响：它们是在声明了 `environment: marketplace` 的那个 job 里用的）。
+**没配 `SSH_KEY` 时这个 job 整个跳过**，fork 这个仓库的人不会因此一直看到红叉 ——
+代价是「忘了配」和「不需要配」在日志上长得一样，第一次接手时值得去确认一眼。
 
 **自建部署必须是 https** —— Web Serial 只在安全上下文下可用，纯 http 的站点上
 页面会显示「浏览器不支持」横幅。

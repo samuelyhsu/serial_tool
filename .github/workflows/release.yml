@@ -1,7 +1,15 @@
 name: Release
 
 # 打 tag 即发布：`git tag v0.2.0 && git push origin v0.2.0`。
-# 先跑完整的 CI，通过了才发 —— 与 deploy.yml 同一个道理，发布出去是收不回来的。
+# 先跑完整的 CI，通过了才发 —— 发布出去是收不回来的。
+#
+# 一个 tag 串起全部四件事，顺序是刻意的：
+#   1. 跑完整 CI（verify）
+#   2. 建 GitHub Release，挂上 VSIX 与网页离线包（release job）
+#   3. 发布到 VS Code Marketplace / Open VSX（同上）
+#   4. 部署 GitHub Pages 与自建服务器（deploy job，调用 deploy.yml）
+# 部署排在最后：它是唯一能随时重跑、也最容易靠手动 dispatch 补救的一步，
+# 而商店那两步发错了收不回来。先做不可逆的，再做可重来的。
 on:
   push:
     tags:
@@ -121,3 +129,27 @@ jobs:
         if: env.VSCE_PAT == '' || env.OVSX_PAT == ''
         run: |
           echo "::notice::未配置发布令牌的商店已跳过。到仓库 Settings → Environments → marketplace 添加 VSCE_PAT / OVSX_PAT 后重新打 tag 即可。"
+
+  # 网页版跟着同一个 tag 上线：GitHub Pages 一份、自建服务器一份。
+  #
+  # 复用 deploy.yml 而不是在这里再抄一遍构建 + rsync：两份网页部署的差别只有
+  # base 路径，抄第二遍意味着以后每改一次构建参数都要记得改两处。
+  #
+  # 三个 key 一个都不能少：
+  #  - skip-verify: 上面的 verify 已经跑过完整 CI 了，不必再跑一遍。
+  #  - secrets: inherit —— 被调用的工作流默认拿不到调用方的 secrets。少了它，
+  #    self-hosted job 会静默走进「未配置 SSH_KEY」的跳过分支，日志上和
+  #    「部署成功」几乎分不出来。
+  #  - permissions —— 传给被调用工作流的令牌权限只能被降级、不能被提升，
+  #    而本工作流顶上的默认是 contents: read。不在这里显式给出 pages / id-token，
+  #    deploy.yml 自己声明的那份会因为「提升」而不生效，Pages 部署直接失败。
+  deploy:
+    needs: release
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/deploy.yml
+    with:
+      skip-verify: true
+    secrets: inherit

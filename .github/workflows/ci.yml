@@ -2,6 +2,11 @@ name: CI
 
 on:
   pull_request:
+  # main 上的推送也直接跑一遍。以前这是靠 deploy.yml（那时它是「推 main 即部署」）
+  # 顺带做的；部署改成只由 tag 触发之后，没了这一条，直接落在 main 上的提交
+  # 就一个关卡都不过了 —— 而问题会一直潜伏到下次打 tag 才爆出来。
+  push:
+    branches: [main]
   # 供 deploy.yml / release.yml 调用：校验作为发布的前置关卡跑，
   # 而不是和发布并行 —— 并行的话测试挂了照样会发出去
   workflow_call:
@@ -62,10 +67,12 @@ jobs:
 
       # 被 deploy.yml 调用时跳过：那条流水线紧接着就会用 BASE_PATH 做一次真正的
       # 生产构建，同样能验证打包器，重复构建只是白等。
-      # 条件里显式写出 pull_request，不依赖「inputs 为空时 null 强转 false」这条
+      # 条件里显式写出直接触发的两种事件，不依赖「inputs 为空时 null 强转 false」这条
       # 隐晦规则 —— 万一理解有偏差，PR 会静默失去打包器验证，这种漏洞没人会察觉。
+      # 注意 workflow_call 时 github.event_name 是**调用方**的事件：release.yml 由
+      # tag 触发，这里同样是 push，所以下面的 push 分支顺带保证了发布必定构建一次。
       - name: Build
-        if: ${{ github.event_name == 'pull_request' || !inputs.skip-build }}
+        if: ${{ github.event_name == 'pull_request' || github.event_name == 'push' || !inputs.skip-build }}
         run: npm run build
 
       # 扩展的宿主代码与 webview 各自打一次，顺带把 VSIX 也打出来。

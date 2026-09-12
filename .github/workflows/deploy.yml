@@ -1,24 +1,44 @@
 name: Deploy
 
+# 只在**打 tag 发布**时部署：由 release.yml 在发布成功之后调用（见那边的 deploy job），
+# 外加一个手动入口用于补救（首次开 Pages、或线上要回滚到某个 tag 重跑）。
+#
+# 曾经是「推 main 即部署」。问题是线上站点跟着任意一次提交走，而 Release 里那份
+# 离线包、商店里那版扩展是跟着 tag 走的 —— 三者各跑各的，出问题时连「线上现在
+# 到底是哪一版」都说不清。现在四件事由同一个 tag 串起来。
+#
+# 代价是 main 上的提交不再自动上线，得打 tag。这是有意的取舍：这个工具是给别人
+# 装到内网机器上用的，「线上=某个发布版本」比「线上=最新提交」重要得多。
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      skip-verify:
+        description: >-
+          调用方自己已经跑过完整 CI 时传 true（release.yml 就是这么用的），
+          免得同一条流水线把 typecheck / lint / 测试跑两遍。
+        type: boolean
+        default: false
 
 permissions:
   contents: read
   pages: write
   id-token: write
 
-# 同一时刻只允许一个部署在跑，新的推送取代排队中的旧任务
+# 同一时刻只允许一个部署在跑。
+# 不开 cancel-in-progress：部署现在只由发布触发，本来就稀少，而被取消的那次很可能
+# 已经把扩展发上商店了 —— 留下「扩展发了、站点没更」的半截状态，比多等一会儿糟得多。
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   # 先把 CI 的校验（typecheck / lint / format / 测试）跑一遍，通过了才允许发布。
   # 打包器的验证交给下面的 build job —— 它用 BASE_PATH 构建的正是要发布的产物
   verify:
+    # 显式写出 workflow_dispatch，不依赖「inputs 未定义时 null 强转 false」这条隐晦规则：
+    # 万一理解有偏差，手动部署会静默失去全部校验，而这种漏洞没人会察觉。
+    if: ${{ github.event_name == 'workflow_dispatch' || !inputs.skip-verify }}
     uses: ./.github/workflows/ci.yml
     with:
       # 下面的 build job 马上会用 BASE_PATH 再构建一次，这里不必重复
@@ -26,6 +46,9 @@ jobs:
 
   build:
     needs: verify
+    # verify 被 skip-verify 跳过时，依赖它的 job 会按默认规则一起跳过 —— 必须显式放行。
+    # 用 !cancelled() 而不是 always()：整条流水线被人取消时不该还继续往线上推。
+    if: ${{ !cancelled() && needs.verify.result != 'failure' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -57,6 +80,12 @@ jobs:
 
   deploy:
     needs: build
+    # 必须显式写：经 release.yml 调用时 verify 被 skip-verify 跳过，build 靠自己的 if 放行了，
+    # 但不写 if 的 job 用的是默认的 success()，它会沿依赖链看到那个 skipped 的 verify，
+    # 把这里也一并跳过（官方文档："a failure or skip applies to all jobs in the dependency
+    # chain from the point of failure or skip onwards"；actions/runner#2205）——
+    # 结果就是自建服务器更新了、Pages 却没更，而且整条流水线是绿的。
+    if: ${{ !cancelled() && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -75,35 +104,43 @@ jobs:
   # fork 这个仓库的人不会因此一直看到红叉。
   self-hosted:
     needs: verify
+    if: ${{ !cancelled() && needs.verify.result != 'failure' }}
     runs-on: ubuntu-latest
     env:
-      SSH_KEY: ${{ secrets.SSH_KEY }}
-      SSH_HOST: ${{ secrets.SSH_HOST }}
-      SSH_PORT: ${{ secrets.SSH_PORT }}
-      SSH_USER: ${{ secrets.SSH_USER }}
-      SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
-      DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+      # job 级只放「配没配」，密钥本身只交给真正用它的 Deploy 一步。
+      # 下面的 npm ci 会执行依赖的 install 脚本 —— 把密钥放在 job 级，
+      # 等于递给整棵依赖树里的每一段代码。
+      HAS_SSH_KEY: ${{ secrets.SSH_KEY != '' }}
     steps:
       - uses: actions/checkout@v7
-        if: env.SSH_KEY != ''
+        if: env.HAS_SSH_KEY == 'true'
 
       - uses: actions/setup-node@v7
-        if: env.SSH_KEY != ''
+        if: env.HAS_SSH_KEY == 'true'
         with:
           node-version-file: .nvmrc
           cache: npm
 
       - run: npm ci
-        if: env.SSH_KEY != ''
+        if: env.HAS_SSH_KEY == 'true'
 
       - name: Build
-        if: env.SSH_KEY != ''
+        if: env.HAS_SSH_KEY == 'true'
         run: npm run build
 
       # 不用第三方的 ssh-agent action：这点事几行 shell 就够，
       # 而部署密钥要经手的东西越少越好。
       - name: Deploy
-        if: env.SSH_KEY != ''
+        if: env.HAS_SSH_KEY == 'true'
+        env:
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+          # 服务器端用 rrsync 把钥匙钉在站点目录上时，这里的路径相对那个目录（填 "."），
+          # 见 docs/deploy/README.md
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
           mkdir -p ~/.ssh
           echo "$SSH_KEY" > ~/.ssh/deploy_key
@@ -115,5 +152,5 @@ jobs:
           rsync -az --delete --chmod=D755,F644 -e "ssh -i ~/.ssh/deploy_key -p $SSH_PORT" dist/ "$SSH_USER@$SSH_HOST:$DEPLOY_PATH/"
 
       - name: Skipped
-        if: env.SSH_KEY == ''
+        if: env.HAS_SSH_KEY != 'true'
         run: echo "::notice::未配置 SSH_KEY，已跳过自建服务器部署。"
