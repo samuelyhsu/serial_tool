@@ -114,6 +114,11 @@ webview 入口靠 `import './bootstrap'` 排在第一行来保证「先装环境
   用户设了 50000、切个标签页回来却只剩默认那些 —— 与「日志被吃掉了」无法区分。
   容量**不设产品上限**是用户明确要的；`LOG_CAPACITY_CEILING`（2^32-1）挡的是
   `new Array(n)` 抛 RangeError，不是性能阀门，别把它当上限往下调。
+- **版本号只有一个：`apps/vscode/package.json` 的 `version`**。它是扩展清单的必填字段，
+  删不掉；release.yml 校验 tag 与它一致，网页版也跟同一个 tag 部署。根 package.json 是
+  private 的 workspace 根，**刻意不写 `version`**，别加回去 —— 两个号迟早对不上。
+  界面左下角的版本号由两份 Vite 配置的 `define` 注入（`src/lib/appVersion.ts`）；
+  webview 那份漏配时类型检查照过、面板却白屏，由 verify-artifacts 兜住。
 - **持久化统一走 `src/lib/persist.ts`**：写用 `saveSoon`（250ms 攒批，`pagehide` /
   `visibilitychange` 时立即落盘），读用 `pickInt` / `pickEnum` / `pickBoolean` / `pickString`
   逐字段校验、非法值回退默认。键名前缀 `wst.` 由 `src/lib/storage.ts` 统一加。

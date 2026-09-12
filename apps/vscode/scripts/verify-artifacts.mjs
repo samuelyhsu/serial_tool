@@ -62,6 +62,18 @@ check(
 );
 
 /*
+ * 版本号靠 Vite 的 define 在构建时替换。webview 的配置不在任何 tsconfig 里，
+ * 漏配 define 时类型检查照样通过，产物里却留下一个裸标识符 —— 面板一加载就
+ * ReferenceError，整片白屏。
+ */
+const { version } = JSON.parse(read('package.json'));
+check(
+  'webview 产物里不该残留 __APP_VERSION__（vite.webview.config.ts 漏配了 define）',
+  !webview.includes('__APP_VERSION__'),
+);
+check(`webview 产物里应能找到版本号 ${version}`, webview.includes(`"${version}"`));
+
+/*
  * webview 的 CSP 只放行扩展自己的资源。任何外部 URL 在线上都会被挡掉，
  * 而串口工具常跑在内网机器上，那种依赖本来就不该有。
  */

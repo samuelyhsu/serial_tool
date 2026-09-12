@@ -1,6 +1,7 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { APP_VERSION } from '@/lib/appVersion';
 import { __resetLogStoreForTests } from '@/store/logStore';
 import { useUiStore } from '@/store/uiStore';
 import { App } from '@/ui/App';
@@ -19,6 +20,12 @@ describe('App', () => {
     expect(screen.getByRole('region', { name: '接收区' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: '单条发送' })).toBeInTheDocument();
     expect(screen.getByRole('complementary', { name: '多条发送' })).toBeInTheDocument();
+  });
+
+  it('版本号显示在左下角：状态栏的第一项', () => {
+    render(<App />);
+    const statusBar = screen.getByRole('contentinfo');
+    expect(statusBar.firstElementChild).toHaveTextContent(`v${APP_VERSION}`);
   });
 
   /**

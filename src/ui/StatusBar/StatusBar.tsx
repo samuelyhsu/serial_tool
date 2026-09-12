@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { APP_VERSION } from '@/lib/appVersion';
 import { useConnectionStore, useSelectedPortLabel } from '@/store/connectionStore';
 import { consumeThroughputWindow, useLogStore } from '@/store/logStore';
 import { useTasksStore } from '@/store/tasksStore';
@@ -64,6 +65,8 @@ export function StatusBar(): React.JSX.Element {
 
   return (
     <footer className={styles.bar}>
+      {/* 固定在左下角：反馈问题时先要知道用的是哪一版，内网离线包尤其说不清 */}
+      <span className={styles.faint}>v{APP_VERSION}</span>
       <span>{config}</span>
       <span className={styles.rx}>
         RX {rxBytes} B · {rxFrames} {t.frames}

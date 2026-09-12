@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { fileURLToPath, URL } from 'node:url';
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
@@ -6,9 +7,17 @@ import react from '@vitejs/plugin-react';
 // 通过 BASE_PATH 环境变量覆盖，CI 里显式传入。
 const base = process.env.BASE_PATH ?? '/';
 
+// 界面上显示的版本号取自扩展清单：发布时 tag 校验的是它（见 src/lib/appVersion.ts）
+const manifest = JSON.parse(
+  readFileSync(new URL('./apps/vscode/package.json', import.meta.url), 'utf8'),
+) as { version: string };
+
 export default defineConfig({
   base,
   plugins: [react()],
+  define: {
+    __APP_VERSION__: JSON.stringify(manifest.version),
+  },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

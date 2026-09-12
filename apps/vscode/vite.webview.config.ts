@@ -1,6 +1,12 @@
+import { readFileSync } from 'node:fs';
 import { fileURLToPath, URL } from 'node:url';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
+
+// 与根 vite.config.ts 同源：界面上的版本号取自扩展清单（见 src/lib/appVersion.ts）
+const manifest = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as {
+  version: string;
+};
 
 /**
  * webview 的构建配置。
@@ -15,6 +21,11 @@ export default defineConfig({
   // 资源用相对路径引用，宿主再用 asWebviewUri 换成 vscode-webview:// 的地址
   base: './',
   plugins: [react()],
+  // 漏了这一项，产物里会留下裸的 __APP_VERSION__，面板一加载就 ReferenceError 白屏
+  // （verify-artifacts.mjs 盯着这件事）
+  define: {
+    __APP_VERSION__: JSON.stringify(manifest.version),
+  },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('../../src', import.meta.url)),

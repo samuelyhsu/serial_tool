@@ -1,7 +1,6 @@
 {
   "name": "web-serial-tool",
   "private": true,
-  "version": "1.0.0",
   "type": "module",
   "description": "Browser-based serial port tool built on the Web Serial API",
   "license": "MIT",
