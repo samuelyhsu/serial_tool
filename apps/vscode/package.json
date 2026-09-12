@@ -173,6 +173,6 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/samuelyhsu/web_serial_tool.git"
+    "url": "https://github.com/samuelyhsu/serial_tool.git"
   }
 }

@@ -132,7 +132,7 @@ rsync -az --delete --chmod=D755,F644 \
 也可以用 gh（在 Git Bash 里执行 —— PowerShell 不支持 `<` 重定向）：
 
 ```bash
-R=samuelyhsu/web_serial_tool
+R=samuelyhsu/serial_tool
 gh secret set SSH_KEY -R $R < deploy_key
 gh secret set SSH_KNOWN_HOSTS -R $R < known_hosts
 gh secret set SSH_HOST -R $R --body '<主机>'

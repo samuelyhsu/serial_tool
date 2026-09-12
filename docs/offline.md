@@ -34,4 +34,4 @@ macOS 上是苹方 + Menlo），**不向任何外部站点发请求**，内网�
 - 更省事的办法是装 VS Code 扩展（同一个 Release 里的 `.vsix`），它不需要 https，
   也不用每次手动授权端口。
 - 许可证：MIT
-- 项目主页：<https://github.com/samuelyhsu/web_serial_tool>
+- 项目主页：<https://github.com/samuelyhsu/serial_tool>

@@ -4,20 +4,20 @@
 
 ## 下载
 
-| 形态             | 入口                                                                                                                                         |
-| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| **在线版**       | <https://samuelyhsu.github.io/web_serial_tool/> 或 <https://serial.uplume.com/> —— 打开就能用，无需安装                                      |
-| **VS Code 扩展** | [serial-tool.vsix](https://github.com/samuelyhsu/web_serial_tool/releases/latest/download/serial-tool.vsix)                                  |
-| **离线网页包**   | [web-serial-tool.zip](https://github.com/samuelyhsu/web_serial_tool/releases/latest/download/web-serial-tool.zip) —— 给内网 / 没有外网的机器 |
+| 形态             | 入口                                                                                                                                     |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| **在线版**       | <https://samuelyhsu.github.io/serial_tool/> 或 <https://serial.uplume.com/> —— 打开就能用，无需安装                                      |
+| **VS Code 扩展** | [serial-tool.vsix](https://github.com/samuelyhsu/serial_tool/releases/latest/download/serial-tool.vsix)                                  |
+| **离线网页包**   | [web-serial-tool.zip](https://github.com/samuelyhsu/serial_tool/releases/latest/download/web-serial-tool.zip) —— 给内网 / 没有外网的机器 |
 
 上面两个链接永远指向最新一次发布（`releases/latest/download/…`）。
-需要指定版本就去 [Releases](https://github.com/samuelyhsu/web_serial_tool/releases) 页取带版本号的那份。
+需要指定版本就去 [Releases](https://github.com/samuelyhsu/serial_tool/releases) 页取带版本号的那份。
 
 离线网页包解压后**不能直接双击 `index.html`**：Web Serial 只在 https 或 localhost
 下可用，`file://` 不算，得起一个本地静态服务器（包里的 `README.md` 有说明）。
 
 > 尚未发布首个版本时，上面两个 Release 链接会是 404。开发中的构建产物可以从
-> 任意一次 [Actions 运行](https://github.com/samuelyhsu/web_serial_tool/actions)
+> 任意一次 [Actions 运行](https://github.com/samuelyhsu/serial_tool/actions)
 > 的 Artifacts 里取（需登录 GitHub 账号）。
 
 ## ⚠️ 使用前须知

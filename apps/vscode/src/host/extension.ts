@@ -136,7 +136,7 @@ export function activate(context: vscode.ExtensionContext): SerialToolApi {
       const choice = await vscode.window.showErrorMessage(t.bindingFailed(loaded.message), open);
       if (choice === open) {
         await vscode.env.openExternal(
-          vscode.Uri.parse('https://samuelyhsu.github.io/web_serial_tool/'),
+          vscode.Uri.parse('https://samuelyhsu.github.io/serial_tool/'),
         );
       }
       return null;
