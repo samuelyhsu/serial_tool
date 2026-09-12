@@ -12,7 +12,9 @@
   --sunk: var(--vscode-editor-background, oklch(0.145 0.008 255));
   --line: var(--vscode-panel-border, oklch(0.31 0.01 255));
   --text: var(--vscode-foreground, oklch(0.93 0.004 255));
-  --mono: var(--vscode-editor-font-family, ui-monospace, SFMono-Regular, Menlo, monospace);
+  /* 西文跟随工作台 / 编辑器字体设置，中文组沿用 tokens.css 的，保证汉字回退确定 */
+  --font-sans: var(--vscode-font-family, var(--font-latin-sans)), var(--font-cjk), sans-serif;
+  --font-mono: var(--vscode-editor-font-family, var(--font-latin-mono)), var(--font-cjk), monospace;
 }
 
 body {

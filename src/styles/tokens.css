@@ -35,10 +35,25 @@
   --radius: 5px;
   --radius-md: 6px;
 
-  --font-sans:
-    'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', 'Noto Sans SC', 'Microsoft YaHei',
-    sans-serif;
-  --font-mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  /*
+   * 字体只用系统自带的，不引 Web 字体：串口工具常跑在内网 / 国内网络，CDN 字体要么
+   * 拿不到、要么晚到后中途换字 —— 等宽字宽一变，日志与 HEX 列整体重排。
+   *
+   * 西文在前、中文在后，浏览器逐字回退：英文数字走 Segoe UI / Cascadia，汉字走雅黑 / 苹方。
+   * 刻意不用 system-ui：中文 Windows 上它会拿中文字体自带的西文字形顶替 Segoe UI，
+   * 日文 Windows 上还有字形错误（Bootstrap #22377、Tailwind #20318 都因此移除了它）。
+   * 等宽栈也带上中文组 —— 日志里常有中文，写明了切到英文界面（lang=en）时回退也确定。
+   * 不写 ui-monospace：Chromium 不支持它，而 Web Serial 只在 Chromium 系浏览器里可用。
+   *
+   * 拆成三组是为了让 VS Code 能只替换西文部分（见 apps/vscode/src/webview/webview.css）。
+   */
+  --font-latin-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Arial;
+  --font-latin-mono: 'Cascadia Mono', Consolas, Menlo, 'DejaVu Sans Mono', 'Liberation Mono';
+  --font-cjk:
+    'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei UI', 'Microsoft YaHei', 'Noto Sans CJK SC',
+    'Source Han Sans SC';
+  --font-sans: var(--font-latin-sans), var(--font-cjk), sans-serif;
+  --font-mono: var(--font-latin-mono), var(--font-cjk), monospace;
 }
 
 [data-theme='light'] {

@@ -21,8 +21,8 @@ python -m http.server 8000
 
 ## 关于字体
 
-页面会尝试从 Google Fonts 取 IBM Plex 字体。**没有外网时这个请求会失败，但不影响功能** ——
-字体栈里有系统字体兜底，界面照常可用，只是字形换成系统默认的。
+页面只用系统自带字体（Windows 上是 Segoe UI / Cascadia Mono / Consolas + 微软雅黑，
+macOS 上是苹方 + Menlo），**不向任何外部站点发请求**，内网与断网环境下的显示与联网时完全一致。
 
 ## 环境要求
 

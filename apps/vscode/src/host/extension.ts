@@ -481,8 +481,7 @@ function escapeAttribute(value: string): string {
  * webview 的宿主页面。
  *
  * CSP 是必须的：`default-src 'none'` 之外只放行带 nonce 的脚本和扩展自己的资源。
- * 因此这里不能像 Web 版那样引 Google Fonts —— 串口工具常跑在内网机器上，
- * 那条 CDN 依赖在浏览器版里就已经是「渐进增强」的，在这里干脆去掉。
+ * 字体不需要额外放行：两端都只用系统字体栈，webview 里西文还会跟随编辑器设置（webview.css）。
  */
 function renderHtml(
   webview: vscode.Webview,
