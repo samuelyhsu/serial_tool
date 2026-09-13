@@ -1,4 +1,6 @@
 {
+  "displayName": "Serial Tool - Serial Port Monitor",
+  "description": "Serial port monitor for embedded development: HEX/text views, timestamps, CRC/Modbus checksums, periodic send, command presets and auto-reconnect. One panel per port, many ports at once.",
   "cmd.newPanel": "New Serial Panel",
   "cmd.showPanels": "Serial Panels…",
   "cmd.toggleConnection": "Open / Close Port",

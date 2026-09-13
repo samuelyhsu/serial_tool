@@ -1,4 +1,6 @@
 {
+  "displayName": "串口助手 - Serial Tool",
+  "description": "串口调试助手：HEX / 文本收发、时间戳、CRC / Modbus 校验和、周期发送、指令预设、断线自动重连。一个面板一个端口，可多口同时调试。",
   "cmd.newPanel": "新建串口面板",
   "cmd.showPanels": "串口面板…",
   "cmd.toggleConnection": "打开 / 关闭串口",
