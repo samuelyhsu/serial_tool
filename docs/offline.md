@@ -1,4 +1,4 @@
-# 串口助手 · Web Serial Tool（离线包）
+# 串口助手 · Serial Tool（离线包）
 
 这是网页版的构建产物，随 GitHub Release 一起分发，供**内网 / 没有外网**的机器离线部署。
 

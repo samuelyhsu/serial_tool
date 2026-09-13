@@ -1,4 +1,4 @@
-# Web Serial Tool · 串口助手
+# Serial Tool · 串口助手
 
 基于 [Web Serial API](https://developer.mozilla.org/docs/Web/API/Web_Serial_API) 的浏览器串口调试工具。打开网页即可收发数据，无需安装驱动或客户端。
 
