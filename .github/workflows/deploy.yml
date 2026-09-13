@@ -1,7 +1,8 @@
 name: Deploy
 
 # 只在**打 tag 发布**时部署：由 release.yml 在发布成功之后调用（见那边的 deploy job），
-# 外加一个手动入口用于补救（首次开 Pages、或线上要回滚到某个 tag 重跑）。
+# 外加一个手动入口用于补救（重跑、或把线上回滚到某个旧 tag）。手动触发同样只接受
+# v* tag，从分支触发会在第一个 job（guard）就失败。
 #
 # 曾经是「推 main 即部署」。问题是线上站点跟着任意一次提交走，而 Release 里那份
 # 离线包、商店里那版扩展是跟着 tag 走的 —— 三者各跑各的，出问题时连「线上现在
@@ -33,11 +34,37 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # 线上只放发布版本：不管是被 release.yml 调用还是手动触发，要部署的 ref 都必须是
+  # v* tag。手动入口在 Actions 页上可以选任意分支 —— 从 main 手动部署过一次，线上跑的
+  # 就成了 v0.1.0 之后第 7 个提交，和 Release、商店里那版对不上。
+  #
+  # github-pages 环境的部署规则里也只放行 v* tag，这里再挡一道是因为：
+  #  - 自建服务器那份不走任何环境，只有这里拦得住它；
+  #  - 在最前面失败，而不是等整套 CI 跑完了才被环境规则拒掉。
+  # 被调用时 github.ref 是调用方的，也就是触发 release.yml 的那个 tag。
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 只允许部署 v* tag
+        env:
+          # 经 env 传进脚本而不是直接拼进命令行：分支名是用户可控的字符串
+          REF: ${{ github.ref }}
+        run: |
+          case "$REF" in
+            refs/tags/v*) echo "部署 ${REF#refs/tags/}" ;;
+            *)
+              echo "::error::线上只部署发布版本。手动触发时请在 Use workflow from 里选一个 v* tag（当前：$REF）"
+              exit 1
+              ;;
+          esac
+
   # 先把 CI 的校验（typecheck / lint / format / 测试）跑一遍，通过了才允许发布。
   # 打包器的验证交给下面的 build job —— 它用 BASE_PATH 构建的正是要发布的产物
   verify:
+    needs: guard
     # 显式写出 workflow_dispatch，不依赖「inputs 未定义时 null 强转 false」这条隐晦规则：
     # 万一理解有偏差，手动部署会静默失去全部校验，而这种漏洞没人会察觉。
+    # 没写状态函数时 GitHub 会隐式补上 success()：guard 失败，这里跟着跳过。
     if: ${{ github.event_name == 'workflow_dispatch' || !inputs.skip-verify }}
     uses: ./.github/workflows/ci.yml
     with:
@@ -45,10 +72,11 @@ jobs:
       skip-build: true
 
   build:
-    needs: verify
+    needs: [guard, verify]
     # verify 被 skip-verify 跳过时，依赖它的 job 会按默认规则一起跳过 —— 必须显式放行。
     # 用 !cancelled() 而不是 always()：整条流水线被人取消时不该还继续往线上推。
-    if: ${{ !cancelled() && needs.verify.result != 'failure' }}
+    # guard 要单独判：它失败时 verify 也是 skipped，而上一条规则恰恰把 skipped 当放行。
+    if: ${{ !cancelled() && needs.guard.result == 'success' && needs.verify.result != 'failure' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -103,8 +131,9 @@ jobs:
   # 非标准 SSH 端口没必要主动登出去。没配密钥时整个 job 静默跳过，
   # fork 这个仓库的人不会因此一直看到红叉。
   self-hosted:
-    needs: verify
-    if: ${{ !cancelled() && needs.verify.result != 'failure' }}
+    needs: [guard, verify]
+    # 与 build 同理：guard 失败时 verify 是 skipped，必须单独判 guard
+    if: ${{ !cancelled() && needs.guard.result == 'success' && needs.verify.result != 'failure' }}
     runs-on: ubuntu-latest
     env:
       # job 级只放「配没配」，密钥本身只交给真正用它的 Deploy 一步。

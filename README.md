@@ -415,7 +415,7 @@ linux x64 / arm / arm64（musl 与 glibc 各一份）、darwin 通用二进制�
 5. 部署网页版 —— GitHub Pages 一份、自建服务器一份（调用 `deploy.yml`，见下节）。
 
 顺序是刻意的：**不可逆的排在可重来的前面**。商店那两步发错了收不回来，
-而部署随时能重跑（`deploy.yml` 留了 workflow_dispatch 手动入口）。
+而部署随时能重跑（重跑失败的那个 job，或手动触发 `deploy.yml` 并选一个 `v*` tag，见下节）。
 
 ```bash
 # 先改 apps/vscode/package.json 的 version 与 CHANGELOG.md，提交
@@ -446,7 +446,15 @@ git tag v0.2.0 && git push origin v0.2.0
 
 网页版有两份，由 `.github/workflows/deploy.yml` 一起发出去，**触发方式只有两种**：
 打 tag 发布时被 `release.yml` 调用，或者到 Actions 页手动 dispatch（补救用 ——
-首次开 Pages、把线上回滚到某个旧 tag）。
+重跑、把线上回滚到某个旧 tag）。
+
+**两份线上都只放发布版本**，由两道关卡保证：
+
+- `deploy.yml` 最前面的 `guard` job 只放行 `v*` tag。手动触发时在 Use workflow from 里
+  选分支（包括 `main`）会直接失败 —— 自建服务器那份不走任何环境，只有它拦得住。
+- `github-pages` 环境的部署规则只放行 `v*` tag（Settings → Environments → github-pages →
+  Deployment branches and tags）。缺了这条规则，打 tag 发布到 Pages 那一步会被拒：
+  `Tag "vX.Y.Z" is not allowed to deploy to github-pages due to environment protection rules`。
 
 - **GitHub Pages**：项目页部署在 `/<repo>/` 子路径下，构建时通过 `BASE_PATH` 环境变量注入。
 - **自建服务器** <https://serial.uplume.com/>：`self-hosted` job 通过 rsync 同步。

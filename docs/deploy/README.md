@@ -2,7 +2,8 @@
 
 GitHub Pages 那份之外，同一份产物再部署一份到自己的服务器，由
 `.github/workflows/deploy.yml` 的 `self-hosted` job 通过 rsync 推送。触发方式与 Pages
-那份相同：打 tag 发布时由 `release.yml` 调用，或者到 Actions 页手动 dispatch。
+那份相同：打 tag 发布时由 `release.yml` 调用，或者到 Actions 页手动 dispatch ——
+手动触发只接受 v* tag，从分支触发会在 `guard` 那一步失败：线上只放发布版本。
 
 ## 前提：必须是 HTTPS
 
