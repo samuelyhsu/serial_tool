@@ -81,13 +81,3 @@
   --hover: oklch(0.92 0.005 255);
   --row-hover: oklch(0.965 0.004 255);
 }
-
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.25;
-  }
-}

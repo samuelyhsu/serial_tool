@@ -120,29 +120,32 @@ export function Toolbar(): React.JSX.Element {
           {t.autoReconnect}
         </label>
 
-        <div className={styles.status}>
-          <span className={styles.led} data-state={sessionState} aria-hidden="true" />
-          {/* 状态灯是纯色彩信息，屏幕阅读器需要文字播报（缺陷 D20） */}
-          <span className={styles.statusText} role="status" aria-live="polite">
-            {sessionState === 'open'
-              ? t.opened
-              : sessionState === 'opening'
-                ? t.opening
-                : sessionState === 'reconnecting'
-                  ? t.reconnecting
-                  : t.disconnected}
-          </span>
-        </div>
+        {/* 看得见的只有按钮，但掉线、重连这类不是用户点出来的变化仍要播报给屏幕阅读器（缺陷 D20） */}
+        <span className="visuallyHidden" role="status" aria-live="polite">
+          {sessionState === 'open'
+            ? t.opened
+            : sessionState === 'opening'
+              ? t.opening
+              : sessionState === 'reconnecting'
+                ? t.reconnecting
+                : t.disconnected}
+        </span>
 
         <button
           type="button"
           className={styles.connect}
-          data-open={isOpen || sessionState === 'reconnecting'}
+          data-state={sessionState}
           disabled={busy || (!isOpen && (!supported || !hasPort))}
-          title={!isOpen && busyElsewhere ? t.portBusy : undefined}
+          title={
+            sessionState === 'reconnecting'
+              ? t.reconnecting
+              : !isOpen && busyElsewhere
+                ? t.portBusy
+                : undefined
+          }
           onClick={() => void toggleConnection()}
         >
-          {sessionState === 'closed' ? t.openPort : t.closePort}
+          {sessionState === 'closed' ? t.openPort : busy ? t.opening : t.closePort}
         </button>
 
         <div className={styles.switches}>

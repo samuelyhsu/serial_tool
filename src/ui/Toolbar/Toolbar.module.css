@@ -142,43 +142,6 @@
   flex-wrap: wrap;
 }
 
-.status {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 4px 10px 4px 8px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--panel2);
-}
-
-.led {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--faint);
-  flex: none;
-}
-
-.led[data-state='open'] {
-  background: var(--green);
-  box-shadow: 0 0 6px var(--green);
-  animation: pulse 1.6s ease-in-out infinite;
-}
-
-.led[data-state='opening'],
-.led[data-state='reconnecting'] {
-  background: var(--amber);
-  box-shadow: 0 0 6px var(--amber);
-  animation: pulse 1.6s ease-in-out infinite;
-}
-
-.statusText {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--dim);
-}
-
 .connect {
   border: none;
   border-radius: var(--radius-md);
@@ -191,9 +154,16 @@
   color: var(--inv);
 }
 
-.connect[data-open='true'] {
+.connect[data-state='open'] {
   background: var(--red-bg);
   color: var(--red-text);
+}
+
+/* 重连期间链路并不通，但按钮仍是「关闭串口」（点了就停止重连）。原先靠状态灯的琥珀色
+   看出这一点，状态灯去掉后由按钮自己换色 */
+.connect[data-state='reconnecting'] {
+  background: var(--amber);
+  color: var(--inv);
 }
 
 .connect:disabled {
