@@ -155,7 +155,7 @@ export function Toolbar(): React.JSX.Element {
             onClick={toggleLanguage}
             aria-label={t.switchLanguage}
           >
-            {language === 'zh' ? 'EN' : '中文'}
+            {language === 'zh' ? 'EN' : 'CN'}
           </button>
           <button type="button" className="btn" onClick={toggleTheme} aria-label={t.switchTheme}>
             {theme === 'dark' ? '☀' : '☾'}

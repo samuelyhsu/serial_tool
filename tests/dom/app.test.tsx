@@ -72,6 +72,16 @@ describe('App', () => {
     expect(screen.queryByText('接收区')).not.toBeInTheDocument();
   });
 
+  it('语言按钮显示要切过去的那种：中文界面是 EN，英文界面是 CN', async () => {
+    render(<App />);
+    const toggle = (): HTMLElement =>
+      screen.getByRole('button', { name: /切换语言|Switch language/ });
+    expect(toggle()).toHaveTextContent(/^EN$/);
+
+    await userEvent.click(toggle());
+    expect(toggle()).toHaveTextContent(/^CN$/);
+  });
+
   it('内置预设名随语言切换，且不依赖名字比对', async () => {
     render(<App />);
     // 预设名现在显示在发送按钮上
