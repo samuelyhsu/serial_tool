@@ -42,9 +42,6 @@ export function Toolbar(): React.JSX.Element {
   return (
     <header className={styles.header}>
       <div className={styles.brand}>
-        <div className={styles.mark} aria-hidden="true">
-          S
-        </div>
         <div className={styles.title}>{t.app}</div>
       </div>
 

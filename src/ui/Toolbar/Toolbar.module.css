@@ -11,22 +11,8 @@
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
   padding-right: 14px;
   border-right: 1px solid var(--line);
-}
-
-.mark {
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
-  background: var(--blue);
-  display: grid;
-  place-items: center;
-  font-family: var(--font-mono);
-  font-weight: 600;
-  font-size: 12px;
-  color: var(--inv);
 }
 
 .title {
