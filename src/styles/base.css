@@ -218,12 +218,6 @@ button {
   background: var(--panel);
 }
 
-.panelTitle {
-  font-weight: 600;
-  font-size: 12px;
-  letter-spacing: 0.02em;
-}
-
 .mono {
   font-family: var(--font-mono);
 }

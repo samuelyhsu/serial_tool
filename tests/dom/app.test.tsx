@@ -22,6 +22,14 @@ describe('App', () => {
     expect(screen.getByRole('complementary', { name: '多条发送' })).toBeInTheDocument();
   });
 
+  /** 三个区不再显示标题，但区域名称仍在，屏幕阅读器照样能按名字跳转。 */
+  it('三个区的名称不再作为标题显示出来', () => {
+    render(<App />);
+    for (const title of ['接收区', '单条发送', '多条发送']) {
+      expect(screen.queryByText(title)).not.toBeInTheDocument();
+    }
+  });
+
   it('版本号显示在左下角：状态栏的第一项', () => {
     render(<App />);
     const statusBar = screen.getByRole('contentinfo');
@@ -65,11 +73,11 @@ describe('App', () => {
 
   it('语言切换后界面文案整体换成英文', async () => {
     render(<App />);
-    expect(screen.getByText('接收区')).toBeInTheDocument();
+    expect(screen.getByText('时间戳')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: /切换语言|Switch language/ }));
-    expect(screen.getByText('Receive')).toBeInTheDocument();
-    expect(screen.queryByText('接收区')).not.toBeInTheDocument();
+    expect(screen.getByText('Timestamp')).toBeInTheDocument();
+    expect(screen.queryByText('时间戳')).not.toBeInTheDocument();
   });
 
   it('语言按钮显示要切过去的那种：中文界面是 EN，英文界面是 CN', async () => {

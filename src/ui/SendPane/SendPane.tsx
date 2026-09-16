@@ -72,8 +72,6 @@ export function SendPane(): React.JSX.Element {
   return (
     <section className={styles.pane} aria-label={t.singleSend}>
       <div className={styles.head}>
-        <span className="panelTitle">{t.singleSend}</span>
-
         <FormatToggle value={mode} onChange={setMode} />
 
         {/* TXT 与 HEX 各有自己的「帧尾」控件，同一位置互斥显示 */}

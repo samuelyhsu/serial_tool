@@ -77,7 +77,6 @@ export function PresetPane(): React.JSX.Element {
   return (
     <aside className={styles.pane} aria-label={t.multiSend}>
       <div className={styles.head}>
-        <span className="panelTitle">{t.multiSend}</span>
         <div className={styles.pager}>
           <button
             type="button"

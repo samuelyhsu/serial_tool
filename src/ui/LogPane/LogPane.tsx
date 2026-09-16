@@ -183,8 +183,6 @@ export function LogPane(): React.JSX.Element {
   return (
     <section className={styles.pane} aria-label={t.receive}>
       <div className={styles.toolbar}>
-        <span className="panelTitle">{t.receive}</span>
-
         <FormatToggle value={view} onChange={setView} />
 
         <label className="check">
