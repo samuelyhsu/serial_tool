@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeTransport } from '../../../../tests/fakeTransport';
+import { LOG_CAPACITY_PREF_KEY } from '@/core/buffer/logCapacity';
 import type { NodePortInfo } from '@/core/transport/nodePortRegistry';
 import type { ConnectionOptions } from '@/core/transport/types';
 import { PortLeases } from '../host/portLeases';
@@ -69,11 +70,17 @@ interface Loopback {
    * 通道掐断。此后 webview 里跑的任何东西都到不了串口，而宿主里跑的照旧。
    */
   hidePanel: () => void;
+  /**
+   * 模拟面板被隐藏后再显示：界面按建面板那一刻的 HTML 整个重新求值（见 prefStore），
+   * 再把宿主的快照回放进去。新界面同样不连着宿主，只用来看回放出来的结果。
+   */
+  rebuildPanel: () => Promise<{ log: LogModule }>;
 }
 
 let disposeHost: (() => void) | null = null;
 
-async function loopback(): Promise<Loopback> {
+/** `prefs` 是建面板时扩展宿主 globalState 里已有的偏好。 */
+async function loopback(options: { prefs?: Record<string, unknown> } = {}): Promise<Loopback> {
   vi.resetModules();
 
   const transports: FakeTransport[] = [];
@@ -83,6 +90,10 @@ async function loopback(): Promise<Loopback> {
 
   let hidden = false;
   const prefWrites: [string, unknown][] = [];
+  const prefs: Record<string, unknown> = { ...options.prefs };
+  // 与 extension.ts 的 renderHtml 一样，只在建面板时烙一次
+  document.body.innerHTML = '<div id="root"></div>';
+  document.getElementById('root')!.dataset.prefs = JSON.stringify(prefs);
 
   // 宿主 → webview：VS Code 那边是 webview.postMessage，这里就是一个 message 事件
   const post = (event: HostEvent): void => {
@@ -101,8 +112,9 @@ async function loopback(): Promise<Loopback> {
     },
     post,
     pickPort: () => Promise.resolve(undefined),
-    readPrefs: () => ({}),
+    readPrefs: () => prefs,
     writePref: (key, value) => {
+      prefs[key] = value;
       prefWrites.push([key, value]);
     },
     language: 'zh',
@@ -165,6 +177,18 @@ async function loopback(): Promise<Loopback> {
     hidePanel: () => {
       hidden = true;
     },
+    rebuildPanel: async () => {
+      hidden = true;
+      vi.resetModules();
+      await import('./bootstrap');
+      const log = await import('@/store/logStore');
+      const view = await import('./applySnapshot');
+      const snapshot = activeHost.snapshot();
+      if (snapshot.type !== 'snapshot') throw new Error('unreachable');
+      view.applySnapshot(snapshot);
+      log.flushPendingEntries();
+      return { log };
+    },
   };
 }
 
@@ -177,6 +201,7 @@ afterEach(() => {
   disposeHost?.();
   disposeHost = null;
   vi.useRealTimers();
+  document.body.innerHTML = '';
 });
 
 describe('webview ⇄ 扩展宿主 回环', () => {
@@ -446,6 +471,43 @@ describe('webview ⇄ 扩展宿主 回环', () => {
 
     expect(tree.getTreeItem(port!).label).toBe('温控板 · COM3 · CH340 (1A86:7523)');
     tree.dispose();
+  });
+
+  /**
+   * 日志容量得两侧一起跟上用户的设定，面板重建后回放才不会被截断，而两侧曾经各错一半：
+   * 宿主拿不带前缀的键名、按数字去认这条偏好，一次都没认出来过；重建出来的界面则按
+   * 建面板时的偏好定容量。两侧的单元测试当时都是绿的 —— 喂的都是自己以为的形状。
+   */
+  it('建面板后调过日志容量，宿主照着留，面板重建后回放的条数也对得上', async () => {
+    const app = await loopback({ prefs: { [LOG_CAPACITY_PREF_KEY]: '1000' } });
+    // 默认的空闲分帧会把一口气喂进去的数据并成一帧，条数就数不清了
+    (await import('@/store/uiStore')).useUiStore.getState().setFrameMode('raw');
+    const store = app.connection.useConnectionStore;
+    store.getState().selectPort('COM3');
+    await store.getState().toggleConnection();
+    await app.settle();
+
+    const hostKeeps = async (count: number): Promise<number> => {
+      for (let i = 0; i < count; i += 1) app.transport().emitData([i & 0xff]);
+      await new Promise((resolve) => setTimeout(resolve, 100)); // 宿主攒批
+      await app.settle();
+      const snapshot = app.host.snapshot();
+      if (snapshot.type !== 'snapshot') throw new Error('unreachable');
+      return snapshot.frames.length;
+    };
+
+    // 建面板时就存着的设定
+    expect(await hostKeeps(1500)).toBe(1000);
+
+    // 面板里调大，走真实的写入路径到宿主
+    app.log.useLogStore.getState().setCapacity(2000);
+    (await import('@/lib/persist')).flushPersist();
+    await app.settle();
+    expect(await hostKeeps(1500)).toBe(2000);
+
+    const rebuilt = await app.rebuildPanel();
+    expect(rebuilt.log.useLogStore.getState().capacity).toBe(2000);
+    expect(rebuilt.log.allEntries()).toHaveLength(2000);
   });
 
   it('设备掉线的通知一路回到界面', async () => {

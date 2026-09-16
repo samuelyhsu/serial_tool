@@ -1,3 +1,4 @@
+import { LOG_CAPACITY_PREF_KEY, parseLogCapacity } from '@/core/buffer/logCapacity';
 import { readStored } from '@/lib/storage';
 import { useConnectionStore } from '@/store/connectionStore';
 import { useLogStore } from '@/store/logStore';
@@ -24,6 +25,11 @@ export function applySnapshot(snapshot: Extract<HostEvent, { type: 'snapshot' }>
     sessionState: snapshot.state,
     openedAt: snapshot.openedAt,
   });
+
+  // 回放之前先把容量对齐到最新设定：重建出来的界面按建面板时的偏好定了容量（见 prefStore），
+  // 宿主那份缓冲却是按最新设定留的 —— 先回放再对齐，多出来的那部分已经被旧容量挤掉了
+  const capacity = parseLogCapacity(snapshot.prefs[LOG_CAPACITY_PREF_KEY]);
+  if (capacity !== null) useLogStore.getState().setCapacity(capacity);
 
   useLogStore.getState().resetFrames(
     snapshot.frames.map((frame) => ({

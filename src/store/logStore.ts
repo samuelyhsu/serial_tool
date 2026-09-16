@@ -5,6 +5,7 @@ import {
   LOG_CAPACITY_CEILING,
   LOG_CAPACITY_KEY,
   LOG_CAPACITY_MIN,
+  parseLogCapacity,
 } from '@/core/buffer/logCapacity';
 import { RingBuffer } from '@/core/buffer/ringBuffer';
 import { escapeControlChars } from '@/core/codec/display';
@@ -14,7 +15,7 @@ import type { SessionNotice } from '@/core/session/notices';
 import type { Direction } from '@/core/session/serialSession';
 import type { Language, Messages } from '@/i18n';
 import { saveSoon } from '@/lib/persist';
-import { readStoredJson } from '@/lib/storage';
+import { readStored } from '@/lib/storage';
 import { platform } from './platform';
 
 export {
@@ -42,10 +43,9 @@ export interface LogEntry {
 }
 
 function loadCapacity(): number {
-  // 单值键，直接校验即可 —— pickInt 那套是给对象型偏好逐字段兜底用的。
+  // 单值键，不走 pickInt 那套（那是给对象型偏好逐字段兜底用的）。
   // 非法/陈旧的存量值一律回退默认，与 persist 的读取约定一致。
-  const raw = readStoredJson<unknown>(LOG_CAPACITY_KEY, null);
-  return isValidLogCapacity(raw) ? raw : DEFAULT_LOG_CAPACITY;
+  return parseLogCapacity(readStored(LOG_CAPACITY_KEY)) ?? DEFAULT_LOG_CAPACITY;
 }
 
 /** 攒批提交间隔：高波特率下把上千次 setState 压成每秒十几次。 */

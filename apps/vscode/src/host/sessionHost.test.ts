@@ -5,7 +5,7 @@ import type { ConnectionOptions } from '@/core/transport/types';
 import type { HostEvent } from '../shared/protocol';
 import { PortLeases } from './portLeases';
 import { PortWatcher } from './portWatcher';
-import { DEFAULT_LOG_CAPACITY, LOG_CAPACITY_KEY } from '@/core/buffer/logCapacity';
+import { DEFAULT_LOG_CAPACITY, LOG_CAPACITY_PREF_KEY } from '@/core/buffer/logCapacity';
 import { SessionHost } from './sessionHost';
 
 const OPTIONS: ConnectionOptions = {
@@ -433,6 +433,10 @@ describe('SessionHost 的日志容量', () => {
     return snapshot.frames.length;
   }
 
+  function capacityPref(value: unknown): string {
+    return JSON.stringify(value);
+  }
+
   it('没存过偏好时用默认容量', () => {
     const panel = makePanel('panel-1');
     expect(panel.host.snapshot().type).toBe('snapshot');
@@ -444,7 +448,7 @@ describe('SessionHost 的日志容量', () => {
    * 晚一步就意味着白丢一次历史。
    */
   it('建面板时就按存量偏好定容量', async () => {
-    const panel = makePanel('panel-1', { [LOG_CAPACITY_KEY]: 1000 });
+    const panel = makePanel('panel-1', { [LOG_CAPACITY_PREF_KEY]: capacityPref(1000) });
     await feed(panel, 1500);
     expect(bufferedFrames(panel)).toBe(1000);
   });
@@ -454,11 +458,19 @@ describe('SessionHost 的日志容量', () => {
     await feed(panel, 1500);
     expect(bufferedFrames(panel)).toBe(1500);
 
-    await panel.host.handle({ method: 'prefs.write', key: LOG_CAPACITY_KEY, value: 1000 });
+    await panel.host.handle({
+      method: 'prefs.write',
+      key: LOG_CAPACITY_PREF_KEY,
+      value: capacityPref(1000),
+    });
     expect(bufferedFrames(panel)).toBe(1000);
 
     // 扩容后继续收，能装到新容量为止
-    await panel.host.handle({ method: 'prefs.write', key: LOG_CAPACITY_KEY, value: 2000 });
+    await panel.host.handle({
+      method: 'prefs.write',
+      key: LOG_CAPACITY_PREF_KEY,
+      value: capacityPref(2000),
+    });
     for (let i = 0; i < 1500; i += 1) panel.transport().emitData([i & 0xff]);
     await vi.advanceTimersByTimeAsync(100);
     expect(bufferedFrames(panel)).toBe(2000);
@@ -467,25 +479,34 @@ describe('SessionHost 的日志容量', () => {
   it('非法容量被忽略，缓冲不受影响', async () => {
     const panel = makePanel('panel-1');
     await feed(panel, 1200);
-    // 低于下限、非整数、非数字都不该动到缓冲；上限不限，所以这里没有「太大」这一档
-    for (const bad of [0, -5, 1.5, 999, 'many', null]) {
-      await panel.host.handle({ method: 'prefs.write', key: LOG_CAPACITY_KEY, value: bad });
+    // 低于下限、非整数、非数字、被改坏的 JSON 都不该动到缓冲；上限不限，所以这里没有「太大」这一档
+    const bad = [...[0, -5, 1.5, 999, 'many', null].map(capacityPref), '{'];
+    for (const value of bad) {
+      await panel.host.handle({ method: 'prefs.write', key: LOG_CAPACITY_PREF_KEY, value });
     }
     expect(bufferedFrames(panel)).toBe(1200);
   });
 
   it('别的偏好键不会动到容量', async () => {
-    const panel = makePanel('panel-1', { [LOG_CAPACITY_KEY]: 1000 });
+    const panel = makePanel('panel-1', { [LOG_CAPACITY_PREF_KEY]: capacityPref(1000) });
     await feed(panel, 1500);
-    await panel.host.handle({ method: 'prefs.write', key: 'viewPrefs', value: { view: 'hex' } });
+    await panel.host.handle({
+      method: 'prefs.write',
+      key: 'wst.viewPrefs',
+      value: '{"view":"hex"}',
+    });
     expect(bufferedFrames(panel)).toBe(1000);
   });
 
   it('容量偏好被写回宿主，下次建面板时还在', async () => {
     const prefs: Record<string, unknown> = {};
     const first = makePanel('panel-1', prefs);
-    await first.host.handle({ method: 'prefs.write', key: LOG_CAPACITY_KEY, value: 2500 });
-    expect(prefs[LOG_CAPACITY_KEY]).toBe(2500);
+    await first.host.handle({
+      method: 'prefs.write',
+      key: LOG_CAPACITY_PREF_KEY,
+      value: capacityPref(2500),
+    });
+    expect(prefs[LOG_CAPACITY_PREF_KEY]).toBe('2500');
 
     // 面板重建：同一份偏好，新的 SessionHost
     const second = makePanel('panel-2', prefs);

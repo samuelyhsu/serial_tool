@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { LOG_CAPACITY_PREF_KEY, parseLogCapacity } from '@/core/buffer/logCapacity';
 import { encodeUtf8 } from '@/core/codec/text';
 import { messagesFor } from '@/i18n';
-import { readStoredJson } from '@/lib/storage';
 import { flushPersist } from '@/lib/persist';
 import {
   __resetLogStoreForTests,
@@ -11,7 +11,6 @@ import {
   entryBody,
   flushPendingEntries,
   LOG_CAPACITY_CEILING,
-  LOG_CAPACITY_KEY,
   LOG_CAPACITY_MIN,
   selectRows,
   setSelectorMessages,
@@ -215,10 +214,14 @@ describe('日志缓冲容量', () => {
     expect(useLogStore.getState().version).toBeGreaterThan(before);
   });
 
-  it('容量落盘，键名是宿主也认得的那个', () => {
+  /**
+   * 断言的是真正落盘的那个键和那段文本，而不是再经过一次存储层读回来 ——
+   * 读写都过同一层，前缀对不对、值是不是字符串，这条测试就看不出来了。
+   */
+  it('容量落盘成宿主按同一套规则读得懂的样子', () => {
     useLogStore.getState().setCapacity(1234);
     flushPersist();
-    expect(readStoredJson<unknown>(LOG_CAPACITY_KEY, null)).toBe(1234);
+    expect(parseLogCapacity(localStorage.getItem(LOG_CAPACITY_PREF_KEY))).toBe(1234);
   });
 });
 

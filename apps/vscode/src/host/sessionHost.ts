@@ -1,8 +1,8 @@
 import { RingBuffer } from '@/core/buffer/ringBuffer';
 import {
   DEFAULT_LOG_CAPACITY,
-  isValidLogCapacity,
-  LOG_CAPACITY_KEY,
+  LOG_CAPACITY_PREF_KEY,
+  parseLogCapacity,
 } from '@/core/buffer/logCapacity';
 import { TaskScheduler } from '@/core/scheduler/taskScheduler';
 import { SerialSession, type SessionState } from '@/core/session/serialSession';
@@ -84,9 +84,8 @@ export class SessionHost {
     this.#options = deps.defaultOptions;
     // 存量偏好里的容量在建 ring 时就要读到：面板重建走的是同一条路，
     // 先按默认容量建再 resize 会把超出默认的那部分历史白丢一次。
-    const stored = deps.readPrefs()[LOG_CAPACITY_KEY];
     this.#ring = new RingBuffer<FramePayload>(
-      isValidLogCapacity(stored) ? stored : DEFAULT_LOG_CAPACITY,
+      parseLogCapacity(deps.readPrefs()[LOG_CAPACITY_PREF_KEY]) ?? DEFAULT_LOG_CAPACITY,
     );
 
     this.#session = new SerialSession<string>({
@@ -225,9 +224,9 @@ export class SessionHost {
 
       case 'prefs.write':
         this.deps.writePref(body.key, body.value);
-        // 容量是唯一一个宿主自己也要照做的偏好：界面那份 ring 在 webview 里，
+        // 容量是会话这边自己也要照做的偏好：界面那份 ring 在 webview 里，
         // 这份在宿主里，只改一边的话面板一重建就回到旧容量。
-        if (body.key === LOG_CAPACITY_KEY) this.#applyCapacity(body.value);
+        if (body.key === LOG_CAPACITY_PREF_KEY) this.#applyCapacity(body.value);
         return undefined;
 
       case 'log.clear':
@@ -418,10 +417,10 @@ export class SessionHost {
     });
   }
 
-  /** 容量偏好落到本地这份 ring 上。非法值忽略 —— 与 webview 侧的读取约定一致。 */
+  /** 容量偏好落到本地这份 ring 上。非法值忽略，缓冲维持现状。 */
   #applyCapacity(value: unknown): void {
-    if (!isValidLogCapacity(value)) return;
-    this.#ring.resize(value);
+    const capacity = parseLogCapacity(value);
+    if (capacity !== null) this.#ring.resize(capacity);
   }
 
   #describeConfig(options: ConnectionOptions): string {

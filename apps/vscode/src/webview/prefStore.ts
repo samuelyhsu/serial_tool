@@ -9,6 +9,11 @@ import { setStorageBackend, type StorageLike } from '@/lib/storage';
  * 真正的存放地是扩展宿主的 globalState（顺带还能跟着 Settings Sync 跨机器同步）。
  * 读必须是同步的 —— 界面在模块初始化时就要拿设置，等不到一条 postMessage ——
  * 所以宿主把整份偏好烙在 `#root` 的 data-prefs 属性里，这里开机即读。
+ *
+ * 这份偏好**停在建面板的那一刻**：面板被隐藏再显示时，VS Code 按 `webview.html`
+ * 重新载入界面（https://code.visualstudio.com/api/extension-guides/webview 的
+ * 「Visibility and Moving」一节），而那份 HTML 只在建面板时生成过一次。
+ * 之后改过的设置，重建出来的界面在这里是读不到的。
  */
 export function installPrefStore(write: (key: string, value: unknown) => void): void {
   const cache = new Map<string, string>();

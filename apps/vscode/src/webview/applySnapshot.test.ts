@@ -1,8 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { LOG_CAPACITY_PREF_KEY } from '@/core/buffer/logCapacity';
 import type { ConnectionOptions } from '@/core/transport/types';
+import { __resetPersistForTests } from '@/lib/persist';
 import { __resetStorageBackendsForTests } from '@/lib/storage';
+import {
+  __resetLogStoreForTests,
+  allEntries,
+  flushPendingEntries,
+  useLogStore,
+} from '@/store/logStore';
 import { useUiStore } from '@/store/uiStore';
-import type { HostEvent } from '../shared/protocol';
+import type { FramePayload, HostEvent } from '../shared/protocol';
 import { applySnapshot } from './applySnapshot';
 import { installPrefStore } from './prefStore';
 
@@ -14,7 +22,9 @@ const OPTIONS: ConnectionOptions = {
   flowControl: 'none',
 };
 
-function snapshot(language: string): Extract<HostEvent, { type: 'snapshot' }> {
+type Snapshot = Extract<HostEvent, { type: 'snapshot' }>;
+
+function snapshot(language: string, overrides: Partial<Snapshot> = {}): Snapshot {
   return {
     kind: 'event',
     type: 'snapshot',
@@ -30,7 +40,16 @@ function snapshot(language: string): Extract<HostEvent, { type: 'snapshot' }> {
     runningTasks: [],
     prefs: {},
     language,
+    ...overrides,
   };
+}
+
+function frames(count: number): FramePayload[] {
+  return Array.from({ length: count }, (_, i) => ({
+    direction: 'rx' as const,
+    at: i,
+    bytes: new Uint8Array([i & 0xff]),
+  }));
 }
 
 /** 宿主把偏好烙在 #root 的 data-prefs 上，webview 开机即读（见 prefStore）。 */
@@ -82,5 +101,39 @@ describe('快照回放的语言', () => {
     applySnapshot(snapshot('en'));
 
     expect(useUiStore.getState().language).toBe('zh');
+  });
+});
+
+describe('快照回放的日志容量', () => {
+  beforeEach(() => {
+    __resetLogStoreForTests();
+  });
+
+  afterEach(() => {
+    __resetPersistForTests();
+  });
+
+  it('回放前先对齐到最新设定，历史不会被重建时的旧容量截掉', () => {
+    // 建面板时容量是 1000，之后调到了 2000：重建出来的界面只知道前者
+    seedPrefs({ [LOG_CAPACITY_PREF_KEY]: '1000' });
+    useLogStore.getState().setCapacity(1000);
+
+    applySnapshot(
+      snapshot('zh', { prefs: { [LOG_CAPACITY_PREF_KEY]: '2000' }, frames: frames(1500) }),
+    );
+    flushPendingEntries();
+
+    expect(useLogStore.getState().capacity).toBe(2000);
+    expect(allEntries()).toHaveLength(1500);
+  });
+
+  it('快照里没有容量设定、或设定不合法时维持现状', () => {
+    seedPrefs({ [LOG_CAPACITY_PREF_KEY]: '1000' });
+    useLogStore.getState().setCapacity(1000);
+
+    applySnapshot(snapshot('zh'));
+    applySnapshot(snapshot('zh', { prefs: { [LOG_CAPACITY_PREF_KEY]: '"many"' } }));
+
+    expect(useLogStore.getState().capacity).toBe(1000);
   });
 });

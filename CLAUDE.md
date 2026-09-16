@@ -111,7 +111,8 @@ webview 入口靠 `import './bootstrap'` 排在第一行来保证「先装环境
   宿主，等于面板每重建一次就把历史清一次。这个 bug 真的发生过：两侧各自的测试全绿，
   错的是没人把「清空之后面板重建」这条路走一遍。
   **容量同理要两侧一起改**：webview 那份在 logStore 里，宿主那份在 `SessionHost` 构造时
-  按 `LOG_CAPACITY_KEY` 从 prefs 读、并在 `prefs.write` 到达时 resize。只改一边的话，
+  按 `LOG_CAPACITY_PREF_KEY` 从 prefs 读、并在 `prefs.write` 到达时 resize；面板重建出来的
+  界面容量是建面板时的，`applySnapshot` 回放前要先按快照里的偏好对齐。只改一边的话，
   用户设了 50000、切个标签页回来却只剩默认那些 —— 与「日志被吃掉了」无法区分。
   容量**不设产品上限**是用户明确要的；`LOG_CAPACITY_CEILING`（2^32-1）挡的是
   `new Array(n)` 抛 RangeError，不是性能阀门，别把它当上限往下调。
@@ -123,9 +124,11 @@ webview 入口靠 `import './bootstrap'` 排在第一行来保证「先装环境
 - **宿主读 webview 写下的偏好时，键名和值都不是你以为的样子**：webview 的偏好经
   `prefs.write` 原样存进 globalState，键名带着 `wst.` 前缀、值是 JSON 字符串。
   宿主要认某一项就用 `core/prefs/prefKey.ts` 算键名、自己解析值 —— 端口备注
-  （`core/transport/portAlias.ts`，活动栏端口列表靠它显示备注名）是照这个做的。
-  两侧的单元测试都只会拿「自己以为的形状」去测，对不上时各自照样是绿的，
-  得靠回环测试走一遍真实的写入路径才看得出来。
+  （`core/transport/portAlias.ts`）与日志容量（`core/buffer/logCapacity.ts`）是照这个做的。
+  日志容量就栽过：宿主拿不带前缀的键名、按数字去认，从来没认出来过，而两侧的单元测试
+  喂的都是「自己以为的形状」，全是绿的，得靠回环测试走一遍真实的写入路径才看得出来。
+  **反方向同样有坑**：重建出来的 webview 读到的偏好停在建面板那一刻（`webview.html`
+  只生成一次，VS Code 按它重新载入，见 `prefStore.ts`），要最新值只能从快照里拿。
 - **持久化统一走 `src/lib/persist.ts`**：写用 `saveSoon`（250ms 攒批，`pagehide` /
   `visibilitychange` 时立即落盘），读用 `pickInt` / `pickEnum` / `pickBoolean` / `pickString`
   逐字段校验、非法值回退默认。键名前缀 `wst.` 由 `src/lib/storage.ts` 统一加。
