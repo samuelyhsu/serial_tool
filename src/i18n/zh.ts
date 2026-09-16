@@ -6,6 +6,7 @@ export const zh: Messages = {
   port: '端口',
   baud: '波特率',
   baudTip: '可从常用档位中选择，也可直接输入任意值；设备是否支持由驱动决定',
+  baudOptions: '常用波特率',
   dataBits: '数据位',
   parity: '校验',
   stopBits: '停止位',

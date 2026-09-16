@@ -7,6 +7,7 @@ export const en: Messages = {
   baud: 'Baud',
   baudTip:
     'Pick a common rate or type any value; whether the device accepts it is up to the driver',
+  baudOptions: 'Common baud rates',
   dataBits: 'Data',
   parity: 'Parity',
   stopBits: 'Stop',

@@ -43,6 +43,7 @@ export interface Messages {
   readonly port: string;
   readonly baud: string;
   readonly baudTip: string;
+  readonly baudOptions: string;
   readonly dataBits: string;
   readonly parity: string;
   readonly stopBits: string;

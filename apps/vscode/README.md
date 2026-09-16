@@ -27,7 +27,7 @@ To open the same port in another panel, use the `+` at the end of its row. Other
 - Single send, periodic send, 50 command presets with a sequence loop, JSON import / export
 - 17 checksums appended automatically in HEX mode: CRC-8 / CRC-16 / CRC-32 (incl. CRC-16/MODBUS),
   SUM8, SUM16, XOR8
-- 32 common baud rates from 110 to 3,000,000, or type any value; data bits, parity, stop bits,
+- 51 common baud rates from 50 to 4,000,000, or type any value; data bits, parity, stop bits,
   RTS/CTS flow control
 - Auto-reconnect with exponential backoff after the device is unplugged
 - Ports are labeled the way Device Manager shows them, plus the chip name: `COM3 · CH340`
@@ -81,7 +81,7 @@ VS Code 里的串口调试助手，给单片机与嵌入式开发用：USB 转�
 - 按空闲超时 / 换行 / 原始分块分帧，UTF-8 跨块解码，被切开的汉字不乱码
 - 单条发送、周期发送，50 条指令预设与顺序循环，预设可 JSON 导入导出
 - HEX 模式自动追加 17 种校验和：CRC-8 / CRC-16 / CRC-32（含 CRC-16/MODBUS）、SUM8、SUM16、XOR8
-- 波特率 110 ~ 3000000 共 32 档常用值，也可直接输入任意值；数据位、校验位、停止位、RTS/CTS 流控
+- 波特率 50 ~ 4000000 共 51 档常用值，也可直接输入任意值；数据位、校验位、停止位、RTS/CTS 流控
 - 拔掉设备后按指数退避自动重连
 - 端口名与设备管理器一致，并附芯片名：`COM3 · CH340`
 - 端口被别的面板占着时直接拦下并说明原因，而不是一句 `Failed to open serial port`
