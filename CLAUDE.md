@@ -53,6 +53,7 @@ src/core/     纯 TypeScript：不 import React / zustand / ui / store，不碰 
   scheduler/    周期任务调度、断线重连退避
   session/      把上面几层编排成一次串口会话
   buffer/       日志环形缓冲
+  prefs/        偏好键名前缀（webview 与扩展宿主共认同一个键名）
 src/store/    Zustand 状态层，订阅 core 的事件回调
 src/ui/       React 组件（每个目录 = 组件 + CSS Module）
 src/i18n/     文案目录（zh / en）
@@ -119,6 +120,12 @@ webview 入口靠 `import './bootstrap'` 排在第一行来保证「先装环境
   private 的 workspace 根，**刻意不写 `version`**，别加回去 —— 两个号迟早对不上。
   界面左下角的版本号由两份 Vite 配置的 `define` 注入（`src/lib/appVersion.ts`）；
   webview 那份漏配时类型检查照过、面板却白屏，由 verify-artifacts 兜住。
+- **宿主读 webview 写下的偏好时，键名和值都不是你以为的样子**：webview 的偏好经
+  `prefs.write` 原样存进 globalState，键名带着 `wst.` 前缀、值是 JSON 字符串。
+  宿主要认某一项就用 `core/prefs/prefKey.ts` 算键名、自己解析值 —— 端口备注
+  （`core/transport/portAlias.ts`，活动栏端口列表靠它显示备注名）是照这个做的。
+  两侧的单元测试都只会拿「自己以为的形状」去测，对不上时各自照样是绿的，
+  得靠回环测试走一遍真实的写入路径才看得出来。
 - **持久化统一走 `src/lib/persist.ts`**：写用 `saveSoon`（250ms 攒批，`pagehide` /
   `visibilitychange` 时立即落盘），读用 `pickInt` / `pickEnum` / `pickBoolean` / `pickString`
   逐字段校验、非法值回退默认。键名前缀 `wst.` 由 `src/lib/storage.ts` 统一加。

@@ -1,19 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { PortDescriptor } from '@/core/transport/portRegistry';
-import { aliasOf, MAX_ALIAS_LENGTH, portDisplayLabel, usePortAliasStore } from './portAliasStore';
+import { MAX_ALIAS_LENGTH } from '@/core/transport/portAlias';
+import { usePortAliasStore } from './portAliasStore';
 
-function makePort(overrides: Partial<PortDescriptor> = {}): PortDescriptor {
-  return {
-    key: 'port-1',
-    ordinal: 1,
-    identity: 'usb:1A86:7523',
-    label: '#1 CH340 (1A86:7523)',
-    chip: 'CH340',
-    vendor: 'WCH 沁恒',
-    connected: true,
-    ...overrides,
-  };
-}
+/** 备注的取值规则与显示格式归 core/transport/portAlias.ts 测，这里只管存取与同步。 */
 
 describe('portAliasStore', () => {
   beforeEach(() => {
@@ -108,47 +97,5 @@ describe('跨标签页同步', () => {
     window.dispatchEvent(new StorageEvent('storage', { key: 'wst.theme' }));
 
     expect(usePortAliasStore.getState().aliases).toEqual({ x: 'y' });
-  });
-});
-
-describe('portDisplayLabel', () => {
-  it('没有备注时显示原始标签', () => {
-    expect(portDisplayLabel(makePort(), {})).toBe('#1 CH340 (1A86:7523)');
-  });
-
-  it('有备注时把备注放在最前面，同时保留原始信息以便与设备管理器核对', () => {
-    expect(portDisplayLabel(makePort(), { 'usb:1A86:7523': '电机控制器' })).toBe(
-      '电机控制器 · #1 CH340 (1A86:7523)',
-    );
-  });
-
-  /**
-   * 备注按 VID:PID 存储，因为浏览器不暴露序列号（WICG/serial#175）。
-   * 这条测试把该局限固定下来：同型号适配器共用备注是可预期行为，不是 bug。
-   */
-  it('同型号的两个适配器共用同一条备注', () => {
-    const aliases = { 'usb:1A86:7523': 'CH340 适配器' };
-    const first = makePort({ key: 'port-1', ordinal: 1, label: '#1 CH340 (1A86:7523)' });
-    const second = makePort({ key: 'port-2', ordinal: 2, label: '#2 CH340 (1A86:7523)' });
-
-    expect(portDisplayLabel(first, aliases)).toBe('CH340 适配器 · #1 CH340 (1A86:7523)');
-    expect(portDisplayLabel(second, aliases)).toBe('CH340 适配器 · #2 CH340 (1A86:7523)');
-  });
-
-  it('不同型号互不影响', () => {
-    const aliases = { 'usb:1A86:7523': '甲' };
-    const other = makePort({ identity: 'usb:0403:6001', label: '#2 FTDI (0403:6001)' });
-    expect(portDisplayLabel(other, aliases)).toBe('#2 FTDI (0403:6001)');
-  });
-});
-
-describe('aliasOf', () => {
-  it('没有选中端口时返回空串', () => {
-    expect(aliasOf(undefined, { x: 'y' })).toBe('');
-  });
-
-  it('返回选中端口的备注', () => {
-    expect(aliasOf(makePort(), { 'usb:1A86:7523': '调试板' })).toBe('调试板');
-    expect(aliasOf(makePort(), {})).toBe('');
   });
 });

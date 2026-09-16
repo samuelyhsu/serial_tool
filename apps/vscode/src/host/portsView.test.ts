@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NodePortInfo } from '@/core/transport/nodePortRegistry';
+import { PORT_ALIAS_PREF_KEY } from '@/core/transport/portAlias';
 import { PortLeases } from './portLeases';
 import { PortWatcher } from './portWatcher';
 import { PortsTreeProvider } from './portsView';
@@ -19,6 +20,7 @@ const PORTS: NodePortInfo[] = [
 let leases: PortLeases;
 let watcher: PortWatcher;
 let listed = 0;
+let prefs: Record<string, unknown>;
 
 function makeProvider(options: { watcherAvailable?: boolean } = {}): PortsTreeProvider {
   return new PortsTreeProvider({
@@ -31,11 +33,17 @@ function makeProvider(options: { watcherAvailable?: boolean } = {}): PortsTreePr
       const holder = leases.holderOf(portKey);
       return holder === undefined ? undefined : `面板 ${holder}`;
     },
+    readPrefs: () => prefs,
   });
+}
+
+function storedAliases(aliases: Record<string, string>): string {
+  return JSON.stringify(aliases);
 }
 
 beforeEach(() => {
   listed = 0;
+  prefs = {};
   leases = new PortLeases();
   watcher = new PortWatcher({ list: () => Promise.resolve(PORTS), intervalMs: 60_000 });
 });
@@ -137,6 +145,74 @@ describe('端口视图', () => {
     await provider.reload();
 
     expect(changed).toHaveBeenCalled();
+    provider.dispose();
+  });
+});
+
+describe('端口备注', () => {
+  it('启动时就带上已经存过的备注', async () => {
+    prefs[PORT_ALIAS_PREF_KEY] = storedAliases({ 'usb:1A86:7523:SN1': '温控板' });
+    const provider = makeProvider();
+    const [port] = await provider.getChildren();
+
+    const item = provider.getTreeItem(port!);
+
+    expect(item.label).toBe('温控板 · COM3 · CH340 (1A86:7523)');
+    // 原始 COM 号仍在，用户还要拿它去设备管理器核对
+    expect(item.tooltip).toHaveProperty('value', expect.stringContaining('温控板 · COM3'));
+    provider.dispose();
+  });
+
+  it('面板里改完备注，列表立刻跟着变', async () => {
+    const provider = makeProvider();
+    const [port] = await provider.getChildren();
+    const changed = vi.fn();
+    provider.onDidChangeTreeData(changed);
+
+    provider.applyPref(PORT_ALIAS_PREF_KEY, storedAliases({ 'usb:1A86:7523:SN1': '温控板' }));
+
+    expect(changed).toHaveBeenCalled();
+    expect(provider.getTreeItem(port!).label).toBe('温控板 · COM3 · CH340 (1A86:7523)');
+    provider.dispose();
+  });
+
+  it('备注被清掉后退回原始标签', async () => {
+    prefs[PORT_ALIAS_PREF_KEY] = storedAliases({ 'usb:1A86:7523:SN1': '温控板' });
+    const provider = makeProvider();
+    const [port] = await provider.getChildren();
+
+    provider.applyPref(PORT_ALIAS_PREF_KEY, storedAliases({}));
+
+    expect(provider.getTreeItem(port!).label).toBe('COM3 · CH340 (1A86:7523)');
+    provider.dispose();
+  });
+
+  it('没有备注的端口不受影响', async () => {
+    prefs[PORT_ALIAS_PREF_KEY] = storedAliases({ 'usb:1A86:7523:SN1': '温控板' });
+    const provider = makeProvider();
+    const [, second] = await provider.getChildren();
+
+    expect(provider.getTreeItem(second!).label).toBe('COM4');
+    provider.dispose();
+  });
+
+  it('别的偏好写入不会惊动列表', () => {
+    const provider = makeProvider();
+    const changed = vi.fn();
+    provider.onDidChangeTreeData(changed);
+
+    provider.applyPref('wst.sendPane', '{"payload":"AA55","mode":"hex"}');
+
+    expect(changed).not.toHaveBeenCalled();
+    provider.dispose();
+  });
+
+  it('存量值被改坏时当作没有备注，列表照常可用', async () => {
+    prefs[PORT_ALIAS_PREF_KEY] = '{ 不是 JSON';
+    const provider = makeProvider();
+    const [port] = await provider.getChildren();
+
+    expect(provider.getTreeItem(port!).label).toBe('COM3 · CH340 (1A86:7523)');
     provider.dispose();
   });
 });

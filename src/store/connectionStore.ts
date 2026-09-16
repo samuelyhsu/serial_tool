@@ -1,14 +1,16 @@
 import { create } from 'zustand';
 import { resolveFraming } from '@/core/framing/frameAssembler';
+import { prefKey } from '@/core/prefs/prefKey';
 import type { SessionState } from '@/core/session/serialSession';
+import { portDisplayLabel } from '@/core/transport/portAlias';
 import type { PortDescriptor } from '@/core/transport/portDescriptor';
 import type { ConnectionOptions, Parity } from '@/core/transport/types';
 import { isRecord, pickBoolean, pickEnum, pickInt, saveSoon } from '@/lib/persist';
 import type { LeaseHolders } from '@/lib/portLease';
-import { readLayered, readStoredJson, storageKey, writeLayered } from '@/lib/storage';
+import { readLayered, readStoredJson, writeLayered } from '@/lib/storage';
 import { platform } from './platform';
 import { useLogStore } from './logStore';
-import { portDisplayLabel, usePortAliasStore } from './portAliasStore';
+import { usePortAliasStore } from './portAliasStore';
 import { useTasksStore } from './tasksStore';
 import { useUiStore } from './uiStore';
 
@@ -380,7 +382,7 @@ useConnectionStore.subscribe((state, prev) => {
  */
 if (typeof window !== 'undefined') {
   window.addEventListener('storage', (event) => {
-    if (event.key !== null && event.key !== storageKey(PORT_SETTINGS_KEY)) return;
+    if (event.key !== null && event.key !== prefKey(PORT_SETTINGS_KEY)) return;
     portProfiles = loadProfiles();
   });
 }

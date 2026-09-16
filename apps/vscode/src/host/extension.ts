@@ -88,6 +88,9 @@ export function activate(context: vscode.ExtensionContext): SerialToolApi {
   status.command = 'serialTool.showPanels';
   context.subscriptions.push(status);
 
+  const readPrefs = (): Record<string, unknown> =>
+    context.globalState.get<Record<string, unknown>>(PREFS_KEY, {});
+
   /**
    * 状态栏。它同时是**新建面板最主要的入口** —— 一个只能从命令面板打开的工具，
    * 用户装完就找不到了。所以它默认常驻：一个面板都没有时也显示，点一下就新建。
@@ -241,10 +244,10 @@ export function activate(context: vscode.ExtensionContext): SerialToolApi {
         }
       },
       pickPort: () => pickPort(current),
-      readPrefs: () => context.globalState.get<Record<string, unknown>>(PREFS_KEY, {}),
+      readPrefs,
       writePref: (key, value) => {
-        const prefs = context.globalState.get<Record<string, unknown>>(PREFS_KEY, {});
-        void context.globalState.update(PREFS_KEY, { ...prefs, [key]: value });
+        void context.globalState.update(PREFS_KEY, { ...readPrefs(), [key]: value });
+        ports.applyPref(key, value);
       },
       language: vscode.env.language,
       defaultOptions: DEFAULT_OPTIONS,
@@ -260,11 +263,7 @@ export function activate(context: vscode.ExtensionContext): SerialToolApi {
     refreshStatus();
     retitle();
 
-    panel.webview.html = renderHtml(
-      panel.webview,
-      context.extensionUri,
-      context.globalState.get<Record<string, unknown>>(PREFS_KEY, {}),
-    );
+    panel.webview.html = renderHtml(panel.webview, context.extensionUri, readPrefs());
 
     panel.webview.onDidReceiveMessage((message: HostRequest) => {
       if (message.kind !== 'request') return;
@@ -326,6 +325,7 @@ export function activate(context: vscode.ExtensionContext): SerialToolApi {
       const owner = [...panels.values()].find((host) => host.id === holder);
       return owner?.portKey ?? holder;
     },
+    readPrefs,
   });
   context.subscriptions.push(
     ports,

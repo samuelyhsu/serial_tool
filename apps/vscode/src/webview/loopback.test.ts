@@ -3,6 +3,7 @@ import { FakeTransport } from '../../../../tests/fakeTransport';
 import type { NodePortInfo } from '@/core/transport/nodePortRegistry';
 import type { ConnectionOptions } from '@/core/transport/types';
 import { PortLeases } from '../host/portLeases';
+import { PortsTreeProvider } from '../host/portsView';
 import { PortWatcher } from '../host/portWatcher';
 import { handleRequest } from '../host/rpc';
 import { SessionHost } from '../host/sessionHost';
@@ -50,6 +51,9 @@ interface Loopback {
   host: SessionHost;
   transport: () => FakeTransport;
   leases: PortLeases;
+  watcher: PortWatcher;
+  /** 宿主收到的偏好写入，按到达顺序。扩展里它们会落进 globalState，并转给活动栏的端口视图。 */
+  prefWrites: [key: string, value: unknown][];
   connection: ConnectionModule;
   send: SendModule;
   preset: PresetModule;
@@ -78,6 +82,7 @@ async function loopback(): Promise<Loopback> {
   await watcher.refresh();
 
   let hidden = false;
+  const prefWrites: [string, unknown][] = [];
 
   // 宿主 → webview：VS Code 那边是 webview.postMessage，这里就是一个 message 事件
   const post = (event: HostEvent): void => {
@@ -97,7 +102,9 @@ async function loopback(): Promise<Loopback> {
     post,
     pickPort: () => Promise.resolve(undefined),
     readPrefs: () => ({}),
-    writePref: () => undefined,
+    writePref: (key, value) => {
+      prefWrites.push([key, value]);
+    },
     language: 'zh',
     defaultOptions: OPTIONS,
   });
@@ -147,6 +154,8 @@ async function loopback(): Promise<Loopback> {
     host: activeHost,
     transport: () => transports[transports.length - 1]!,
     leases,
+    watcher,
+    prefWrites,
     connection,
     send: await import('@/store/sendStore'),
     preset: await import('@/store/presetStore'),
@@ -411,6 +420,32 @@ describe('webview ⇄ 扩展宿主 回环', () => {
     await vi.waitFor(() => {
       expect(store.getState().pendingBytes()).toBe(128);
     });
+  });
+
+  /**
+   * 端口备注在面板里改、在活动栏里显示，中间隔着 prefStore → RPC → 宿主，键名与值的
+   * 形状在这一路上都会变。两侧各自的单元测试只能拿「自己以为的形状」去测，
+   * 对不上时各自照样是绿的。
+   */
+  it('面板里改了端口备注，活动栏的端口列表跟着显示', async () => {
+    const app = await loopback();
+    const aliases = await import('@/store/portAliasStore');
+    const tree = new PortsTreeProvider({
+      leases: app.leases,
+      ensureWatcher: () => Promise.resolve(app.watcher),
+      holderLabel: () => undefined,
+      readPrefs: () => ({}),
+    });
+    const [port] = await tree.getChildren();
+
+    aliases.usePortAliasStore.getState().setAlias(port!.identity, '温控板');
+    await app.settle();
+
+    // 扩展入口把宿主收到的每一条写入原样转给端口视图（extension.ts 的 writePref）
+    for (const [key, value] of app.prefWrites) tree.applyPref(key, value);
+
+    expect(tree.getTreeItem(port!).label).toBe('温控板 · COM3 · CH340 (1A86:7523)');
+    tree.dispose();
   });
 
   it('设备掉线的通知一路回到界面', async () => {

@@ -1,3 +1,5 @@
+import { prefKey } from '@/core/prefs/prefKey';
+
 /**
  * localStorage 安全包装 —— 缺陷 D18。
  *
@@ -13,15 +15,8 @@
  *    效果是「已开的页面各改各的，新开的页面继承你最后一次的选择」。
  */
 
-const PREFIX = 'wst.';
-
 /** 偏好的存储作用域。 */
 export type PrefScope = 'global' | 'page';
-
-/** localStorage 里的完整键名。storage 事件回调里需要用它比对。 */
-export function storageKey(key: string): string {
-  return PREFIX + key;
-}
 
 /** 底层存储要的最小能力。浏览器的 Storage 天然满足它。 */
 export interface StorageLike {
@@ -62,7 +57,7 @@ function backing(scope: PrefScope): StorageLike | null {
 
 export function readStored(key: string, scope: PrefScope = 'global'): string | null {
   try {
-    return backing(scope)?.getItem(PREFIX + key) ?? null;
+    return backing(scope)?.getItem(prefKey(key)) ?? null;
   } catch {
     // 同上；读不到偏好设置只影响体验
     return null;
@@ -71,7 +66,7 @@ export function readStored(key: string, scope: PrefScope = 'global'): string | n
 
 export function writeStored(key: string, value: string, scope: PrefScope = 'global'): void {
   try {
-    backing(scope)?.setItem(PREFIX + key, value);
+    backing(scope)?.setItem(prefKey(key), value);
   } catch {
     // 同上；也可能是配额已满。偏好设置写不进去不值得打断用户操作
   }

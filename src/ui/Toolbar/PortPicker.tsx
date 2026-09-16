@@ -1,12 +1,8 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { aliasOf, MAX_ALIAS_LENGTH, portDisplayLabel } from '@/core/transport/portAlias';
 import { useConnectionStore } from '@/store/connectionStore';
 import { useLogStore } from '@/store/logStore';
-import {
-  aliasOf,
-  MAX_ALIAS_LENGTH,
-  portDisplayLabel,
-  usePortAliasStore,
-} from '@/store/portAliasStore';
+import { usePortAliasStore } from '@/store/portAliasStore';
 import { useMessages } from '../useMessages';
 import styles from './Toolbar.module.css';
 

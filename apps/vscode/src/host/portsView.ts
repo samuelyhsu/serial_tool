@@ -1,4 +1,10 @@
 import * as vscode from 'vscode';
+import {
+  parsePortAliases,
+  portDisplayLabel,
+  PORT_ALIAS_PREF_KEY,
+  type PortAliasMap,
+} from '@/core/transport/portAlias';
 import type { PortDescriptor } from '@/core/transport/portDescriptor';
 import { hostText } from './hostText';
 import type { PortLeases } from './portLeases';
@@ -21,6 +27,8 @@ export interface PortsViewDeps {
   ensureWatcher: () => Promise<PortWatcher | null>;
   /** 某个端口当前是被哪个面板占着；没有则 undefined。 */
   holderLabel: (portKey: string) => string | undefined;
+  /** 宿主 globalState 里的整份偏好。端口备注在里面，见 applyPref。 */
+  readPrefs: () => Record<string, unknown>;
 }
 
 export class PortsTreeProvider implements vscode.TreeDataProvider<PortDescriptor> {
@@ -30,14 +38,30 @@ export class PortsTreeProvider implements vscode.TreeDataProvider<PortDescriptor
   #watcher: PortWatcher | null = null;
   #unsubscribe: (() => void) | null = null;
   #failed = false;
+  #aliases: PortAliasMap;
 
   constructor(private readonly deps: PortsViewDeps) {
+    this.#aliases = parsePortAliases(deps.readPrefs()[PORT_ALIAS_PREF_KEY]);
     // 占用情况变了（别的面板开了/关了口），列表上的标注要跟着变
     this.#unsubscribe = deps.leases.subscribe(() => this.refresh());
   }
 
   refresh(): void {
     this.#changed.fire();
+  }
+
+  /**
+   * 面板每写一条偏好都要转进来。
+   *
+   * 备注是用户在面板里改的，经 RPC 存进宿主的 globalState；这份列表显示的是同一个名字，
+   * 而面板可以一个都不开 —— 不盯着这条写入，这里没有别的渠道知道备注变了，
+   * 侧边栏要等重启 VS Code 才对得上。其余的键直接忽略：偏好写入很密
+   * （发送框边打字边落盘），跟着刷新整棵树纯属浪费。
+   */
+  applyPref(key: string, value: unknown): void {
+    if (key !== PORT_ALIAS_PREF_KEY) return;
+    this.#aliases = parsePortAliases(value);
+    this.refresh();
   }
 
   /** 手动刷新：立刻重新枚举一次，不必等下一次轮询。 */
@@ -56,7 +80,8 @@ export class PortsTreeProvider implements vscode.TreeDataProvider<PortDescriptor
   }
 
   getTreeItem(port: PortDescriptor): vscode.TreeItem {
-    const item = new vscode.TreeItem(port.label, vscode.TreeItemCollapsibleState.None);
+    const label = portDisplayLabel(port, this.#aliases);
+    const item = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.None);
     const holder = this.deps.holderLabel(port.key);
     const t = hostText();
 
@@ -64,7 +89,7 @@ export class PortsTreeProvider implements vscode.TreeDataProvider<PortDescriptor
     item.description = holder !== undefined ? t.stateOpen : port.identity;
     item.tooltip = new vscode.MarkdownString(
       [
-        `**${port.label}**`,
+        `**${label}**`,
         '',
         `- ${t.deviceId}: \`${port.identity}\``,
         port.chip ? `- ${t.chip}: ${port.chip}` : null,
