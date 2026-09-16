@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { APP_VERSION } from '@/lib/appVersion';
-import { useConnectionStore, useSelectedPortLabel } from '@/store/connectionStore';
+import { useConnectionStore } from '@/store/connectionStore';
 import { consumeThroughputWindow, useLogStore } from '@/store/logStore';
 import { useTasksStore } from '@/store/tasksStore';
 import { useMessages } from '../useMessages';
@@ -23,8 +23,6 @@ export function StatusBar(): React.JSX.Element {
 
   const sessionState = useConnectionStore((s) => s.sessionState);
   const openedAt = useConnectionStore((s) => s.openedAt);
-  const options = useConnectionStore((s) => s.options);
-  const portLabel = useSelectedPortLabel();
   const runningCount = useTasksStore((s) => s.running.length);
 
   const [uptimeSec, setUptimeSec] = useState(0);
@@ -55,11 +53,6 @@ export function StatusBar(): React.JSX.Element {
     return () => clearInterval(tick);
   }, [isOpen, openedAt]);
 
-  const parity = options.parity === 'none' ? 'N' : options.parity === 'even' ? 'E' : 'O';
-  const config = `${portLabel} @ ${options.baudRate} ${options.dataBits}${parity}${options.stopBits} · ${t.flow} ${
-    options.flowControl === 'none' ? t.none : 'RTS/CTS'
-  }`;
-
   const minutes = String(Math.floor(uptimeSec / 60)).padStart(2, '0');
   const seconds = String(uptimeSec % 60).padStart(2, '0');
 
@@ -67,7 +60,6 @@ export function StatusBar(): React.JSX.Element {
     <footer className={styles.bar}>
       {/* 固定在左下角：反馈问题时先要知道用的是哪一版，内网离线包尤其说不清 */}
       <span className={styles.faint}>v{APP_VERSION}</span>
-      <span>{config}</span>
       <span className={styles.rx}>
         RX {rxBytes} B · {rxFrames} {t.frames}
       </span>
