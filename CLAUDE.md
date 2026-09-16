@@ -111,8 +111,8 @@ webview 入口靠 `import './bootstrap'` 排在第一行来保证「先装环境
   宿主，等于面板每重建一次就把历史清一次。这个 bug 真的发生过：两侧各自的测试全绿，
   错的是没人把「清空之后面板重建」这条路走一遍。
   **容量同理要两侧一起改**：webview 那份在 logStore 里，宿主那份在 `SessionHost` 构造时
-  按 `LOG_CAPACITY_PREF_KEY` 从 prefs 读、并在 `prefs.write` 到达时 resize；面板重建出来的
-  界面容量是建面板时的，`applySnapshot` 回放前要先按快照里的偏好对齐。只改一边的话，
+  按 `LOG_CAPACITY_PREF_KEY` 从 prefs 读、并在 `prefs.write` 到达时 resize；重建出来的界面
+  按 HTML 里烙的偏好定容量，那份可能比宿主晚一步，`applySnapshot` 回放前先按快照对齐。只改一边的话，
   用户设了 50000、切个标签页回来却只剩默认那些 —— 与「日志被吃掉了」无法区分。
   容量**不设产品上限**是用户明确要的；`LOG_CAPACITY_CEILING`（2^32-1）挡的是
   `new Array(n)` 抛 RangeError，不是性能阀门，别把它当上限往下调。
@@ -127,8 +127,10 @@ webview 入口靠 `import './bootstrap'` 排在第一行来保证「先装环境
   （`core/transport/portAlias.ts`）与日志容量（`core/buffer/logCapacity.ts`）是照这个做的。
   日志容量就栽过：宿主拿不带前缀的键名、按数字去认，从来没认出来过，而两侧的单元测试
   喂的都是「自己以为的形状」，全是绿的，得靠回环测试走一遍真实的写入路径才看得出来。
-  **反方向同样有坑**：重建出来的 webview 读到的偏好停在建面板那一刻（`webview.html`
-  只生成一次，VS Code 按它重新载入，见 `prefStore.ts`），要最新值只能从快照里拿。
+  **反方向同样有坑**：界面开机只读 HTML 里烙的偏好，而面板隐藏再显示时 VS Code 按
+  `webview.html` 的当前值重建界面。HTML 曾经只在建面板时生成一次，切个标签页，预设、主题、
+  语言就全退回建面板时的值；现在宿主在面板隐藏期间逢偏好写入就重新生成（`host/panelHtml.ts`）。
+  **可见的面板不能这么刷**：给显示着的 webview 设 html 会整页重载，正在输入的东西全丢。
 - **持久化统一走 `src/lib/persist.ts`**：写用 `saveSoon`（250ms 攒批，`pagehide` /
   `visibilitychange` 时立即落盘），读用 `pickInt` / `pickEnum` / `pickBoolean` / `pickString`
   逐字段校验、非法值回退默认。键名前缀 `wst.` 由 `src/lib/storage.ts` 统一加。

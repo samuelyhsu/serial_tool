@@ -8,6 +8,7 @@ import type { SerialToolApi } from '../shared/api';
 import type { HostEvent, HostRequest } from '../shared/protocol';
 import { hostText } from './hostText';
 import { NodeSerialTransport, type OpenNodePort } from './nodeSerialTransport';
+import { refreshHiddenPanels } from './panelHtml';
 import { PortLeases } from './portLeases';
 import { PortsTreeProvider } from './portsView';
 import { handleRequest } from './rpc';
@@ -90,6 +91,10 @@ export function activate(context: vscode.ExtensionContext): SerialToolApi {
 
   const readPrefs = (): Record<string, unknown> =>
     context.globalState.get<Record<string, unknown>>(PREFS_KEY, {});
+
+  function renderPanel(panel: vscode.WebviewPanel): void {
+    panel.webview.html = renderHtml(panel.webview, context.extensionUri, readPrefs());
+  }
 
   /**
    * 状态栏。它同时是**新建面板最主要的入口** —— 一个只能从命令面板打开的工具，
@@ -248,6 +253,7 @@ export function activate(context: vscode.ExtensionContext): SerialToolApi {
       writePref: (key, value) => {
         void context.globalState.update(PREFS_KEY, { ...readPrefs(), [key]: value });
         ports.applyPref(key, value);
+        refreshHiddenPanels(panels.keys(), renderPanel);
       },
       language: vscode.env.language,
       defaultOptions: DEFAULT_OPTIONS,
@@ -263,7 +269,7 @@ export function activate(context: vscode.ExtensionContext): SerialToolApi {
     refreshStatus();
     retitle();
 
-    panel.webview.html = renderHtml(panel.webview, context.extensionUri, readPrefs());
+    renderPanel(panel);
 
     panel.webview.onDidReceiveMessage((message: HostRequest) => {
       if (message.kind !== 'request') return;
@@ -286,6 +292,7 @@ export function activate(context: vscode.ExtensionContext): SerialToolApi {
     // 否则用户会看到一个状态全空的界面，而宿主那边端口其实还开着
     panel.onDidChangeViewState(() => {
       if (panel.visible) void panel.webview.postMessage(host.snapshot());
+      else refreshHiddenPanels([panel], renderPanel);
     });
 
     panel.onDidDispose(() => {

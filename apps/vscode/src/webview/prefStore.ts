@@ -10,10 +10,10 @@ import { setStorageBackend, type StorageLike } from '@/lib/storage';
  * 读必须是同步的 —— 界面在模块初始化时就要拿设置，等不到一条 postMessage ——
  * 所以宿主把整份偏好烙在 `#root` 的 data-prefs 属性里，这里开机即读。
  *
- * 这份偏好**停在建面板的那一刻**：面板被隐藏再显示时，VS Code 按 `webview.html`
+ * 这份偏好是 HTML 生成那一刻的。面板被隐藏再显示时，VS Code 按 `webview.html` 的当前值
  * 重新载入界面（https://code.visualstudio.com/api/extension-guides/webview 的
- * 「Visibility and Moving」一节），而那份 HTML 只在建面板时生成过一次。
- * 之后改过的设置，重建出来的界面在这里是读不到的。
+ * 「Visibility and Moving」一节），宿主靠在面板隐藏期间重新生成 HTML 让它跟上
+ * （见 host/panelHtml.ts）。面板显示着的时候别处改的设置，这里仍然读不到。
  */
 export function installPrefStore(write: (key: string, value: unknown) => void): void {
   const cache = new Map<string, string>();
