@@ -14,5 +14,11 @@
   "cmd.openPortInNewPanel": "在新面板中打开",
   "view.container": "串口助手",
   "view.ports": "端口",
-  "view.empty": "没有找到串口设备。\n[刷新](command:serialTool.refreshPorts)\n插上 USB 转串口设备，或者先开一个空面板：\n[新建串口面板](command:serialTool.newPanel)"
+  "view.empty": "没有找到串口设备。\n[刷新](command:serialTool.refreshPorts)\n插上 USB 转串口设备，或者先开一个空面板：\n[新建串口面板](command:serialTool.newPanel)",
+  "lm.listPorts.displayName": "列出串口",
+  "lm.listPorts.userDescription": "列出串口，以及哪些正在串口助手面板里打开。",
+  "lm.readOutput.displayName": "读取串口输出",
+  "lm.readOutput.userDescription": "读取串口助手面板里某个串口最近收发的数据。",
+  "lm.send.displayName": "发送串口数据",
+  "lm.send.userDescription": "向串口助手面板里已打开的串口发送数据。"
 }

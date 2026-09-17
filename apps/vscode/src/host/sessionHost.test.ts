@@ -400,6 +400,22 @@ describe('SessionHost（一个面板一条会话）', () => {
     expect(panel.typed('frames').at(-1)?.pendingBytes).toBe(64);
   });
 
+  it('能直接读攒着的帧，发送能拿到真实结果', async () => {
+    const panel = makePanel('panel-1');
+    expect(await panel.host.send(new Uint8Array([9]))).toEqual({ code: 'not-open' });
+
+    await panel.host.handle({ method: 'session.open', portKey: 'COM3', options: OPTIONS });
+    panel.transport().emitData([1]);
+    expect(await panel.host.send(new Uint8Array([2]))).toBeNull();
+    panel.transport().emitData([3]);
+
+    expect(panel.host.frameCount).toBe(3);
+    expect(panel.host.recentFrames(2).map((frame) => [frame.direction, [...frame.bytes]])).toEqual([
+      ['tx', [2]],
+      ['rx', [3]],
+    ]);
+  });
+
   it('面板 id 是对外可见的 —— 端口视图要靠它认出「这个口被谁占着」', () => {
     const panel = makePanel('panel-7');
     expect(panel.host.id).toBe('panel-7');

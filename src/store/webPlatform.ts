@@ -44,7 +44,10 @@ function createSession(): SessionLike {
       await session.open(port, key, options);
     },
     close: () => session.close(),
-    send: (bytes) => session.send(bytes),
+    // 失败原因界面已经从通知里拿到了
+    send: async (bytes) => {
+      await session.send(bytes);
+    },
     setFraming: (config) => session.setFraming(config),
     setReconnectSettings: (settings) => session.setReconnectSettings(settings),
     get pendingBytes() {

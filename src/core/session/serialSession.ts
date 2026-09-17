@@ -2,7 +2,7 @@ import { FrameAssembler, type FramingConfig } from '../framing/frameAssembler';
 import { ReconnectController } from '../scheduler/reconnectController';
 import { TransportError } from '../transport/errors';
 import type { ConnectionOptions, Transport } from '../transport/types';
-import type { SessionNotice } from './notices';
+import type { SendFailure, SessionNotice } from './notices';
 
 export type SessionState = 'closed' | 'opening' | 'open' | 'reconnecting';
 export type Direction = 'rx' | 'tx';
@@ -156,25 +156,33 @@ export class SerialSession<TPort = unknown> {
     this.#notify({ code: 'port-closed' });
   }
 
-  /** 发送一帧。写队列满时不抛异常，而是回一条可见的背压通知（缺陷 D10）。 */
-  async send(bytes: Uint8Array): Promise<void> {
+  /**
+   * 发送一帧。写队列满时不抛异常，而是回一条可见的背压通知（缺陷 D10）。
+   *
+   * 没写出去时返回同时发出的那条通知，写出去了返回 null。界面靠通知就够了，
+   * 但只看返回值的调用方（AI 工具）拿不到通知，静默的失败会被当成「已发送」。
+   */
+  async send(bytes: Uint8Array): Promise<SendFailure | null> {
     if (this.#state !== 'open' || !this.#transport) {
-      this.#notify({ code: 'not-open' });
-      return;
+      const failure = { code: 'not-open' } as const;
+      this.#notify(failure);
+      return failure;
     }
-    if (bytes.length === 0) return;
+    if (bytes.length === 0) return null;
 
     const transport = this.#transport;
     try {
       await transport.write(bytes);
       this.#handlers.onFrame?.('tx', bytes);
       this.#handlers.onThroughput?.('tx', bytes.length);
+      return null;
     } catch (error) {
-      if (error instanceof TransportError && error.kind === 'backpressure') {
-        this.#notify({ code: 'write-dropped-backpressure', pendingBytes: transport.pendingBytes });
-        return;
-      }
-      this.#notify({ code: 'write-error', message: describeError(error) });
+      const failure: SendFailure =
+        error instanceof TransportError && error.kind === 'backpressure'
+          ? { code: 'write-dropped-backpressure', pendingBytes: transport.pendingBytes }
+          : { code: 'write-error', message: describeError(error) };
+      this.#notify(failure);
+      return failure;
     }
   }
 

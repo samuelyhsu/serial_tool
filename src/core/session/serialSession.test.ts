@@ -314,20 +314,20 @@ describe('SerialSession', () => {
 
   it('发送成功时记一条 tx 帧', async () => {
     await harness.session.open(FAKE_PORT, 'port-1', TEST_OPTIONS);
-    await harness.session.send(encoder.encode('AT+VER?\r\n'));
+    expect(await harness.session.send(encoder.encode('AT+VER?\r\n'))).toBeNull();
 
     expect(harness.frames).toEqual([{ direction: 'tx', text: 'AT+VER?\r\n' }]);
     expect(harness.current().written).toHaveLength(1);
   });
 
   it('端口未打开时发送只提示，不抛异常', async () => {
-    await harness.session.send(encoder.encode('AT'));
+    expect(await harness.session.send(encoder.encode('AT'))).toEqual({ code: 'not-open' });
     expect(codes(harness.notices)).toContain('not-open');
   });
 
   it('空数据不发送', async () => {
     await harness.session.open(FAKE_PORT, 'port-1', TEST_OPTIONS);
-    await harness.session.send(new Uint8Array(0));
+    expect(await harness.session.send(new Uint8Array(0))).toBeNull();
     expect(harness.current().written).toHaveLength(0);
   });
 
@@ -336,7 +336,9 @@ describe('SerialSession', () => {
     await harness.session.open(FAKE_PORT, 'port-1', TEST_OPTIONS);
     harness.current().rejectWritesWith(new TransportError('backpressure', 'full'));
 
-    await harness.session.send(encoder.encode('AT'));
+    expect(await harness.session.send(encoder.encode('AT'))).toMatchObject({
+      code: 'write-dropped-backpressure',
+    });
     expect(codes(harness.notices)).toContain('write-dropped-backpressure');
   });
 
@@ -344,7 +346,10 @@ describe('SerialSession', () => {
     await harness.session.open(FAKE_PORT, 'port-1', TEST_OPTIONS);
     harness.current().rejectWritesWith(new TransportError('write', 'device gone'));
 
-    await harness.session.send(encoder.encode('AT'));
+    expect(await harness.session.send(encoder.encode('AT'))).toEqual({
+      code: 'write-error',
+      message: 'device gone',
+    });
     expect(codes(harness.notices)).toContain('write-error');
   });
 

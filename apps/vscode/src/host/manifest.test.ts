@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { LM_TOOL_NAMES } from './lmTools';
 
 /**
  * 扩展清单里那些「代码全对也救不回来」的声明。
@@ -19,6 +20,9 @@ interface Manifest {
     virtualWorkspaces?: boolean;
   };
   extensionKind?: string[];
+  contributes: {
+    languageModelTools?: { name: string; modelDescription?: string; inputSchema?: unknown }[];
+  };
 }
 
 function read(relativePath: string): string {
@@ -125,5 +129,23 @@ describe('扩展清单的运行环境声明', () => {
   it('优先跑在本地，因为串口是本地设备', () => {
     expect(manifest.extensionKind?.[0]).toBe('ui');
     expect(manifest.extensionKind).toContain('workspace');
+  });
+});
+
+describe('扩展清单里的 AI 聊天工具', () => {
+  const tools = manifest.contributes.languageModelTools ?? [];
+
+  /** 平台要求两处都有：清单里声明、代码里 registerTool，名字必须一致。 */
+  it('清单里声明的工具与代码注册的一一对应', () => {
+    expect(tools.map((tool) => tool.name).sort()).toEqual(Object.values(LM_TOOL_NAMES).sort());
+  });
+
+  /** 名字按官方建议的 {verb}_{noun}（https://code.visualstudio.com/api/extension-guides/ai/tools）。 */
+  it('名字是 verb_noun 形式，且都写了给模型看的说明与参数', () => {
+    for (const tool of tools) {
+      expect(tool.name).toMatch(/^[a-z]+(_[a-z]+)+$/);
+      expect(tool.modelDescription).toBeTruthy();
+      expect(tool.inputSchema).toBeTruthy();
+    }
   });
 });

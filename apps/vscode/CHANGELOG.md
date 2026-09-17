@@ -16,6 +16,9 @@
 - 打开串口失败、且底层明确报告端口被占（Windows 的 Access denied，Linux / macOS 的端口锁
   失败）时，提示会补一句「端口可能正被其他程序或另一个 VS Code 窗口占用」。多个 VS Code
   窗口之间无法互相登记占用，以前这种情况只看得到一句 Access denied。
+- 接入 VS Code 的 AI 聊天：在 agent 模式下，或用 `#serialPorts`、`#serialOutput`、`#serialSend`
+  引用，助手可以列出串口、读取面板已捕获的收发数据、向已打开的串口发送数据。它不能打开或关闭
+  端口；每次发送都会弹出确认框，写明端口与要发的字节。助手读到的串口数据会交给聊天所用的模型。
 
 ### 变更
 

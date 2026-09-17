@@ -25,3 +25,9 @@ export type SessionNotice =
   | { code: 'port-busy' };
 
 export type SessionNoticeCode = SessionNotice['code'];
+
+/** send() 没能写出时报的那几种通知。 */
+export type SendFailure = Extract<
+  SessionNotice,
+  { code: 'not-open' | 'write-dropped-backpressure' | 'write-error' }
+>;

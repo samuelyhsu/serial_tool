@@ -14,5 +14,11 @@
   "cmd.openPortInNewPanel": "Open Port in New Panel",
   "view.container": "Serial Tool",
   "view.ports": "Ports",
-  "view.empty": "No serial devices found.\n[Refresh](command:serialTool.refreshPorts)\nPlug in a USB-serial adapter, or open an empty panel:\n[New Serial Panel](command:serialTool.newPanel)"
+  "view.empty": "No serial devices found.\n[Refresh](command:serialTool.refreshPorts)\nPlug in a USB-serial adapter, or open an empty panel:\n[New Serial Panel](command:serialTool.newPanel)",
+  "lm.listPorts.displayName": "List Serial Ports",
+  "lm.listPorts.userDescription": "List serial ports and which ones are open in Serial Tool panels.",
+  "lm.readOutput.displayName": "Read Serial Output",
+  "lm.readOutput.userDescription": "Read recent data received from and sent to a serial port in a Serial Tool panel.",
+  "lm.send.displayName": "Send Serial Data",
+  "lm.send.userDescription": "Send data to a serial port that is already open in a Serial Tool panel."
 }

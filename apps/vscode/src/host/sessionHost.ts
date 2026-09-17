@@ -5,6 +5,7 @@ import {
   parseLogCapacity,
 } from '@/core/buffer/logCapacity';
 import { TaskScheduler } from '@/core/scheduler/taskScheduler';
+import type { SendFailure } from '@/core/session/notices';
 import { SerialSession, type SessionState } from '@/core/session/serialSession';
 import { TransportError } from '@/core/transport/errors';
 import type { PortDescriptor } from '@/core/transport/portDescriptor';
@@ -165,6 +166,19 @@ export class SessionHost {
   /** 写队列的积压字节数。界面靠它显示背压，值在这一侧，只能捎回去。 */
   get pendingBytes(): number {
     return this.#session.pendingBytes;
+  }
+
+  get frameCount(): number {
+    return this.#ring.size;
+  }
+
+  recentFrames(count: number): FramePayload[] {
+    return this.#ring.recent(count);
+  }
+
+  /** 与 `session.send` 请求走同一条路，但把没写出去的原因交回来 —— AI 工具只看返回值。 */
+  send(bytes: Uint8Array): Promise<SendFailure | null> {
+    return this.#session.send(bytes);
   }
 
   /**
@@ -353,7 +367,8 @@ export class SessionHost {
     if (!state || state.frames.length === 0) return Promise.resolve();
     const frame = state.frames[state.cursor % state.frames.length]!;
     state.cursor += 1;
-    return this.#session.send(frame);
+    // 失败原因已经作为通知推给界面了，调度器只管节拍
+    return this.#session.send(frame).then(() => undefined);
   }
 
   /** 改运行中任务的内容或周期。任务没在跑时什么都不做。 */

@@ -99,6 +99,21 @@ suite('扩展装进 VS Code 之后', () => {
     }
   });
 
+  /**
+   * 必须真调一次：`vscode.lm.tools` 列的是清单里的声明，代码里漏了 registerTool
+   * 它照样列得出名字 —— 最初按名字断言的版本，删掉注册调用后仍然是绿的。
+   */
+  test('AI 聊天工具注册了实现，调得通', async () => {
+    const result = await vscode.lm.invokeTool('list_serial_ports', {
+      input: {},
+      toolInvocationToken: undefined,
+    });
+    const text = result.content
+      .map((part) => (part instanceof vscode.LanguageModelTextPart ? part.value : ''))
+      .join('');
+    assert.match(text, /serial ports/i);
+  });
+
   test('清单里声明了活动栏视图与图标', () => {
     const manifest = extension().packageJSON as {
       contributes?: {

@@ -38,7 +38,26 @@ export class ThemeColor {
 }
 
 export class MarkdownString {
-  constructor(readonly value = '') {}
+  constructor(public value = '') {}
+
+  appendMarkdown(value: string): this {
+    this.value += value;
+    return this;
+  }
+
+  /** 真实实现还会转义代码里的围栏；测试只关心内容进没进去。 */
+  appendCodeblock(code: string, language = ''): this {
+    this.value += `\n\`\`\`${language}\n${code}\n\`\`\`\n`;
+    return this;
+  }
+}
+
+export class LanguageModelTextPart {
+  constructor(readonly value: string) {}
+}
+
+export class LanguageModelToolResult {
+  constructor(readonly content: unknown[]) {}
 }
 
 export class TreeItem {

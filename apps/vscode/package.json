@@ -185,6 +185,83 @@
         "view": "serialTool.ports",
         "contents": "%view.empty%"
       }
+    ],
+    "languageModelTools": [
+      {
+        "name": "list_serial_ports",
+        "toolReferenceName": "serialPorts",
+        "displayName": "%lm.listPorts.displayName%",
+        "userDescription": "%lm.listPorts.userDescription%",
+        "modelDescription": "List the serial ports on the machine where the Serial Tool extension runs, and whether each one is selected in a Serial Tool panel and open. Returns one line per port: key, label, stable identity, panel state. Use it to find the port key for get_serial_output and send_serial_data. It does not open, close or change any port.",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      {
+        "name": "get_serial_output",
+        "toolReferenceName": "serialOutput",
+        "displayName": "%lm.readOutput.displayName%",
+        "userDescription": "%lm.readOutput.userDescription%",
+        "modelDescription": "Read the most recent serial data captured by a Serial Tool panel: frames received from the device (RX) and sent to it (TX), oldest first, with timestamps. Use it to inspect device output such as boot logs, or the reply to a command sent with send_serial_data. It only returns what a panel has already captured and cannot open ports; history is limited by the panel's log capacity. If no panel has the port, ask the user to open it in the Serial Tool panel.",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "port": {
+              "type": "string",
+              "description": "Port key as listed by list_serial_ports, such as COM3 or /dev/ttyUSB0. May be omitted when exactly one Serial Tool panel has a port selected."
+            },
+            "maxFrames": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000,
+              "description": "How many of the most recent frames to return. Defaults to 50."
+            },
+            "format": {
+              "type": "string",
+              "enum": [
+                "text",
+                "hex"
+              ],
+              "description": "text decodes UTF-8 and shows control characters as escapes such as \r\n; frames that are not valid UTF-8 fall back to hex. hex shows every frame as raw bytes. Defaults to text."
+            }
+          }
+        }
+      },
+      {
+        "name": "send_serial_data",
+        "toolReferenceName": "serialSend",
+        "displayName": "%lm.send.displayName%",
+        "userDescription": "%lm.send.userDescription%",
+        "modelDescription": "Send data to a serial port that is already open in a Serial Tool panel, for example a command to a device. The user may be asked to confirm each send. It cannot open ports: if the port is not open, ask the user to open it in the Serial Tool panel. Text is sent as UTF-8 exactly as given, with no line ending added. After sending, call get_serial_output to read the device's reply, which may take a moment to arrive.",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "port": {
+              "type": "string",
+              "description": "Port key as listed by list_serial_ports, such as COM3 or /dev/ttyUSB0. May be omitted when exactly one Serial Tool panel has a port selected."
+            },
+            "data": {
+              "type": "string",
+              "description": "The data to send. With encoding text it is sent as UTF-8 exactly as given; include \r\n or \n yourself if the device expects a line ending. With encoding hex, bytes such as \"AA 55 01\" (0x prefixes are accepted, and a single digit is one byte)."
+            },
+            "encoding": {
+              "type": "string",
+              "enum": [
+                "text",
+                "hex"
+              ],
+              "description": "How to interpret data. Defaults to text."
+            }
+          },
+          "required": [
+            "data"
+          ]
+        }
+      }
     ]
   },
   "scripts": {

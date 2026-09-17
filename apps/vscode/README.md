@@ -34,6 +34,10 @@ To open the same port in another panel, use the `+` at the end of its row. Other
 - A port held by another panel is flagged up front, instead of failing with
   `Failed to open serial port`
 - Devices are recognized by USB serial number: baud rate and alias follow the device to any USB port
+- **AI chat tools**: in agent mode, or referenced as `#serialPorts` / `#serialOutput` / `#serialSend`,
+  the assistant can list ports, read what a panel has captured and send data to a port that is
+  already open. It cannot open or close ports, and each send asks for confirmation. Serial data the
+  assistant reads is passed to the chat's language model
 - English and Chinese UI, following VS Code's display language
 - No telemetry and no network requests — works fully offline
 - Prebuilt native binaries for Windows (x64, arm64, ia32), macOS (Intel and Apple Silicon)
@@ -45,6 +49,8 @@ To open the same port in another panel, use the `+` at the end of its row. Other
 - **Periodic send keeps sending** after you switch tabs or hide the panel — by design
 - On ESP32, Arduino boards with an auto-reset circuit and the like, **just opening the port**
   resets the board via DTR/RTS
+- Sends from the AI chat tools are real writes. Check the port and bytes in the confirmation, and
+  think twice before letting it send without asking
 
 Only use it on devices you are authorized to operate. Provided "as is", without warranty of any kind.
 
@@ -86,6 +92,9 @@ VS Code 里的串口调试助手，给单片机与嵌入式开发用：USB 转�
 - 端口名与设备管理器一致，并附芯片名：`COM3 · CH340`
 - 端口被别的面板占着时直接拦下并说明原因，而不是一句 `Failed to open serial port`
 - 设备身份带 USB 序列号，换个 USB 口插也认得出来，波特率和备注跟着设备走
+- **AI 聊天工具**：在 agent 模式下，或用 `#serialPorts` / `#serialOutput` / `#serialSend` 引用，助手可以
+  列出串口、读取面板已捕获的收发数据、向已打开的串口发送数据。它不能打开或关闭端口，每次发送都会
+  请你确认。助手读到的串口数据会交给聊天所用的模型
 - 中英双语界面，跟随 VS Code 显示语言
 - 不收集遥测、不发任何网络请求，离线可用
 
@@ -95,6 +104,7 @@ VS Code 里的串口调试助手，给单片机与嵌入式开发用：USB 转�
 - **周期发送会一直发下去**，包括你切走标签页、隐藏面板之后——这是设计如此
 - 在 ESP32、带自动下载电路的 Arduino 等板子上，**仅仅「打开端口」这个动作**
   就会通过 DTR/RTS 触发复位
+- AI 聊天工具的发送是真实写入。允许之前看清确认框里的端口和字节，慎用免确认
 
 请只在你有权操作的设备上使用。本工具按「现状」提供，不作任何担保。
 

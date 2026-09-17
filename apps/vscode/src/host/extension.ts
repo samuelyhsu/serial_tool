@@ -7,6 +7,7 @@ import type { ConnectionOptions } from '@/core/transport/types';
 import type { SerialToolApi } from '../shared/api';
 import type { HostEvent, HostRequest } from '../shared/protocol';
 import { hostText } from './hostText';
+import { createLmTools } from './lmTools';
 import { NodeSerialTransport, type OpenNodePort } from './nodeSerialTransport';
 import { noticeLogEntry } from './noticeLog';
 import { refreshHiddenPanels } from './panelHtml';
@@ -364,6 +365,24 @@ export function activate(context: vscode.ExtensionContext): SerialToolApi {
   const portsView = vscode.window.createTreeView('serialTool.ports', { treeDataProvider: ports });
   if (remote !== undefined) portsView.description = hostText().remoteHost(remote);
   context.subscriptions.push(ports, portsView);
+
+  context.subscriptions.push(
+    ...Object.entries(
+      createLmTools({
+        listPorts: async () => {
+          const current = await ensureWatcher();
+          if (!current) {
+            throw new Error(
+              'The native serial module failed to load, so no ports can be listed. Details are in the extension output channel.',
+            );
+          }
+          return current.refresh();
+        },
+        sessions: () => panels.values(),
+        remote,
+      }),
+    ).map(([name, tool]) => vscode.lm.registerTool(name, tool)),
+  );
 
   /**
    * 点端口的去处。

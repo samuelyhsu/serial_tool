@@ -35,6 +35,11 @@ export interface HostText {
   readonly vendor: string;
   readonly heldByPanel: (label: string) => string;
   readonly remoteHost: (remote: string) => string;
+  readonly lmListingPorts: string;
+  readonly lmReadingOutput: string;
+  readonly lmSending: (port: string) => string;
+  readonly lmSendTitle: string;
+  readonly lmSendMessage: (port: string, byteCount: number) => string;
   readonly stateOpen: string;
   readonly stateOpening: string;
   readonly stateReconnecting: string;
@@ -65,6 +70,11 @@ const zh: HostText = {
   vendor: '厂商',
   heldByPanel: (label) => `正被面板「${label}」使用`,
   remoteHost: (remote) => `远端：${remote}`,
+  lmListingPorts: '正在列出串口',
+  lmReadingOutput: '正在读取串口输出',
+  lmSending: (port) => `正在向 ${port} 发送`,
+  lmSendTitle: '发送到串口？',
+  lmSendMessage: (port, byteCount) => `向 \`${port}\` 发送 ${byteCount} 字节：`,
   stateOpen: '已连接',
   stateOpening: '连接中',
   stateReconnecting: '重连中',
@@ -99,6 +109,11 @@ const en: HostText = {
   vendor: 'Vendor',
   heldByPanel: (label) => `In use by panel "${label}"`,
   remoteHost: (remote) => `Remote: ${remote}`,
+  lmListingPorts: 'Listing serial ports',
+  lmReadingOutput: 'Reading serial output',
+  lmSending: (port) => `Sending to ${port}`,
+  lmSendTitle: 'Send to serial port?',
+  lmSendMessage: (port, byteCount) => `Send ${byteCount} bytes to \`${port}\`:`,
   stateOpen: 'Connected',
   stateOpening: 'Connecting',
   stateReconnecting: 'Reconnecting',
