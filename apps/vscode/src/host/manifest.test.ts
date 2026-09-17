@@ -3,16 +3,22 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 /**
- * 扩展清单里决定「在商店里搜不搜得到」的那几项。
+ * 扩展清单里那些「代码全对也救不回来」的声明。
  *
- * 它们写错了不会让任何功能出错，只会让扩展悄悄变难找；更糟的是商店的硬性约束
- * （关键词上限、合法分类）要到打 tag 之后的发布步骤才会被拒 —— 而那一步失败会
- * 连带跳过网页部署。所以把这些约束写成断言，提前到 CI 里红。
+ * 一类决定在商店里搜不搜得到：写错了不会让任何功能出错，只会让扩展悄悄变难找；
+ * 更糟的是商店的硬性约束（关键词上限、合法分类）要到打 tag 之后的发布步骤才会被拒
+ * —— 而那一步失败会连带跳过网页部署。另一类决定扩展在什么环境里跑得起来、跑在哪台
+ * 机器上，漏了就是整个扩展静默消失或者枚举错机器的串口。两类都写成断言，提前到 CI 里红。
  */
 
 interface Manifest {
   categories: string[];
   keywords: string[];
+  capabilities?: {
+    untrustedWorkspaces?: { supported?: boolean };
+    virtualWorkspaces?: boolean;
+  };
+  extensionKind?: string[];
 }
 
 function read(relativePath: string): string {
@@ -86,5 +92,38 @@ describe('扩展清单的商店元数据', () => {
   it('商店名称包含界面上的名称', () => {
     expect(nlsEn.displayName).toContain(nlsEn['view.container']);
     expect(nlsZh.displayName).toContain(nlsZh['view.container']);
+  });
+});
+
+describe('扩展清单的运行环境声明', () => {
+  /**
+   * 不声明 capabilities.untrustedWorkspaces，VS Code 就按「不支持」处理，工作区处于
+   * 受限模式时整个扩展被禁用（https://code.visualstudio.com/api/extension-guides/workspace-trust）。
+   * 用户克隆一个不认识的仓库、在信任弹窗里选了「不信任」，串口助手连同状态栏那个
+   * 「用来被发现」的入口一起消失 —— 而它根本不读工作区内容、也不执行工作区里的任何
+   * 东西，输入只有用户在面板里敲的字节和 globalState 里的偏好。
+   */
+  it('在受限模式下仍然可用', () => {
+    expect(manifest.capabilities?.untrustedWorkspaces?.supported).toBe(true);
+  });
+
+  /** 与文件系统无关，虚拟工作区里照常可用。默认值就是 true，官方仍鼓励显式声明。 */
+  it('声明支持虚拟工作区', () => {
+    expect(manifest.capabilities?.virtualWorkspaces).toBe(true);
+  });
+
+  /**
+   * extensionKind 不声明时，扩展一律被当作 workspace 扩展
+   * （https://code.visualstudio.com/api/advanced-topics/remote-extensions）。
+   * 那样在 Remote-SSH / WSL / devcontainer 里会被装到远端，`SerialPort.list()` 枚举到的
+   * 是远端那台机器的串口 —— WSL 里基本是空的（Windows 的 COM 口不透传），用户看到
+   * 「没有串口」，而板子就插在手边。
+   *
+   * 'ui' 排在前面让它优先跑在本地；保留 'workspace' 是因为「板子插在远程服务器上」
+   * 是真实用法，本地没装时仍可在远端装一份接着用。
+   */
+  it('优先跑在本地，因为串口是本地设备', () => {
+    expect(manifest.extensionKind?.[0]).toBe('ui');
+    expect(manifest.extensionKind).toContain('workspace');
   });
 });
