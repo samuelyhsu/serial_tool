@@ -151,7 +151,47 @@ describe('预设持久化', () => {
       JSON.stringify({ version: 1, presets: [{ name: 'a', data: 'AT' }] }),
     );
     const app = await reload();
-    expect(app.preset.usePresetStore.getState().presets).toHaveLength(app.preset.PRESET_COUNT);
+    const { tabs, presets } = app.preset.usePresetStore.getState();
+    expect(tabs).toHaveLength(app.preset.PRESET_DEFAULT_TABS);
+    expect(presets).toHaveLength(tabs.length * app.preset.PRESET_TAB_SIZE);
+  });
+
+  it('分组标题和新建的分组刷新后都在，当前看的是哪一组不记', async () => {
+    let app = await reload();
+    const store = app.preset.usePresetStore;
+    store.getState().renameTab(store.getState().tabs[1]!.id, '电机');
+    store.getState().addTab();
+    expect(store.getState().activeTab).toBe(3);
+    app.persist.flushPersist();
+
+    app = await reload();
+    const state = app.preset.usePresetStore.getState();
+    expect(state.tabs.map((tab) => tab.title)).toEqual([null, '电机', null, null]);
+    expect(state.presets).toHaveLength(4 * app.preset.PRESET_TAB_SIZE);
+    expect(state.activeTab).toBe(0);
+  });
+
+  /** 0.3.0 及更早存的是分页的一整列：升级后内容不能丢，下一次写回就换成带分组的格式。 */
+  it('旧版分页存量升级后内容不丢，写回时换成新格式', async () => {
+    const legacy = Array.from({ length: 50 }, (_, index) => ({
+      name: `#${index + 1}`,
+      labelKey: null,
+      data: index === 23 ? 'AT+OLD' : '',
+      mode: 'text',
+      intervalMs: 1000,
+      inSequence: false,
+    }));
+    localStorage.setItem('wst.presets', JSON.stringify({ version: 1, presets: legacy }));
+
+    const app = await reload();
+    const state = app.preset.usePresetStore.getState();
+    expect(state.tabs).toHaveLength(app.preset.PRESET_DEFAULT_TABS);
+    const migrated = app.preset.tabPresets(state.presets, 2)[3]!;
+    expect(migrated.data).toBe('AT+OLD');
+
+    state.setData(migrated.id, 'AT+NEW');
+    app.persist.flushPersist();
+    expect(stored('presets')).toMatchObject({ version: app.preset.PRESET_EXPORT_VERSION });
   });
 
   it('顺序循环的间隔刷新后还在', async () => {
@@ -172,8 +212,9 @@ describe('预设持久化', () => {
   it('存储损坏时整体退回内置示例', async () => {
     localStorage.setItem('wst.presets', JSON.stringify({ presets: 'nope' }));
     const app = await reload();
-    const presets = app.preset.usePresetStore.getState().presets;
-    expect(presets).toHaveLength(app.preset.PRESET_COUNT);
+    const { tabs, presets } = app.preset.usePresetStore.getState();
+    expect(tabs).toHaveLength(app.preset.PRESET_DEFAULT_TABS);
+    expect(presets).toHaveLength(tabs.length * app.preset.PRESET_TAB_SIZE);
     expect(presets[0]!.labelKey).toBe('queryVersion');
   });
 });

@@ -127,9 +127,13 @@ export interface Messages {
   readonly stopSequence: string;
   readonly stopAll: string;
   readonly renamePreset: string;
-  readonly prevPage: string;
-  readonly nextPage: string;
-  readonly pageIndicator: (current: number, total: number) => string;
+  /** 分组标签页整体的名称，给屏幕阅读器用。 */
+  readonly presetTabs: string;
+  /** 没改过名的分组的标题，序号从 1 开始。 */
+  readonly presetTabTitle: (index: number) => string;
+  readonly newTab: string;
+  readonly renameTab: string;
+  readonly renameTabHint: string;
   readonly toggleHexMode: string;
   readonly formatToggleLabel: (current: string, next: string) => string;
 

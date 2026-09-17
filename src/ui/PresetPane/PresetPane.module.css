@@ -25,25 +25,60 @@
   white-space: nowrap;
 }
 
-.pager {
+/* 分组多了就横向滚动；「+」与导入导出排在它外面，始终看得见 */
+.tabs {
   display: flex;
   align-items: center;
-  gap: 4px;
-  margin-left: 4px;
+  gap: 2px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
 }
 
-.pageBtn {
+.tab {
+  flex: none;
+  max-width: 120px;
+  padding: 4px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--dim);
+  cursor: pointer;
+  font-size: 11.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab:hover {
+  color: var(--text);
+  background: var(--hover);
+}
+
+/* 选中态与发送按钮同一组配色 */
+.tab[aria-selected='true'] {
+  color: var(--blue-text);
+  background: var(--blue-soft);
+}
+
+.tabInput {
+  flex: none;
+  width: 110px;
+  background: var(--sunk);
+  border: 1px solid var(--blue);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  padding: 3px 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.addTab {
+  flex: none;
   padding: 2px 8px;
   font-size: 13px;
   line-height: 1;
-}
-
-.pageLabel {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--dim);
-  min-width: 34px;
-  text-align: center;
 }
 
 .headActions {

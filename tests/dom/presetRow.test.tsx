@@ -2,7 +2,7 @@ import { act, cleanup, render, screen, waitFor, within } from '@testing-library/
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { __resetLogStoreForTests } from '@/store/logStore';
-import { PRESET_COUNT, PRESET_PAGE_SIZE, PRESET_PAGES, usePresetStore } from '@/store/presetStore';
+import { PRESET_DEFAULT_TABS, PRESET_TAB_SIZE, usePresetStore } from '@/store/presetStore';
 import { useTasksStore } from '@/store/tasksStore';
 import { useUiStore } from '@/store/uiStore';
 import { PresetPane } from '@/ui/PresetPane/PresetPane';
@@ -11,24 +11,23 @@ function rows(): HTMLElement[] {
   return screen.getAllByRole('checkbox').map((box) => box.closest('div') as HTMLElement);
 }
 
+function tabs(): HTMLElement[] {
+  return screen.getAllByRole('tab');
+}
+
 describe('多条发送', () => {
   beforeEach(() => {
     __resetLogStoreForTests();
     useTasksStore.setState({ running: [] });
     useUiStore.setState({ language: 'zh' });
-    usePresetStore.setState({
-      presets: usePresetStore.getInitialState().presets,
-      page: 0,
-      issues: {},
-    });
+    usePresetStore.setState(usePresetStore.getInitialState(), true);
   });
 
   afterEach(cleanup);
 
-  it('每页固定 10 条，没有新增和删除', () => {
+  it('每组固定 10 条，没有新增和删除行的按钮', () => {
     render(<PresetPane />);
-    expect(usePresetStore.getState().presets).toHaveLength(PRESET_COUNT);
-    expect(rows()).toHaveLength(PRESET_PAGE_SIZE);
+    expect(rows()).toHaveLength(PRESET_TAB_SIZE);
 
     expect(screen.queryByRole('button', { name: '+ 新增' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /删除/ })).not.toBeInTheDocument();
@@ -126,39 +125,122 @@ describe('多条发送', () => {
     expect(usePresetStore.getState().presets.filter((p) => p.inSequence)).toHaveLength(before - 1);
   });
 
-  it('翻页只换这一页的 10 条，总数不变', async () => {
+  it('默认三个分组，第一个选中，列表归属于选中的分组', () => {
     render(<PresetPane />);
-    expect(screen.getByText(`1/${PRESET_PAGES}`)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '查询版本' })).toBeInTheDocument();
+    expect(tabs().map((tab) => tab.textContent)).toEqual(['分组 1', '分组 2', '分组 3']);
+    expect(tabs()[0]).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tabpanel')).toHaveAccessibleName('分组 1');
+  });
 
-    await userEvent.click(screen.getByRole('button', { name: '下一页' }));
+  it('点分组只换显示的 10 条，总数不变', async () => {
+    render(<PresetPane />);
+    await userEvent.click(tabs()[1]!);
 
-    expect(screen.getByText(`2/${PRESET_PAGES}`)).toBeInTheDocument();
-    expect(rows()).toHaveLength(PRESET_PAGE_SIZE);
-    // 第二页是空行，第一页的内置预设不该还在
+    expect(tabs()[1]).toHaveAttribute('aria-selected', 'true');
+    expect(rows()).toHaveLength(PRESET_TAB_SIZE);
+    // 第二组是空行，第一组的内置预设不该还在
     expect(screen.queryByRole('button', { name: '查询版本' })).not.toBeInTheDocument();
-    expect(usePresetStore.getState().presets).toHaveLength(PRESET_COUNT);
+    expect(usePresetStore.getState().presets).toHaveLength(PRESET_DEFAULT_TABS * PRESET_TAB_SIZE);
   });
 
-  it('首页禁用上一页，末页禁用下一页', async () => {
+  /** 标签页的键盘约定：方向键切换且焦点跟着走，到头回绕，Home / End 直达两端。 */
+  it('方向键在分组间切换', async () => {
     render(<PresetPane />);
-    expect(screen.getByRole('button', { name: '上一页' })).toBeDisabled();
+    act(() => {
+      tabs()[0]!.focus();
+    });
 
-    for (let i = 0; i < PRESET_PAGES - 1; i += 1) {
-      await userEvent.click(screen.getByRole('button', { name: '下一页' }));
-    }
-    expect(screen.getByText(`${PRESET_PAGES}/${PRESET_PAGES}`)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '下一页' })).toBeDisabled();
+    await userEvent.keyboard('{ArrowRight}');
+    expect(tabs()[1]).toHaveAttribute('aria-selected', 'true');
+    expect(tabs()[1]).toHaveFocus();
+
+    await userEvent.keyboard('{ArrowLeft}{ArrowLeft}');
+    expect(tabs()[2]).toHaveAttribute('aria-selected', 'true');
+
+    await userEvent.keyboard('{Home}');
+    expect(tabs()[0]).toHaveFocus();
+    await userEvent.keyboard('{End}');
+    expect(tabs()[2]).toHaveFocus();
   });
 
-  /** 勾选的含义是「参与顺序循环」，与当前看的是哪一页无关。 */
-  it('顺序循环跨页统计勾选项', async () => {
+  it('只有选中的分组在 Tab 键序列里', () => {
+    render(<PresetPane />);
+    expect(tabs().map((tab) => tab.tabIndex)).toEqual([0, -1, -1]);
+  });
+
+  it('双击分组标题改名，回车提交后焦点回到标签上', async () => {
+    render(<PresetPane />);
+    await userEvent.dblClick(tabs()[0]!);
+
+    const input = screen.getByRole('textbox', { name: '重命名分组' });
+    expect(input).toHaveFocus();
+    expect(input).toHaveValue('分组 1');
+
+    await userEvent.clear(input);
+    await userEvent.type(input, '电机{Enter}');
+
+    expect(tabs()[0]).toHaveTextContent('电机');
+    expect(tabs()[0]).toHaveFocus();
+    expect(screen.queryByRole('textbox', { name: '重命名分组' })).not.toBeInTheDocument();
+  });
+
+  it('按 F2 也能改名，Esc 放弃', async () => {
+    render(<PresetPane />);
+    act(() => {
+      tabs()[1]!.focus();
+    });
+
+    await userEvent.keyboard('{F2}');
+    await userEvent.type(screen.getByRole('textbox', { name: '重命名分组' }), '别存{Escape}');
+
+    expect(tabs()[1]).toHaveTextContent('分组 2');
+    expect(usePresetStore.getState().tabs[1]!.title).toBeNull();
+  });
+
+  it('标题留空保持原标题', async () => {
+    render(<PresetPane />);
+    await userEvent.dblClick(tabs()[2]!);
+
+    const input = screen.getByRole('textbox', { name: '重命名分组' });
+    await userEvent.clear(input);
+    await userEvent.type(input, '{Enter}');
+
+    expect(tabs()[2]).toHaveTextContent('分组 3');
+  });
+
+  it('新建分组排在最后并自动选中，里面是空行', async () => {
+    render(<PresetPane />);
+    await userEvent.click(screen.getByRole('button', { name: '新建分组' }));
+
+    expect(tabs()).toHaveLength(PRESET_DEFAULT_TABS + 1);
+    expect(tabs().at(-1)).toHaveTextContent('分组 4');
+    expect(tabs().at(-1)).toHaveAttribute('aria-selected', 'true');
+    expect(within(rows()[0]!).getByRole('button', { name: '#1' })).toBeInTheDocument();
+  });
+
+  it('切到英文后没改过名的分组标题跟着换，改过的不变', async () => {
+    render(<PresetPane />);
+    await userEvent.dblClick(tabs()[0]!);
+    await userEvent.type(
+      screen.getByRole('textbox', { name: '重命名分组' }),
+      '{Control>}a{/Control}电机{Enter}',
+    );
+
+    act(() => {
+      useUiStore.setState({ language: 'en' });
+    });
+
+    expect(tabs().map((tab) => tab.textContent)).toEqual(['电机', 'Group 2', 'Group 3']);
+  });
+
+  /** 勾选的含义是「参与顺序循环」，与当前看的是哪一组无关。 */
+  it('顺序循环跨分组统计勾选项', async () => {
     render(<PresetPane />);
     const checked = usePresetStore.getState().presets.filter((preset) => preset.inSequence).length;
     expect(screen.getByText(`按序依次发送 ${checked} 条`)).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: '下一页' }));
-    // 翻到没有勾选项的第二页，统计仍然是全局的
+    await userEvent.click(tabs()[1]!);
+    // 切到没有勾选项的第二组，统计仍然是全局的
     expect(screen.getByText(`按序依次发送 ${checked} 条`)).toBeInTheDocument();
   });
 
@@ -181,14 +263,14 @@ describe('多条发送', () => {
     });
   });
 
-  it('翻页后编辑第二页的行不影响第一页', async () => {
+  it('在第二组里编辑不影响第一组', async () => {
     render(<PresetPane />);
-    await userEvent.click(screen.getByRole('button', { name: '下一页' }));
+    await userEvent.click(tabs()[1]!);
 
     const firstRowData = screen.getAllByRole('textbox')[0]!;
-    await userEvent.type(firstRowData, 'AT+PAGE2');
+    await userEvent.type(firstRowData, 'AT+GROUP2');
 
-    await userEvent.click(screen.getByRole('button', { name: '上一页' }));
+    await userEvent.click(tabs()[0]!);
     expect(screen.getAllByRole('textbox')[0]).toHaveValue('AT+VER?');
   });
 });

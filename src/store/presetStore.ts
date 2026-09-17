@@ -19,21 +19,38 @@ export interface Preset {
   inSequence: boolean;
 }
 
-export const PRESET_EXPORT_VERSION = 1;
+/**
+ * 预设分组，界面上是一个标签页。
+ *
+ * 分组只记标题，预设本身仍按顺序排在 presets 里：第 i 组就是第 i 个 PRESET_TAB_SIZE 条。
+ * 顺序循环、周期任务、交给宿主执行这些按整列工作的逻辑，因此都不必知道分组的存在。
+ */
+export interface PresetTab {
+  id: string;
+  /** 用户起的标题；null 表示没改过名，显示当前语言的默认标题（与预设的 labelKey 同理）。 */
+  title: string | null;
+}
+
+/** 2 起带分组；1 是分组之前的一整列预设，导入与读取存量数据时仍然认。 */
+export const PRESET_EXPORT_VERSION = 2;
 
 /**
- * 预设按页组织：每页固定 10 条，共 PRESET_PAGES 页。
+ * 每组固定 10 条。
  *
- * 固定条数换来的是不需要新增/删除按钮，每行也就能压成密度一致的一行；
- * 分页则让总量够用而不必把几十行堆在一个滚动区里。
- * 页数不够改这里一个常量即可，界面会自动跟上。
+ * 固定条数换来的是不需要新增/删除行的按钮，每行也就能压成密度一致的一行；
+ * 总量不够时新建一个分组，而不是把几十行堆在一个滚动区里。
  */
-export const PRESET_PAGE_SIZE = 10;
-export const PRESET_PAGES = 5;
-export const PRESET_COUNT = PRESET_PAGE_SIZE * PRESET_PAGES;
+export const PRESET_TAB_SIZE = 10;
+/** 新用户默认几组；旧版分页数据迁移过来时也至少保留这么多组。 */
+export const PRESET_DEFAULT_TABS = 3;
+/** 标签页上放不下更长的标题。 */
+export const PRESET_TAB_TITLE_MAX = 16;
+
+const DEFAULT_INTERVAL_MS = 1000;
 
 let counter = 0;
 const nextId = (): string => `p${++counter}`;
+const nextTabId = (): string => `t${++counter}`;
 
 const BUILTINS: readonly Omit<Preset, 'id' | 'name'>[] = [
   { labelKey: 'queryVersion', data: 'AT+VER?', mode: 'text', intervalMs: 1000, inSequence: true },
@@ -78,15 +95,41 @@ const BUILTINS: readonly Omit<Preset, 'id' | 'name'>[] = [
   { labelKey: 'softReset', data: 'AT+RST', mode: 'text', intervalMs: 1000, inSequence: false },
 ];
 
-function blankPreset(index: number): Preset {
+/** 空行的名字按它在组内的位置编号。 */
+function blankPreset(indexInTab: number): Preset {
   return {
     id: nextId(),
     labelKey: null,
-    name: `#${index + 1}`,
+    name: `#${indexInTab + 1}`,
     data: '',
     mode: 'text',
-    intervalMs: 1000,
+    intervalMs: DEFAULT_INTERVAL_MS,
     inSequence: false,
+  };
+}
+
+/** 与 blankPreset 生成的一模一样（编号不论），也就是没有任何用户改动。 */
+function isBlank(preset: Preset): boolean {
+  return (
+    preset.labelKey === null &&
+    preset.data === '' &&
+    preset.mode === 'text' &&
+    preset.intervalMs === DEFAULT_INTERVAL_MS &&
+    !preset.inSequence &&
+    /^#\d+$/.test(preset.name)
+  );
+}
+
+/** 分组与预设总是成对出现：presets 恒为 tabs.length × PRESET_TAB_SIZE 条。 */
+export interface PresetCollection {
+  tabs: PresetTab[];
+  presets: Preset[];
+}
+
+function blankTab(): PresetCollection {
+  return {
+    tabs: [{ id: nextTabId(), title: null }],
+    presets: Array.from({ length: PRESET_TAB_SIZE }, (_, index) => blankPreset(index)),
   };
 }
 
@@ -102,17 +145,25 @@ function loadSequenceGap(): number {
     : DEFAULT_SEQUENCE_GAP_MS;
 }
 
+/** 第 index 组的那 PRESET_TAB_SIZE 条。 */
+export function tabPresets(presets: readonly Preset[], index: number): readonly Preset[] {
+  return presets.slice(index * PRESET_TAB_SIZE, (index + 1) * PRESET_TAB_SIZE);
+}
+
 /** 导出与本地持久化共用同一套字段，因此两者的还原路径也完全一致。 */
-function serializePresets(presets: readonly Preset[]): unknown {
+function serializePresets(tabs: readonly PresetTab[], presets: readonly Preset[]): unknown {
   return {
     version: PRESET_EXPORT_VERSION,
-    presets: presets.map((preset) => ({
-      name: preset.name,
-      labelKey: preset.labelKey,
-      data: preset.data,
-      mode: preset.mode,
-      intervalMs: preset.intervalMs,
-      inSequence: preset.inSequence,
+    tabs: tabs.map((tab, index) => ({
+      title: tab.title,
+      presets: tabPresets(presets, index).map((preset) => ({
+        name: preset.name,
+        labelKey: preset.labelKey,
+        data: preset.data,
+        mode: preset.mode,
+        intervalMs: preset.intervalMs,
+        inSequence: preset.inSequence,
+      })),
     })),
   };
 }
@@ -124,16 +175,23 @@ function serializePresets(presets: readonly Preset[]): unknown {
  * （旧版本字段、被手改、被别的标签页写坏），没有理由维护两套校验。
  * 校验不通过就整体退回内置示例，而不是让半截数据进到界面里。
  */
-function loadPresets(): Preset[] {
+function loadCollection(): PresetCollection {
   const result = validatePresetPayload(readStoredJson<unknown>(PRESETS_KEY, null));
-  return result.ok ? result.presets : defaultPresets();
+  return result.ok ? { tabs: result.tabs, presets: result.presets } : defaultCollection();
 }
 
-function defaultPresets(): Preset[] {
-  // 前 10 条是内置示例，其余补空行凑满固定总数
-  const presets: Preset[] = BUILTINS.map((preset) => ({ ...preset, id: nextId(), name: '' }));
-  while (presets.length < PRESET_COUNT) presets.push(blankPreset(presets.length));
-  return presets;
+function defaultCollection(): PresetCollection {
+  // 第一组是内置示例（恰好 10 条），其余各组是空行
+  const collection: PresetCollection = {
+    tabs: [{ id: nextTabId(), title: null }],
+    presets: BUILTINS.map((preset) => ({ ...preset, id: nextId(), name: '' })),
+  };
+  while (collection.tabs.length < PRESET_DEFAULT_TABS) {
+    const blank = blankTab();
+    collection.tabs.push(...blank.tabs);
+    collection.presets.push(...blank.presets);
+  }
+  return collection;
 }
 
 /** 内置预设显示当前语言的名字，用户改过名的显示自定义名。 */
@@ -141,15 +199,21 @@ export function presetLabel(preset: Preset, messages: Messages): string {
   return preset.labelKey ? messages.presetNames[preset.labelKey] : preset.name;
 }
 
+/** 没改过名的分组显示当前语言的默认标题，按位置编号。 */
+export function presetTabTitle(tab: PresetTab, index: number, messages: Messages): string {
+  return tab.title ?? messages.presetTabTitle(index + 1);
+}
+
 export type PresetIssue =
   | { id: string; kind: 'lossy' }
   | { id: string; kind: 'parse'; error: HexParseError };
 
 interface PresetState {
-  /** 恒为 PRESET_COUNT 条，按 PRESET_PAGE_SIZE 分页展示。 */
+  /** 按分组顺序排列，恒为 tabs.length × PRESET_TAB_SIZE 条。 */
   presets: readonly Preset[];
-  /** 当前页，从 0 开始。 */
-  page: number;
+  tabs: readonly PresetTab[];
+  /** 当前显示的分组，从 0 开始。 */
+  activeTab: number;
   /** 顺序循环两条之间的间隔。 */
   sequenceGapMs: number;
   /** 每条预设当前的问题（HEX 解析失败 / 模式切换被拒），按 id 索引。 */
@@ -166,8 +230,12 @@ interface PresetState {
   setSequenceGapMs: (gapMs: number) => void;
   toggleSequence: () => void;
 
-  setPage: (page: number) => void;
-  replaceAll: (presets: Preset[]) => void;
+  selectTab: (index: number) => void;
+  /** 标题的取值规则见 parseTabTitle；清洗后为空则不改。 */
+  renameTab: (id: string, title: string) => void;
+  /** 在末尾加一组空行并切换过去。 */
+  addTab: () => void;
+  replaceAll: (collection: PresetCollection) => void;
   exportPayload: () => string;
 }
 
@@ -203,10 +271,13 @@ export const usePresetStore = create<PresetState>()((set, get) => {
       };
     });
 
+  const initial = loadCollection();
+
   return {
-    presets: loadPresets(),
-    // page 不持久化：翻页是当下的浏览位置，不是配置
-    page: 0,
+    presets: initial.presets,
+    tabs: initial.tabs,
+    // activeTab 不持久化：当前看的是哪一组是浏览位置，不是配置
+    activeTab: 0,
     sequenceGapMs: loadSequenceGap(),
     issues: {},
 
@@ -303,21 +374,40 @@ export const usePresetStore = create<PresetState>()((set, get) => {
       });
     },
 
-    setPage: (page) => set({ page: Math.min(PRESET_PAGES - 1, Math.max(0, page)) }),
+    selectTab: (index) =>
+      set((state) => ({ activeTab: Math.min(state.tabs.length - 1, Math.max(0, index)) })),
 
-    replaceAll: (presets) => {
-      useTasksStore.getState().stopAll();
-      set({ presets, issues: {} });
+    renameTab: (id, title) => {
+      const clean = parseTabTitle(title);
+      if (clean === null) return;
+      set((state) => ({
+        tabs: state.tabs.map((tab) => (tab.id === id ? { ...tab, title: clean } : tab)),
+      }));
     },
 
-    exportPayload: () => JSON.stringify(serializePresets(get().presets), null, 2),
+    addTab: () =>
+      set((state) => {
+        const blank = blankTab();
+        return {
+          tabs: [...state.tabs, ...blank.tabs],
+          presets: [...state.presets, ...blank.presets],
+          activeTab: state.tabs.length,
+        };
+      }),
+
+    replaceAll: ({ tabs, presets }) => {
+      useTasksStore.getState().stopAll();
+      set({ tabs, presets, activeTab: 0, issues: {} });
+    },
+
+    exportPayload: () => JSON.stringify(serializePresets(get().tabs, get().presets), null, 2),
   };
 });
 
 /* ---------------- 导入：显式校验（缺陷 D17） ---------------- */
 
 export type ImportResult =
-  | { ok: true; presets: Preset[]; skipped: number }
+  | ({ ok: true; skipped: number } & PresetCollection)
   | { ok: false; reason: string };
 
 /**
@@ -337,53 +427,122 @@ export function parseImportedPresets(raw: string): ImportResult {
 
 /** 校验已解析出来的结构。导入文件与读取 localStorage 共用。 */
 export function validatePresetPayload(parsed: unknown): ImportResult {
+  if (isRecord(parsed) && Array.isArray(parsed.tabs)) return validateTabs(parsed.tabs);
+
   const items = Array.isArray(parsed)
     ? parsed // 兼容原型导出的裸数组
     : isRecord(parsed) && Array.isArray(parsed.presets)
-      ? parsed.presets
+      ? parsed.presets // 分组之前的格式（version 1）
       : null;
 
   if (!items) return { ok: false, reason: 'expected an array of presets' };
-  if (items.length === 0) return { ok: false, reason: 'file contains no presets' };
+  return validatePages(items);
+}
 
-  const presets: Preset[] = [];
+/** 带分组的格式：每组各自校验，不足 PRESET_TAB_SIZE 条补空行，多出的计入跳过。 */
+function validateTabs(rawTabs: readonly unknown[]): ImportResult {
+  const collection: PresetCollection = { tabs: [], presets: [] };
   let skipped = 0;
+  let parsedCount = 0;
 
-  for (const item of items.slice(0, PRESET_COUNT)) {
-    if (!isRecord(item) || typeof item.data !== 'string') {
+  for (const rawTab of rawTabs) {
+    if (!isRecord(rawTab) || !Array.isArray(rawTab.presets)) {
       skipped += 1;
       continue;
     }
-    // 旧格式用 hex: boolean，新格式用 mode: 'text' | 'hex'
-    const mode: PayloadMode =
-      item.mode === 'hex' || item.mode === 'text' ? item.mode : item.hex === true ? 'hex' : 'text';
-
-    const interval = Number(item.intervalMs ?? item.interval);
-    // 内置预设的名字来自翻译目录、name 字段本就是空的：labelKey 丢掉的话，
-    // 导出再导入回来就全变成兜底的 'preset'。
-    // 但自定义名字优先 —— 与 rename() 同一条规则：一旦有自己的名字就切断内置翻译，
-    // 否则手改过的文件导入回来会被内置译名盖掉。
-    const named = typeof item.name === 'string' && item.name.trim() ? item.name : null;
-    const labelKey = named ? null : toBuiltinKey(item.labelKey);
-    const name = named ?? (labelKey ? '' : 'preset');
-
-    presets.push({
-      id: nextId(),
-      labelKey,
-      name,
-      data: item.data,
-      mode,
-      intervalMs: Number.isFinite(interval) ? Math.max(10, Math.round(interval)) : 1000,
-      inSequence: item.inSequence === true || item.seq === true,
-    });
+    const group: Preset[] = [];
+    for (const item of rawTab.presets) {
+      const preset = group.length < PRESET_TAB_SIZE ? parsePresetItem(item) : null;
+      if (preset) group.push(preset);
+      else skipped += 1;
+    }
+    parsedCount += group.length;
+    while (group.length < PRESET_TAB_SIZE) group.push(blankPreset(group.length));
+    collection.tabs.push({ id: nextTabId(), title: parseTabTitle(rawTab.title) });
+    collection.presets.push(...group);
   }
 
-  if (presets.length === 0) return { ok: false, reason: 'no valid preset in file' };
+  if (parsedCount === 0) return { ok: false, reason: 'no valid preset in file' };
+  return { ok: true, ...collection, skipped };
+}
 
-  // 条数固定，不足补空行、超出截断，界面才不需要处理「行数会变」这件事
-  while (presets.length < PRESET_COUNT) presets.push(blankPreset(presets.length));
+/**
+ * 分组之前的格式：一整列预设，当时按每页 10 条分页显示。
+ *
+ * 按原来的页切成分组，末尾完全没用过的空页去掉（至少留 PRESET_DEFAULT_TABS 组）——
+ * 旧版固定 5 页，原样照搬的话大多数人会凭空多出两个空分组。
+ */
+function validatePages(items: readonly unknown[]): ImportResult {
+  if (items.length === 0) return { ok: false, reason: 'file contains no presets' };
 
-  return { ok: true, presets, skipped: skipped + Math.max(0, items.length - PRESET_COUNT) };
+  const parsed: Preset[] = [];
+  let skipped = 0;
+  for (const item of items) {
+    const preset = parsePresetItem(item);
+    if (preset) parsed.push(preset);
+    else skipped += 1;
+  }
+  if (parsed.length === 0) return { ok: false, reason: 'no valid preset in file' };
+
+  const pageCount = Math.max(PRESET_DEFAULT_TABS, Math.ceil(parsed.length / PRESET_TAB_SIZE));
+  const pages: Preset[][] = [];
+  for (let page = 0; page < pageCount; page += 1) {
+    // 旧版空行的占位名按全局位置编号（#11 … #50）。名字没改过的（填没填数据都算）
+    // 改成组内编号，否则同一组里会出现 #1、#12、#3 这样夹杂的名字
+    const group = tabPresets(parsed, page).map((preset, index) =>
+      preset.labelKey === null && preset.name === `#${page * PRESET_TAB_SIZE + index + 1}`
+        ? { ...preset, name: `#${index + 1}` }
+        : preset,
+    );
+    while (group.length < PRESET_TAB_SIZE) group.push(blankPreset(group.length));
+    pages.push(group);
+  }
+  while (pages.length > PRESET_DEFAULT_TABS && pages[pages.length - 1]!.every(isBlank)) {
+    pages.pop();
+  }
+
+  return {
+    ok: true,
+    tabs: pages.map(() => ({ id: nextTabId(), title: null })),
+    presets: pages.flat(),
+    skipped,
+  };
+}
+
+function parsePresetItem(item: unknown): Preset | null {
+  if (!isRecord(item) || typeof item.data !== 'string') return null;
+
+  // 旧格式用 hex: boolean，新格式用 mode: 'text' | 'hex'
+  const mode: PayloadMode =
+    item.mode === 'hex' || item.mode === 'text' ? item.mode : item.hex === true ? 'hex' : 'text';
+
+  const interval = Number(item.intervalMs ?? item.interval);
+  // 内置预设的名字来自翻译目录、name 字段本就是空的：labelKey 丢掉的话，
+  // 导出再导入回来就全变成兜底的 'preset'。
+  // 但自定义名字优先 —— 与 rename() 同一条规则：一旦有自己的名字就切断内置翻译，
+  // 否则手改过的文件导入回来会被内置译名盖掉。
+  const named = typeof item.name === 'string' && item.name.trim() ? item.name : null;
+  const labelKey = named ? null : toBuiltinKey(item.labelKey);
+  const name = named ?? (labelKey ? '' : 'preset');
+
+  return {
+    id: nextId(),
+    labelKey,
+    name,
+    data: item.data,
+    mode,
+    intervalMs: Number.isFinite(interval)
+      ? Math.max(10, Math.round(interval))
+      : DEFAULT_INTERVAL_MS,
+    inSequence: item.inSequence === true || item.seq === true,
+  };
+}
+
+/** 分组标题的取值规则：去掉首尾空白、截到上限，剩下空串就等于没起名。 */
+function parseTabTitle(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const clean = value.trim().slice(0, PRESET_TAB_TITLE_MAX);
+  return clean === '' ? null : clean;
 }
 
 /** 只认识目录里确实存在的内置键，其余一律当作用户自定义预设。 */
@@ -408,8 +567,8 @@ function sequenceFrames(presets: readonly Preset[]): Uint8Array[] {
   return presets.filter((preset) => preset.inSequence).flatMap(presetFrames);
 }
 
-usePresetStore.subscribe(({ presets, sequenceGapMs }) => {
-  saveSoon(PRESETS_KEY, serializePresets(presets));
+usePresetStore.subscribe(({ presets, tabs, sequenceGapMs }) => {
+  saveSoon(PRESETS_KEY, serializePresets(tabs, presets));
   saveSoon(SEQUENCE_GAP_KEY, sequenceGapMs);
 
   // 循环期间改预设内容 / 增删队列成员要即时生效。浏览器侧靠执行体重读状态自然就有；
