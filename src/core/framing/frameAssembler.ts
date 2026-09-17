@@ -52,10 +52,13 @@ export class FrameAssembler {
   #size = 0;
   #timer: ReturnType<typeof setTimeout> | null = null;
   #config: FramingConfig;
+  #lastChunkAt = 0;
 
   constructor(
     private readonly emit: (frame: Uint8Array) => void,
     config: Partial<FramingConfig> = {},
+    /** 单调时钟，毫秒。测试里换成可控的。 */
+    private readonly now: () => number = () => performance.now(),
   ) {
     this.#config = { ...DEFAULT_FRAMING, ...config };
   }
@@ -99,7 +102,13 @@ export class FrameAssembler {
       case 'line':
         this.#pushLine(chunk);
         return;
-      case 'idle':
+      case 'idle': {
+        // 「静默」按数据实际到达的间隔算，定时器只负责数据停下之后交出最后一帧。
+        // 后台标签页里浏览器会把定时器限流到至少 1 秒才触发一次：设备每隔几十毫秒发一行时，
+        // 定时器每来一块就被重新计时、永远等不到触发，只靠它的话整段数据会被攒成上限大小的巨帧
+        const at = this.now();
+        if (this.#size > 0 && at - this.#lastChunkAt >= this.#config.idleMs) this.flush();
+        this.#lastChunkAt = at;
         this.#append(chunk);
         if (this.#size >= this.#config.maxFrameBytes) {
           this.flush(); // 强制成帧，同时把定时器清掉
@@ -107,6 +116,7 @@ export class FrameAssembler {
         }
         this.#restartIdleTimer();
         return;
+      }
     }
   }
 

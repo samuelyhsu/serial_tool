@@ -14,17 +14,24 @@ function bytes(text: string): Uint8Array {
 }
 
 /** 收集成帧结果，断言时按文本比对可读性最好。 */
-function harness(config: Partial<FramingConfig> = {}): {
+function harness(
+  config: Partial<FramingConfig> = {},
+  now?: () => number,
+): {
   framer: FrameAssembler;
   frames: string[];
   raw: Uint8Array[];
 } {
   const raw: Uint8Array[] = [];
   const frames: string[] = [];
-  const framer = new FrameAssembler((frame) => {
-    raw.push(frame);
-    frames.push(decoder.decode(frame));
-  }, config);
+  const framer = new FrameAssembler(
+    (frame) => {
+      raw.push(frame);
+      frames.push(decoder.decode(frame));
+    },
+    config,
+    now,
+  );
   return { framer, frames, raw };
 }
 
@@ -78,6 +85,37 @@ describe('空闲分帧（idle）', () => {
     framer.push(bytes('second'));
     vi.advanceTimersByTime(20);
     expect(frames).toEqual(['first', 'second']);
+  });
+
+  /**
+   * 后台标签页里定时器被限流：真实时间过去了，定时器却没跑。设备每隔几十毫秒发一行时，
+   * 只看定时器的话这些行会被攒成一帧，切回来看到的是一个个上限大小的巨帧。
+   */
+  it('定时器迟迟不触发时，按数据实际到达的间隔成帧', () => {
+    let clock = 0;
+    const { framer, frames } = harness({ mode: 'idle', idleMs: 10 }, () => clock);
+    framer.push(bytes('AB'));
+    clock += 30;
+    framer.push(bytes('CD'));
+    clock += 30;
+    framer.push(bytes('EF'));
+
+    // 前两段各自成帧；最后一段后面还没有新数据，照旧等定时器
+    expect(frames).toEqual(['AB', 'CD']);
+    vi.advanceTimersByTime(10);
+    expect(frames).toEqual(['AB', 'CD', 'EF']);
+  });
+
+  it('实际间隔不够静默时长的照旧拼成一帧', () => {
+    let clock = 0;
+    const { framer, frames } = harness({ mode: 'idle', idleMs: 10 }, () => clock);
+    framer.push(bytes('AB'));
+    clock += 9;
+    framer.push(bytes('CD'));
+
+    expect(frames).toEqual([]);
+    vi.advanceTimersByTime(10);
+    expect(frames).toEqual(['ABCD']);
   });
 
   it('超过上限时强制成帧，不让缓冲无界增长', () => {
