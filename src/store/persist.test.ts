@@ -22,6 +22,8 @@ function stored(key: string): unknown {
 
 beforeEach(() => {
   localStorage.clear();
+  // 分层作用域的偏好还会写进 sessionStorage，不清的话会串到下一条用例
+  sessionStorage.clear();
 });
 
 describe('串口参数持久化', () => {
@@ -156,7 +158,7 @@ describe('预设持久化', () => {
     expect(presets).toHaveLength(tabs.length * app.preset.PRESET_TAB_SIZE);
   });
 
-  it('分组标题和新建的分组刷新后都在，当前看的是哪一组不记', async () => {
+  it('分组标题、新建的分组与当前选中的分组刷新后都在', async () => {
     let app = await reload();
     const store = app.preset.usePresetStore;
     store.getState().renameTab(store.getState().tabs[1]!.id, '电机');
@@ -168,7 +170,35 @@ describe('预设持久化', () => {
     const state = app.preset.usePresetStore.getState();
     expect(state.tabs.map((tab) => tab.title)).toEqual([null, '电机', null, null]);
     expect(state.presets).toHaveLength(4 * app.preset.PRESET_TAB_SIZE);
-    expect(state.activeTab).toBe(0);
+    expect(state.activeTab).toBe(3);
+  });
+
+  it('选中的分组按分层作用域存：两处都写，读时本页面优先', async () => {
+    let app = await reload();
+    app.preset.usePresetStore.getState().selectTab(1);
+    app.persist.flushPersist();
+    expect(sessionStorage.getItem('wst.presetTab')).toBe('1');
+    expect(stored('presetTab')).toBe(1);
+
+    // 别的页面后来选了第三组：全局那份变了，本页面刷新后仍停在自己选的那一组
+    localStorage.setItem('wst.presetTab', '2');
+    app = await reload();
+    expect(app.preset.usePresetStore.getState().activeTab).toBe(1);
+
+    // 新开的页面没有自己的记录，沿用最后一次的选择
+    sessionStorage.clear();
+    app = await reload();
+    expect(app.preset.usePresetStore.getState().activeTab).toBe(2);
+  });
+
+  it('存量里的分组序号越界时夹到最后一组，非法值回到第一组', async () => {
+    localStorage.setItem('wst.presetTab', '7');
+    let app = await reload();
+    expect(app.preset.usePresetStore.getState().activeTab).toBe(app.preset.PRESET_DEFAULT_TABS - 1);
+
+    localStorage.setItem('wst.presetTab', '"x"');
+    app = await reload();
+    expect(app.preset.usePresetStore.getState().activeTab).toBe(0);
   });
 
   /** 0.3.0 及更早存的是分页的一整列：升级后内容不能丢，下一次写回就换成带分组的格式。 */

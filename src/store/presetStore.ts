@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { HexParseError } from '@/core/codec/hex';
 import { BUILTIN_PRESET_KEYS, type BuiltinPresetKey, type Messages } from '@/i18n/types';
 import { saveSoon } from '@/lib/persist';
-import { readStoredJson } from '@/lib/storage';
+import { readLayeredJson, readStoredJson } from '@/lib/storage';
 import { useConnectionStore } from './connectionStore';
 import { useLogStore } from './logStore';
 import { buildFrame, convertPayload, type PayloadMode } from './payload';
@@ -142,6 +142,21 @@ const PRESETS_KEY = 'presets';
 /** 顺序循环的间隔单独存：它不是预设内容，不该混进导出文件的格式里。 */
 const SEQUENCE_GAP_KEY = 'sequenceGapMs';
 const DEFAULT_SEQUENCE_GAP_MS = 300;
+
+/**
+ * 当前选中的分组按分层作用域存（见 lib/storage.ts）：每个页面记自己的，新开的页面沿用
+ * 最后一次的选择。要记住它，是因为 VS Code 里面板一隐藏就销毁重建 —— 不记的话，
+ * 每切一次编辑器标签都会回到第一组。
+ */
+const ACTIVE_TAB_KEY = 'presetTab';
+
+/** 越界（比如别的页面删过分组）就夹到最后一组，不是非负整数就回到第一组。 */
+function loadActiveTab(tabCount: number): number {
+  const raw = readLayeredJson<unknown>(ACTIVE_TAB_KEY, 0);
+  return typeof raw === 'number' && Number.isInteger(raw) && raw >= 0
+    ? Math.min(raw, tabCount - 1)
+    : 0;
+}
 
 function loadSequenceGap(): number {
   const raw = readStoredJson<unknown>(SEQUENCE_GAP_KEY, null);
@@ -283,8 +298,7 @@ export const usePresetStore = create<PresetState>()((set, get) => {
   return {
     presets: initial.presets,
     tabs: initial.tabs,
-    // activeTab 不持久化：当前看的是哪一组是浏览位置，不是配置
-    activeTab: 0,
+    activeTab: loadActiveTab(initial.tabs.length),
     sequenceGapMs: loadSequenceGap(),
     issues: {},
 
@@ -601,9 +615,10 @@ function sequenceFrames(presets: readonly Preset[]): Uint8Array[] {
   return presets.filter((preset) => preset.inSequence).flatMap(presetFrames);
 }
 
-usePresetStore.subscribe(({ presets, tabs, sequenceGapMs }) => {
+usePresetStore.subscribe(({ presets, tabs, activeTab, sequenceGapMs }) => {
   saveSoon(PRESETS_KEY, serializePresets(tabs, presets));
   saveSoon(SEQUENCE_GAP_KEY, sequenceGapMs);
+  saveSoon(ACTIVE_TAB_KEY, activeTab, 'layered');
 
   // 循环期间改预设内容 / 增删队列成员要即时生效。浏览器侧靠执行体重读状态自然就有；
   // 交给宿主执行时内容在那一头，必须显式推过去。
