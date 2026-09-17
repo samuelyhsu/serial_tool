@@ -90,6 +90,10 @@ async function loopback(options: { prefs?: Record<string, unknown> } = {}): Prom
   await watcher.refresh();
 
   let hidden = false;
+  // 这一套回环收尾之后，还有异步的尾巴会回来：界面里攒批的偏好写入、还没处理完的请求。
+  // 它们回来时下一条用例已经开始，甚至整个文件的 jsdom 都已拆掉，再往 window 派发就是
+  // 一个测试之外的未处理错误（CI 机器慢一点时真的出现过：window is not defined）
+  let closed = false;
   const prefWrites: [string, unknown][] = [];
   const prefs: Record<string, unknown> = { ...options.prefs };
   // 与 extension.ts 的 renderHtml 一样，只在建面板时烙一次
@@ -98,7 +102,7 @@ async function loopback(options: { prefs?: Record<string, unknown> } = {}): Prom
 
   // 宿主 → webview：VS Code 那边是 webview.postMessage，这里就是一个 message 事件
   const post = (event: HostEvent): void => {
-    if (hidden) return;
+    if (hidden || closed) return;
     window.dispatchEvent(new MessageEvent('message', { data: event }));
   };
 
@@ -123,6 +127,7 @@ async function loopback(options: { prefs?: Record<string, unknown> } = {}): Prom
   });
   const activeHost = host;
   disposeHost = () => {
+    closed = true;
     activeHost.dispose();
     watcher.stop();
   };
@@ -131,8 +136,9 @@ async function loopback(options: { prefs?: Record<string, unknown> } = {}): Prom
   const api: VsCodeApi = {
     postMessage: (message) => {
       // 面板被隐藏后 webview 已经不存在了，它发不出任何东西
-      if (hidden) return;
+      if (hidden || closed) return;
       void handleRequest(activeHost, message as HostRequest).then((response) => {
+        if (closed) return;
         window.dispatchEvent(new MessageEvent('message', { data: response }));
       });
     },
