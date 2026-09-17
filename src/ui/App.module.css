@@ -34,6 +34,9 @@
    min 不为 0 的轨道不需要再写 min-height: 0，另一行仍要 minmax(0, …) 才肯收缩。 */
 .right {
   display: grid;
+  /* 列同样要 minmax(0, …)：隐式的 auto 列按子元素的内容宽度算下限，多条发送的分组一多，
+     标签条的内容宽度会顺着传上来，把整个右栏撑出 470px，头部的按钮被推到屏幕外 */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(200px, 1fr) minmax(0, auto);
   min-width: 0;
   min-height: 0;

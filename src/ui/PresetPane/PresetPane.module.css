@@ -1,5 +1,7 @@
 .pane {
   display: grid;
+  /* 同 App.module.css 的 .right：不写的话标签条的内容宽度会把面板撑宽 */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto auto minmax(0, 1fr) auto;
   min-height: 0;
   background: var(--panel2);
@@ -25,8 +27,9 @@
   white-space: nowrap;
 }
 
-/* 分组多了就横向滚动；「+」与导入导出排在它外面，始终看得见 */
+/* 头部这一行里只有它能收缩：分组多了就横向滚动，「+」「−」与导入导出始终保持完整宽度 */
 .tabs {
+  flex: 0 1 auto;
   display: flex;
   align-items: center;
   gap: 2px;
@@ -82,6 +85,8 @@
 }
 
 .headActions {
+  /* 不参与收缩：否则放不下时浏览器按宽度比例把挤压分摊过来，中文按钮会被压成两行 */
+  flex: none;
   margin-left: auto;
   display: flex;
   gap: 6px;
