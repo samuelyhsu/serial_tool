@@ -7,7 +7,12 @@
 export type SessionNotice =
   | { code: 'port-opened'; config: string }
   | { code: 'port-closed' }
-  | { code: 'open-failed'; message: string }
+  | {
+      code: 'open-failed';
+      message: string;
+      /** 传输层报的是 in-use。界面据此提示用户去找占着它的程序，而不是怀疑设备或参数。 */
+      inUse?: true;
+    }
   | { code: 'connection-lost' }
   | { code: 'reconnect-scheduled'; attempt: number; max: number; delayMs: number }
   | { code: 'reconnect-succeeded'; attempt: number }

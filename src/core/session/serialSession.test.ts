@@ -269,6 +269,27 @@ describe('SerialSession', () => {
     expect(session.state).toBe('closed');
   });
 
+  it('传输层报 in-use 时，open-failed 带上 inUse', async () => {
+    const failing = new SerialSession<FakePort>({
+      createTransport: () => {
+        const t = new FakeTransport();
+        t.failNextOpen = new TransportError('in-use', 'Opening COM3: Access denied');
+        return t;
+      },
+      resolvePort: () => Promise.resolve(undefined),
+      describeConfig: () => 'cfg',
+    });
+    const notices: SessionNotice[] = [];
+    failing.setHandlers({ onNotice: (n) => notices.push(n) });
+
+    await expect(failing.open(FAKE_PORT, 'port-1', TEST_OPTIONS)).rejects.toThrow('Access denied');
+    expect(notices).toContainEqual({
+      code: 'open-failed',
+      message: 'Opening COM3: Access denied',
+      inUse: true,
+    });
+  });
+
   /**
    * 原样分块：驱动交付一次就是一帧，不按 \n 切、也不按空闲超时切。
    * 一次交付里含多个换行，仍然只算一帧。

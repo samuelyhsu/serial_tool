@@ -125,7 +125,13 @@ export class SerialSession<TPort = unknown> {
       // 已被 close() 接管时不要再改状态：那会把它从 'closed' 拽回来
       if (generation === this.#generation) {
         this.#setState('closed');
-        this.#notify({ code: 'open-failed', message: describeError(error) });
+        this.#notify({
+          code: 'open-failed',
+          message: describeError(error),
+          ...(error instanceof TransportError && error.kind === 'in-use'
+            ? { inUse: true as const }
+            : {}),
+        });
       }
       throw error;
     }

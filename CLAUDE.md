@@ -142,7 +142,8 @@ webview 入口靠 `import './bootstrap'` 排在第一行来保证「先装环境
   `src/store/tasks.test.ts` 专门盯着这件事。
 - **多页面 / 多面板各连一口**：串口参数按设备存（`wst.portSettings`），端口选择、发送内容、
   接收区视图按「分层作用域」存（页面优先、全局兜底，见 `src/lib/storage.ts`）。
-  端口占用在浏览器里靠 BroadcastChannel 尽力而为、在 VS Code 里由宿主权威仲裁。
+  端口占用在浏览器里靠 BroadcastChannel 尽力而为、在 VS Code 里由宿主在**同一窗口内**权威仲裁
+  （每个窗口各有一个宿主进程；跨窗口靠 serialport 的端口锁让 open() 失败，见 `portLeases.ts`）。
 - **VSIX 必须在仓库之外的临时目录里打**（`apps/vscode/scripts/package.mjs`）。
   workspace 把依赖提升到了根 node_modules，vsce 顺着提升后的路径会算出
   `extension/../../vite.config.ts` 这种跑出扩展目录的相对路径而报错；若在扩展本地

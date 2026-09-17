@@ -133,7 +133,9 @@ export const en: Messages = {
       case 'port-closed':
         return 'Port closed';
       case 'open-failed':
-        return `Open failed: ${notice.message}`;
+        return notice.inUse
+          ? `Open failed: ${notice.message} (the port may be in use by another program or another VS Code window)`
+          : `Open failed: ${notice.message}`;
       case 'connection-lost':
         return 'Connection lost';
       case 'reconnect-scheduled':

@@ -38,6 +38,12 @@ describe('noticeLogEntry', () => {
     }
   });
 
+  it('端口被占导致的打开失败在日志里标出来', () => {
+    const inUse = noticeLogEntry({ ...samples['open-failed'], inUse: true });
+    expect(inUse?.message).toContain('port in use');
+    expect(noticeLogEntry(samples['open-failed'])?.message).not.toContain('port in use');
+  });
+
   it('「未打开就发送」只是操作反馈，不进日志', () => {
     expect(noticeLogEntry(samples['not-open'])).toBeNull();
   });

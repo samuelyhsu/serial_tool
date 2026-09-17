@@ -13,6 +13,9 @@
   日志级别跟着「Developer: Set Log Level」走。
 - 在 Remote-SSH、WSL、开发容器里若扩展运行在远端，端口视图标题旁会标出「远端：ssh-remote」
   之类的来源；远端找不到串口时，提示会说明是远端没有，并指出本机设备需要把扩展装到本地。
+- 打开串口失败、且底层明确报告端口被占（Windows 的 Access denied，Linux / macOS 的端口锁
+  失败）时，提示会补一句「端口可能正被其他程序或另一个 VS Code 窗口占用」。多个 VS Code
+  窗口之间无法互相登记占用，以前这种情况只看得到一句 Access denied。
 
 ### 修复
 

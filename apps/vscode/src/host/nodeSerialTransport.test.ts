@@ -121,6 +121,20 @@ describe('NodeSerialTransport', () => {
     expect(h.transport.state).toBe('closed');
   });
 
+  /** 样本逐字取自 @serialport/bindings-cpp 的 serialport_win.cpp 与 serialport_unix.cpp。 */
+  it('底层说端口被占时抛 in-use，其余打开失败仍是 open-failed', async () => {
+    const cases: [string, string][] = [
+      ['Opening COM3: Access denied', 'in-use'],
+      ['Error Resource temporarily unavailable Cannot lock port', 'in-use'],
+      ['Error Permission denied Cannot open /dev/ttyUSB0', 'open-failed'],
+      ['Opening COM9: File not found', 'open-failed'],
+    ];
+    for (const [message, kind] of cases) {
+      const h = makeHarness({ failOpen: new Error(message) });
+      await expect(h.transport.open(OPTIONS)).rejects.toMatchObject({ kind });
+    }
+  });
+
   it('未打开时写入直接拒绝，而不是排队等一个永远不来的端口', async () => {
     const h = makeHarness();
     await expect(h.transport.write(new Uint8Array([1]))).rejects.toThrow(/not open/i);

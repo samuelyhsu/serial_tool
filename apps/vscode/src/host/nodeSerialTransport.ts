@@ -36,6 +36,22 @@ export interface NodePortHandle {
 
 export type OpenNodePort = (path: string, options: ConnectionOptions) => Promise<NodePortHandle>;
 
+/**
+ * 打开失败的原因是不是「端口正被占着」。
+ *
+ * 认的是 @serialport/bindings-cpp 在 C++ 里写死的两个串，都由它默认开启的 `lock` 选项产生：
+ *  - Windows：以独占方式 CreateFile，被别的进程开着时报 `Opening COM3: Access denied`；
+ *  - Linux / macOS：flock(LOCK_EX | LOCK_NB) 失败时报 `Error <strerror> Cannot lock port`。
+ *    前半段 strerror 随 locale 变，所以只认后缀。flock 是建议锁，只拦得住同样加锁的
+ *    程序（另一个窗口里的本扩展一定拦得住），这也是提示里只说「可能」的原因。
+ *
+ * Linux 上 `Error Permission denied Cannot open …` 是没进 dialout 组，不是占用，刻意不认。
+ */
+export function isPortInUseError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes(': Access denied') || message.includes('Cannot lock port');
+}
+
 export class NodeSerialTransport implements Transport {
   #state: TransportState = 'closed';
   #port: NodePortHandle | null = null;
@@ -102,7 +118,11 @@ export class NodeSerialTransport implements Transport {
       port = await this.openPort(this.path, options);
     } catch (error) {
       this.#state = 'closed';
-      throw TransportError.from(error, 'open-failed', `Failed to open ${this.path}`);
+      throw TransportError.from(
+        error,
+        isPortInUseError(error) ? 'in-use' : 'open-failed',
+        `Failed to open ${this.path}`,
+      );
     }
 
     // 打开过程中用户点了关闭：这条链路已经作废，开出来的口必须立刻还回去，

@@ -23,7 +23,7 @@ import { SessionHost } from './sessionHost';
  * 有自己独立的 postMessage 通道，这里用 Map 把它和 SessionHost 关联起来即可。
  *
  * 全进程共享的只有两样东西，都必须唯一：
- *  - PortLeases：端口占用的权威仲裁者；
+ *  - PortLeases：窗口内端口占用的权威仲裁者；
  *  - PortWatcher：插拔轮询。桌面端没有 connect/disconnect 事件，只能轮询，
  *    每个面板各跑一个就是 N 倍系统调用。
  */

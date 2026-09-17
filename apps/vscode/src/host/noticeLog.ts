@@ -21,7 +21,10 @@ export function noticeLogEntry(notice: SessionNotice): NoticeLogEntry | null {
     case 'port-closed':
       return { level: 'info', message: 'closed' };
     case 'open-failed':
-      return { level: 'error', message: `open failed: ${notice.message}` };
+      return {
+        level: 'error',
+        message: `open failed: ${notice.message}${notice.inUse ? ' (port in use)' : ''}`,
+      };
     case 'connection-lost':
       return { level: 'warn', message: 'connection lost' };
     case 'reconnect-scheduled':

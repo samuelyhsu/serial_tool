@@ -129,7 +129,9 @@ export const zh: Messages = {
       case 'port-closed':
         return '串口已关闭';
       case 'open-failed':
-        return `打开失败：${notice.message}`;
+        return notice.inUse
+          ? `打开失败：${notice.message}（端口可能正被其他程序或另一个 VS Code 窗口占用）`
+          : `打开失败：${notice.message}`;
       case 'connection-lost':
         return '连接意外断开';
       case 'reconnect-scheduled':

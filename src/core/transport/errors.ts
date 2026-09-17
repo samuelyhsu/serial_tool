@@ -2,6 +2,8 @@ export type TransportErrorKind =
   | 'unsupported'
   | 'invalid-state'
   | 'open-failed'
+  /** 打开失败，且底层明确说端口正被占着。目前只有 Node 传输层能从底层错误里辨认出来。 */
+  | 'in-use'
   | 'no-writable'
   | 'read'
   | 'write'

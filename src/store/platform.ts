@@ -12,7 +12,7 @@ import { createWebPlatform } from './webPlatform';
  * store 与 UI 是同一套代码，底下却有两种运行环境：
  *  - **浏览器**：会话跑在页面里，端口来自 `navigator.serial`，跨页面占用靠 BroadcastChannel；
  *  - **VS Code webview**：会话跑在**扩展宿主进程**里（面板一被隐藏 webview 就会销毁，
- *    会话放在这边的话切个标签页串口就断了），端口来自 `serialport`，占用由宿主权威仲裁。
+ *    会话放在这边的话切个标签页串口就断了），端口来自 `serialport`，占用由宿主在窗口内权威仲裁。
  *
  * 差异全部收敛在这个接口后面，store 只认它。这也是「同一份 UI 服务两个运行环境」
  * 唯一不会随时间腐化的做法 —— 复制一份 store 出来，两边迟早会长歪。
@@ -75,7 +75,7 @@ export interface TasksLike {
   subscribe: (listener: (running: string[]) => void) => () => void;
 }
 
-/** 端口占用登记。浏览器里是尽力而为的广播，VS Code 里由宿主权威仲裁。 */
+/** 端口占用登记。浏览器里是尽力而为的广播，VS Code 里由宿主在窗口内权威仲裁。 */
 export interface LeasesLike {
   holders: () => LeaseHolders;
   claim: (identity: string) => void;

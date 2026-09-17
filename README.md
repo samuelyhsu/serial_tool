@@ -330,7 +330,7 @@ VS Code 的 webview 是沙箱 iframe，**没有 `navigator.serial`**；桌面端
 │  SerialSession / 分帧 / 写队列 / 重连  │◄─RPC──►│    ↑ 与 SerialSession 同形   │
 │  TaskScheduler（周期发送）            │ 攒批帧  │  codec/（HEX/文本渲染）     │
 │  RingBuffer（日志真相源）             │        │                            │
-│  PortLeases（占用权威仲裁）           │        │                            │
+│  PortLeases（窗口内占用仲裁）         │        │                            │
 └──────────────────────────────────────┘        └───────────────────────────┘
 ```
 
@@ -364,7 +364,7 @@ VS Code 的 webview 是沙箱 iframe，**没有 `navigator.serial`**；桌面端
 | 端口身份 | `VID:PID#出现序号`（浏览器拿不到序列号）      | `usb:VID:PID:序列号`，跨插拔稳定              |
 | 端口标签 | `#1 CH340`                                    | `COM3 · CH340`，与设备管理器一致              |
 | 插拔感知 | connect / disconnect 事件                     | **没有事件，只能轮询**（默认 2s，可配）       |
-| 占用仲裁 | BroadcastChannel，尽力而为                    | 宿主进程里的权威占用表                        |
+| 占用仲裁 | BroadcastChannel，尽力而为                    | 宿主进程里的权威占用表（限同一窗口）          |
 | 偏好存储 | localStorage / sessionStorage                 | 宿主 `globalState`（可随 Settings Sync 同步） |
 | 周期发送 | 页面内                                        | 宿主进程内，面板隐藏也照跑（含顺序循环）      |
 
