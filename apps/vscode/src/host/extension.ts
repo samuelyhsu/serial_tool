@@ -8,6 +8,7 @@ import type { SerialToolApi } from '../shared/api';
 import type { HostEvent, HostRequest } from '../shared/protocol';
 import { hostText } from './hostText';
 import { NodeSerialTransport, type OpenNodePort } from './nodeSerialTransport';
+import { noticeLogEntry } from './noticeLog';
 import { refreshHiddenPanels } from './panelHtml';
 import { PortLeases } from './portLeases';
 import { PortsTreeProvider } from './portsView';
@@ -81,6 +82,11 @@ async function loadBinding(): Promise<Binding> {
  * 真的去开面板时才会被加载（见 ensureWatcher）。
  */
 export function activate(context: vscode.ExtensionContext): SerialToolApi {
+  // console.error 只进扩展宿主的开发者工具，用户报「打不开串口」时拿不出任何东西；
+  // 输出面板里的这份能直接贴进 issue，级别还跟着「Developer: Set Log Level」走
+  const log = vscode.window.createOutputChannel(hostText().appName, { log: true });
+  context.subscriptions.push(log);
+
   const leases = new PortLeases();
   let watcher: PortWatcher | null = null;
   const panels = new Map<vscode.WebviewPanel, SessionHost>();
@@ -139,6 +145,7 @@ export function activate(context: vscode.ExtensionContext): SerialToolApi {
     if (watcher) return watcher;
     const loaded = await loadBinding();
     if (!loaded.ok) {
+      log.error(`failed to load native serial module: ${loaded.message}`);
       const t = hostText();
       const open = t.openWebVersion;
       const choice = await vscode.window.showErrorMessage(t.bindingFailed(loaded.message), open);
@@ -155,7 +162,9 @@ export function activate(context: vscode.ExtensionContext): SerialToolApi {
         .getConfiguration('serialTool')
         .get<number>('portPollIntervalMs', 2000),
       onError: (error) => {
-        console.error('[serialTool] 枚举串口失败', error);
+        log.error(
+          `failed to enumerate serial ports: ${error instanceof Error ? error.message : String(error)}`,
+        );
       },
     });
     return watcher;
@@ -240,6 +249,10 @@ export function activate(context: vscode.ExtensionContext): SerialToolApi {
         }),
       post: (event: HostEvent) => {
         void panel.webview.postMessage(event);
+        if (event.type === 'notice') {
+          const entry = noticeLogEntry(event.notice);
+          if (entry) log[entry.level](`[${host.portKey ?? '-'}] ${entry.message}`);
+        }
         // 状态和端口选择都会经过这里，标题与状态栏跟着它们走就够了，
         // 不必再拿一个定时器去轮询「标题该不该变」
         if (event.type === 'state' || event.type === 'selected') {
