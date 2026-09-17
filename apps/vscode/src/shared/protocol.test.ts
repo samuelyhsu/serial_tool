@@ -112,7 +112,7 @@ describe('协议消息的序列化保真', () => {
   /**
    * 字节必须以 Uint8Array 的身份到达对面。
    * VS Code 1.57 之前会把它退化成 `{0:1,1:2,…}` 的普通对象，几 MB 数据就能把界面卡死 ——
-   * 这也是 engines.vscode 定在 ^1.75 的原因之一。
+   * 这也是 engines.vscode 不能低于 1.57 的原因。
    */
   it('字节数组穿过之后仍然是 Uint8Array，而不是退化成普通对象', () => {
     const event = EVENTS.frames;

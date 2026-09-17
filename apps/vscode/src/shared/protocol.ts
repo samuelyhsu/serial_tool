@@ -20,7 +20,7 @@ import type { ConnectionOptions } from '@/core/transport/types';
  * 字节用 `Uint8Array` 直接传：VS Code 1.57+ 会在接收端正确重建 typed array 并高效传输
  * （https://code.visualstudio.com/updates/v1_57）。更老的版本会把它退化成
  * `{0:1,1:2,…}` 的 JSON 对象，几 MB 数据就能把界面卡死 —— 这也是 engines.vscode
- * 定在 ^1.75 的原因之一。
+ * 不能低于 1.57 的原因。
  */
 
 /* ---------------- webview → 宿主 ---------------- */

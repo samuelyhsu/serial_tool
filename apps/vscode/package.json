@@ -7,7 +7,7 @@
   "private": true,
   "publisher": "uplume",
   "engines": {
-    "vscode": "^1.75.0"
+    "vscode": "^1.95.0"
   },
   "capabilities": {
     "untrustedWorkspaces": {
@@ -199,7 +199,7 @@
   },
   "devDependencies": {
     "@types/mocha": "10.0.10",
-    "@types/vscode": "1.75.0",
+    "@types/vscode": "1.95.0",
     "@vscode/test-cli": "0.0.12",
     "@vscode/test-electron": "3.0.0",
     "@vscode/vsce": "3.9.2",
