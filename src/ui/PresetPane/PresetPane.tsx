@@ -3,6 +3,7 @@ import { downloadText } from '@/lib/download';
 import { useConnectionStore } from '@/store/connectionStore';
 import { useLogStore } from '@/store/logStore';
 import {
+  isBlankTab,
   parseImportedPresets,
   PRESET_TAB_TITLE_MAX,
   presetLabel,
@@ -13,6 +14,7 @@ import {
 } from '@/store/presetStore';
 import { isTaskRunning, presetTask, SEQUENCE_TASK, useTasksStore } from '@/store/tasksStore';
 import { FormatToggle } from '../FormatToggle';
+import { useConfirm } from '../useConfirm';
 import { useMessages } from '../useMessages';
 import styles from './PresetPane.module.css';
 
@@ -181,15 +183,19 @@ interface TabsProps {
 
 /**
  * 分组标签页，按 WAI-ARIA 的 tabs 模式：只有选中的那个进 Tab 键序列，
- * 左右方向键 / Home / End 切换分组，焦点跟着走。双击或 F2 改名，「+」新建。
+ * 左右方向键 / Home / End 切换分组，焦点跟着走。双击或 F2 改名，「+」新建，
+ * 「−」或 Delete 删除选中的那一组。
  */
 function PresetTabs({ tabDomId, panelId }: TabsProps): React.JSX.Element {
   const t = useMessages();
   const tabs = usePresetStore((s) => s.tabs);
+  const presets = usePresetStore((s) => s.presets);
   const activeTab = usePresetStore((s) => s.activeTab);
   const selectTab = usePresetStore((s) => s.selectTab);
   const renameTab = usePresetStore((s) => s.renameTab);
   const addTab = usePresetStore((s) => s.addTab);
+  const removeTab = usePresetStore((s) => s.removeTab);
+  const { armed, confirm, reset } = useConfirm<string>();
 
   const buttons = useRef<(HTMLButtonElement | null)[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -197,18 +203,24 @@ function PresetTabs({ tabDomId, panelId }: TabsProps): React.JSX.Element {
   const [draft, setDraft] = useState('');
   // 同步可读的「正在改谁」：按 Esc 收起输入框时若浏览器随后补发一次 blur，不能再提交
   const editing = useRef<string | null>(null);
-  // 用键盘提交或放弃后把焦点还给那个标签，否则焦点掉到页面上，键盘用户得从头 Tab 过来
-  const refocus = useRef<number | null>(null);
+  // 改完名、删完组之后要聚焦的标签。输入框或被删的标签一消失，焦点就掉到页面上，
+  // 键盘用户得从头 Tab 过来；标签按钮要等这一轮渲染完才在，所以放到 effect 里做
+  const pendingFocus = useRef<number | null>(null);
 
   useEffect(() => {
-    if (renamingId !== null) {
-      inputRef.current?.focus();
-      inputRef.current?.select();
-    } else if (refocus.current !== null) {
-      buttons.current[refocus.current]?.focus();
-      refocus.current = null;
-    }
+    if (renamingId === null) return;
+    inputRef.current?.focus();
+    inputRef.current?.select();
   }, [renamingId]);
+
+  useEffect(() => {
+    if (pendingFocus.current === null) return;
+    buttons.current[pendingFocus.current]?.focus();
+    pendingFocus.current = null;
+  });
+
+  // 征询的始终是选中的那一组：换了组，之前那次征询就作废
+  useEffect(() => reset(), [activeTab, reset]);
 
   // 新建的分组排在最后，标签一多就在可视区外；jsdom 没有 scrollIntoView
   useEffect(() => {
@@ -228,6 +240,22 @@ function PresetTabs({ tabDomId, panelId }: TabsProps): React.JSX.Element {
     editing.current = null;
     if (save && id !== null) renameTab(id, draft);
     setRenamingId(null);
+  };
+
+  /** 没动过的空分组直接删（多点了一下「+」很常见），有内容的要按两下。 */
+  const removeAt = (index: number): void => {
+    const tab = tabs[index];
+    if (!tab || tabs.length <= 1) return;
+    const remove = (): void => {
+      removeTab(tab.id);
+      pendingFocus.current = usePresetStore.getState().activeTab;
+    };
+    if (isBlankTab(tab, tabPresets(presets, index))) {
+      reset();
+      remove();
+    } else {
+      confirm(tab.id, remove);
+    }
   };
 
   const onTabKeyDown = (event: React.KeyboardEvent, index: number): void => {
@@ -254,8 +282,14 @@ function PresetTabs({ tabDomId, panelId }: TabsProps): React.JSX.Element {
     } else if (event.key === 'F2') {
       event.preventDefault();
       startRename(index);
+    } else if (event.key === 'Delete') {
+      event.preventDefault();
+      removeAt(index);
     }
   };
+
+  const activeTitle = tabs[activeTab] ? presetTabTitle(tabs[activeTab], activeTab, t) : '';
+  const deleteArmed = armed !== null && armed === tabs[activeTab]?.id;
 
   return (
     <>
@@ -274,7 +308,7 @@ function PresetTabs({ tabDomId, panelId }: TabsProps): React.JSX.Element {
               onKeyDown={(event) => {
                 if (event.key !== 'Enter' && event.key !== 'Escape') return;
                 event.preventDefault();
-                refocus.current = index;
+                pendingFocus.current = index;
                 finishRename(event.key === 'Enter');
               }}
             />
@@ -291,7 +325,7 @@ function PresetTabs({ tabDomId, panelId }: TabsProps): React.JSX.Element {
               aria-selected={index === activeTab}
               aria-controls={panelId}
               tabIndex={index === activeTab ? 0 : -1}
-              title={t.renameTabHint}
+              title={t.tabHint}
               onClick={() => selectTab(index)}
               onDoubleClick={() => startRename(index)}
               onKeyDown={(event) => onTabKeyDown(event, index)}
@@ -303,13 +337,24 @@ function PresetTabs({ tabDomId, panelId }: TabsProps): React.JSX.Element {
       </div>
       <button
         type="button"
-        className={`btn ${styles.addTab}`}
+        className={`btn ${styles.tabAction}`}
         aria-label={t.newTab}
         title={t.newTab}
         onClick={addTab}
       >
         +
       </button>
+      {tabs.length > 1 ? (
+        <button
+          type="button"
+          className={`btn btn--danger ${styles.tabAction}`}
+          aria-label={deleteArmed ? t.confirmDeleteTab : t.deleteTab(activeTitle)}
+          title={deleteArmed ? t.confirmDeleteTab : t.deleteTab(activeTitle)}
+          onClick={() => removeAt(activeTab)}
+        >
+          {deleteArmed ? t.confirmDeleteTab : '−'}
+        </button>
+      ) : null}
     </>
   );
 }

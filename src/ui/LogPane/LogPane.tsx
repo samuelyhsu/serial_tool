@@ -14,6 +14,7 @@ import {
 import { useConnectionStore } from '@/store/connectionStore';
 import { useUiStore } from '@/store/uiStore';
 import { FormatToggle } from '../FormatToggle';
+import { useConfirm } from '../useConfirm';
 import { CapacityInput } from './CapacityInput';
 import { IdleFrameInput } from './IdleFrameInput';
 import { useMessages } from '../useMessages';
@@ -28,7 +29,6 @@ import styles from './LogPane.module.css';
  */
 const RENDER_LIMIT = 1000;
 /** 清空的二次确认窗口：这么久没有再按一次就当作放弃。 */
-const CONFIRM_WINDOW_MS = 3000;
 /** 距底部多少像素以内算作「贴底」。 */
 const BOTTOM_THRESHOLD = 24;
 
@@ -132,24 +132,8 @@ export function LogPane(): React.JSX.Element {
     useLogStore.getState().appendMessage(t.exportedLog(entries.length));
   }, [view, t]);
 
-  /**
-   * 清空要按两下。它不可撤销 —— 环形缓冲里最多 5000 条采集数据连同统计一起丢，
-   * 而按钮就紧挨着「保存日志」。
-   *
-   * 没有用 window.confirm：VS Code 的 webview 跑在没有 `allow-modals` 的 iframe 里，
-   * 原生弹窗会被直接吞掉。浏览器里好用、扩展里静默失效是最糟的一种组合。
-   */
-  const [confirmingClear, setConfirmingClear] = useState(false);
-  const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const resetConfirm = useCallback(() => {
-    if (confirmTimer.current !== null) clearTimeout(confirmTimer.current);
-    confirmTimer.current = null;
-    setConfirmingClear(false);
-  }, []);
-
-  // 面板隐藏即销毁，别把定时器留给一个已经卸载的组件
-  useEffect(() => resetConfirm, [resetConfirm]);
+  // 清空要按两下：缓冲里的全部采集数据连同统计一起丢、不可撤销，而按钮就紧挨着「保存日志」
+  const { armed: confirmingClear, confirm } = useConfirm<'clear'>();
 
   /**
    * 缩容是破坏性的，所以结果必须回执到日志里：容量一改日志就短了一截，
@@ -165,18 +149,11 @@ export function LogPane(): React.JSX.Element {
   );
 
   const onClear = useCallback(() => {
-    if (!confirmingClear) {
-      setConfirmingClear(true);
-      confirmTimer.current = setTimeout(() => {
-        confirmTimer.current = null;
-        setConfirmingClear(false);
-      }, CONFIRM_WINDOW_MS);
-      return;
-    }
-    resetConfirm();
-    clearAll();
-    useLogStore.getState().appendMessage(t.clearedLog);
-  }, [confirmingClear, resetConfirm, clearAll, t]);
+    confirm('clear', () => {
+      clearAll();
+      useLogStore.getState().appendMessage(t.clearedLog);
+    });
+  }, [confirm, clearAll, t]);
 
   const showJump = !atBottom && rows.length > 0;
 

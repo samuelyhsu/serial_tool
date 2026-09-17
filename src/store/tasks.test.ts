@@ -169,8 +169,8 @@ describe('周期任务把内容交给平台执行', () => {
   });
 
   /**
-   * 预设区一有改动就会为全部 50 条各算一次。若不短路，在 VS Code 里
-   * 就是每敲一个键往宿主发 50 条消息。
+   * 预设区一有改动就会为全部预设各算一次。若不短路，在 VS Code 里
+   * 就是每敲一个键往宿主发几十条消息。
    */
   it('没在跑的任务不会被推送更新', async () => {
     const app = await load();
@@ -179,6 +179,26 @@ describe('周期任务把内容交给平台执行', () => {
     app.preset.usePresetStore.getState().setData(first.id, 'AT+X');
 
     expect(app.recorded.update).toEqual([]);
+  });
+
+  /**
+   * 订阅只给还在列表里的预设推新帧：删掉的那组若还在循环，交给宿主执行时
+   * 会带着旧内容一直发下去。
+   */
+  it('删除分组时停掉组里还在循环的预设，别的组不受影响', async () => {
+    const app = await load();
+    const store = app.preset.usePresetStore.getState();
+    const keep = store.presets[0]!;
+    const gone = app.preset.tabPresets(store.presets, 1)[0]!;
+    store.setData(gone.id, 'AT');
+    app.preset.usePresetStore.getState().toggleLoop(keep.id);
+    app.preset.usePresetStore.getState().toggleLoop(gone.id);
+
+    app.preset.usePresetStore.getState().removeTab(store.tabs[1]!.id);
+
+    const running = app.tasks.useTasksStore.getState().running;
+    expect(running).toContain(app.tasks.presetTask(keep.id));
+    expect(running).not.toContain(app.tasks.presetTask(gone.id));
   });
 
   it('报文当前解析不通过时以空队列启动，改对了再补进去', async () => {

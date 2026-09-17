@@ -3,6 +3,7 @@ import { en } from '@/i18n/en';
 import { BUILTIN_PRESET_KEYS } from '@/i18n/types';
 import { zh } from '@/i18n/zh';
 import {
+  isBlankTab,
   parseImportedPresets,
   PRESET_DEFAULT_TABS,
   PRESET_TAB_SIZE,
@@ -125,6 +126,75 @@ describe('分组', () => {
 
     usePresetStore.getState().selectTab(-3);
     expect(usePresetStore.getState().activeTab).toBe(0);
+  });
+});
+
+describe('删除分组', () => {
+  it('连同这一组的预设一起删，其余分组与顺序不变', () => {
+    const [first, second, third] = usePresetStore.getState().tabs;
+    const thirdPresets = tabPresets(usePresetStore.getState().presets, 2).map(
+      (preset) => preset.id,
+    );
+
+    usePresetStore.getState().removeTab(second!.id);
+
+    const { tabs, presets } = usePresetStore.getState();
+    expect(tabs.map((tab) => tab.id)).toEqual([first!.id, third!.id]);
+    expect(presets).toHaveLength(2 * PRESET_TAB_SIZE);
+    expect(tabPresets(presets, 1).map((preset) => preset.id)).toEqual(thirdPresets);
+  });
+
+  it('至少留一组', () => {
+    const [first, second, third] = usePresetStore.getState().tabs;
+    usePresetStore.getState().removeTab(third!.id);
+    usePresetStore.getState().removeTab(second!.id);
+    usePresetStore.getState().removeTab(first!.id);
+
+    expect(usePresetStore.getState().tabs.map((tab) => tab.id)).toEqual([first!.id]);
+    expect(usePresetStore.getState().presets).toHaveLength(PRESET_TAB_SIZE);
+  });
+
+  it('删的在选中组之前，选中的仍是原来那一组', () => {
+    const selected = usePresetStore.getState().tabs[2]!;
+    usePresetStore.getState().selectTab(2);
+    usePresetStore.getState().removeTab(usePresetStore.getState().tabs[0]!.id);
+
+    const { tabs, activeTab } = usePresetStore.getState();
+    expect(tabs[activeTab]!.id).toBe(selected.id);
+  });
+
+  it('删的正是选中组，落到顶上来的那一组；它是最后一组时落到前一组', () => {
+    const [, second, third] = usePresetStore.getState().tabs;
+    usePresetStore.getState().selectTab(1);
+    usePresetStore.getState().removeTab(second!.id);
+    const afterFirst = usePresetStore.getState();
+    expect(afterFirst.tabs[afterFirst.activeTab]!.id).toBe(third!.id);
+
+    usePresetStore.getState().removeTab(third!.id);
+    expect(usePresetStore.getState().activeTab).toBe(0);
+  });
+
+  it('删掉的预设的错误标记一并清掉', () => {
+    const doomed = tabPresets(usePresetStore.getState().presets, 1)[0]!;
+    usePresetStore.getState().toggleMode(doomed.id);
+    usePresetStore.getState().setData(doomed.id, 'ZZ');
+    expect(usePresetStore.getState().issues[doomed.id]).toBeDefined();
+
+    usePresetStore.getState().removeTab(usePresetStore.getState().tabs[1]!.id);
+    expect(usePresetStore.getState().issues[doomed.id]).toBeUndefined();
+  });
+
+  it('没改过标题、每行都是空行的分组才算空', () => {
+    const { tabs, presets } = usePresetStore.getState();
+    expect(isBlankTab(tabs[0]!, tabPresets(presets, 0))).toBe(false);
+    expect(isBlankTab(tabs[1]!, tabPresets(presets, 1))).toBe(true);
+
+    usePresetStore.getState().renameTab(tabs[1]!.id, '电机');
+    expect(isBlankTab(usePresetStore.getState().tabs[1]!, tabPresets(presets, 1))).toBe(false);
+
+    usePresetStore.getState().setInterval(tabPresets(presets, 2)[0]!.id, 250);
+    const after = usePresetStore.getState();
+    expect(isBlankTab(after.tabs[2]!, tabPresets(after.presets, 2))).toBe(false);
   });
 });
 

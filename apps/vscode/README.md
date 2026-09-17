@@ -24,7 +24,7 @@ To open the same port in another panel, use the `+` at the end of its row. Other
   doesn't drop the port, and periodic sends keep running
 - HEX and text views, timestamps, auto-scroll, filter & highlight, log export
 - Receive framing by idle timeout, by line or raw; UTF-8 text is decoded correctly across chunks
-- Single send, periodic send, command presets in tabbed groups (3 by default, add and rename your own) with a sequence loop, JSON import / export
+- Single send, periodic send, command presets in tabbed groups (3 by default; add, rename and delete your own) with a sequence loop, JSON import / export
 - 17 checksums appended automatically in HEX mode: CRC-8 / CRC-16 / CRC-32 (incl. CRC-16/MODBUS),
   SUM8, SUM16, XOR8
 - 51 common baud rates from 50 to 4,000,000, or type any value; data bits, parity, stop bits,
@@ -79,7 +79,7 @@ VS Code 里的串口调试助手，给单片机与嵌入式开发用：USB 转�
 - **串口连接活在扩展宿主进程里**：面板被隐藏、切去看代码都不会断，周期发送照跑
 - HEX / 文本双视图，时间戳、自动滚动、过滤高亮、日志导出
 - 按空闲超时 / 换行 / 原始分块分帧，UTF-8 跨块解码，被切开的汉字不乱码
-- 单条发送、周期发送，指令预设按分组标签页管理（默认 3 组，可新建、可改名）与顺序循环，预设可 JSON 导入导出
+- 单条发送、周期发送，指令预设按分组标签页管理（默认 3 组，可新建、改名、删除）与顺序循环，预设可 JSON 导入导出
 - HEX 模式自动追加 17 种校验和：CRC-8 / CRC-16 / CRC-32（含 CRC-16/MODBUS）、SUM8、SUM16、XOR8
 - 波特率 50 ~ 4000000 共 51 档常用值，也可直接输入任意值；数据位、校验位、停止位、RTS/CTS 流控
 - 拔掉设备后按指数退避自动重连

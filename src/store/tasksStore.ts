@@ -37,8 +37,8 @@ export const useTasksStore = create<TasksState>()((set) => {
     stop: (id) => tasks.stop(id),
     stopAll: () => tasks.stopAll(),
     update: (id, patch) => {
-      // 没在跑的任务直接短路。这不只是省事：预设区一有改动就会为全部 50 条各调一次，
-      // 在 VS Code 里那是每敲一个键就往宿主发 50 条消息
+      // 没在跑的任务直接短路。这不只是省事：预设区一有改动就会为全部预设各调一次，
+      // 在 VS Code 里那是每敲一个键就往宿主发几十条消息
       if (!tasks.runningIds().includes(id)) return;
       tasks.update(id, patch);
     },

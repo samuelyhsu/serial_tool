@@ -133,7 +133,11 @@ export interface Messages {
   readonly presetTabTitle: (index: number) => string;
   readonly newTab: string;
   readonly renameTab: string;
-  readonly renameTabHint: string;
+  /** 分组标签上的悬停提示：怎么改名、怎么删。 */
+  readonly tabHint: string;
+  /** 删除当前分组的按钮，参数是分组标题。 */
+  readonly deleteTab: (title: string) => string;
+  readonly confirmDeleteTab: string;
   readonly toggleHexMode: string;
   readonly formatToggleLabel: (current: string, next: string) => string;
 

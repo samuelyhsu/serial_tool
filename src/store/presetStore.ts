@@ -120,6 +120,11 @@ function isBlank(preset: Preset): boolean {
   );
 }
 
+/** 没改过标题、每一行都是空行（presets 传这一组的那几条）：删它不会丢任何用户数据。 */
+export function isBlankTab(tab: PresetTab, presets: readonly Preset[]): boolean {
+  return tab.title === null && presets.every(isBlank);
+}
+
 /** 分组与预设总是成对出现：presets 恒为 tabs.length × PRESET_TAB_SIZE 条。 */
 export interface PresetCollection {
   tabs: PresetTab[];
@@ -235,6 +240,8 @@ interface PresetState {
   renameTab: (id: string, title: string) => void;
   /** 在末尾加一组空行并切换过去。 */
   addTab: () => void;
+  /** 删掉一组连同它的预设，至少留一组；组里还在循环的预设一并停掉。 */
+  removeTab: (id: string) => void;
   replaceAll: (collection: PresetCollection) => void;
   exportPayload: () => string;
 }
@@ -394,6 +401,33 @@ export const usePresetStore = create<PresetState>()((set, get) => {
           activeTab: state.tabs.length,
         };
       }),
+
+    removeTab: (id) => {
+      const { tabs, presets } = get();
+      const index = tabs.findIndex((tab) => tab.id === id);
+      if (index < 0 || tabs.length <= 1) return;
+
+      const removed = new Set(tabPresets(presets, index).map((preset) => preset.id));
+      // 订阅只给还在列表里的预设推新帧：删掉的那些若还在循环，交给宿主执行时
+      // 会带着旧内容一直发下去，得在这里显式停掉
+      const tasks = useTasksStore.getState();
+      for (const presetId of removed) {
+        if (tasks.running.includes(presetTask(presetId))) tasks.stop(presetTask(presetId));
+      }
+
+      set((state) => ({
+        tabs: state.tabs.filter((tab) => tab.id !== id),
+        presets: state.presets.filter((preset) => !removed.has(preset.id)),
+        // 删的在选中组之前，选中的仍是原来那一组；删的正是选中组，落到顶上来的那一组
+        activeTab:
+          index < state.activeTab
+            ? state.activeTab - 1
+            : Math.min(state.activeTab, state.tabs.length - 2),
+        issues: Object.fromEntries(
+          Object.entries(state.issues).filter(([presetId]) => !removed.has(presetId)),
+        ),
+      }));
+    },
 
     replaceAll: ({ tabs, presets }) => {
       useTasksStore.getState().stopAll();
