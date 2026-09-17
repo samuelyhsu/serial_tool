@@ -36,6 +36,8 @@ describe('宿主文案', () => {
       expect(t.bindingFailed('EPERM')).toContain('EPERM');
       expect(t.portNotFound('COM7')).toContain('COM7');
       expect(t.heldByPanel('COM3')).toContain('COM3');
+      expect(t.noPortsFoundOnRemote('ssh-remote')).toContain('ssh-remote');
+      expect(t.remoteHost('wsl')).toContain('wsl');
     }
   });
 

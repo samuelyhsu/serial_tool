@@ -24,6 +24,7 @@ export interface HostText {
   readonly panelPickTitle: string;
   readonly portPickTitle: string;
   readonly noPortsFound: string;
+  readonly noPortsFoundOnRemote: (remote: string) => string;
   readonly portBusy: string;
   readonly noActivePanel: string;
   readonly pickPortFirst: string;
@@ -33,6 +34,7 @@ export interface HostText {
   readonly chip: string;
   readonly vendor: string;
   readonly heldByPanel: (label: string) => string;
+  readonly remoteHost: (remote: string) => string;
   readonly stateOpen: string;
   readonly stateOpening: string;
   readonly stateReconnecting: string;
@@ -51,6 +53,8 @@ const zh: HostText = {
   panelPickTitle: '串口面板',
   portPickTitle: '选择串口',
   noPortsFound: '没有找到任何串口设备。',
+  noPortsFoundOnRemote: (remote) =>
+    `远端（${remote}）上没有找到任何串口设备。要用插在本机上的设备，请把本扩展安装到本地。`,
   portBusy: '已被其他面板占用',
   noActivePanel: '没有处于活动状态的串口面板。',
   pickPortFirst: '请先在面板里选择一个串口。',
@@ -60,6 +64,7 @@ const zh: HostText = {
   chip: '芯片',
   vendor: '厂商',
   heldByPanel: (label) => `正被面板「${label}」使用`,
+  remoteHost: (remote) => `远端：${remote}`,
   stateOpen: '已连接',
   stateOpening: '连接中',
   stateReconnecting: '重连中',
@@ -82,6 +87,8 @@ const en: HostText = {
   panelPickTitle: 'Serial Panels',
   portPickTitle: 'Select Port',
   noPortsFound: 'No serial devices found.',
+  noPortsFoundOnRemote: (remote) =>
+    `No serial devices found on the remote (${remote}). To use devices attached to this computer, install this extension locally.`,
   portBusy: 'In use by another panel',
   noActivePanel: 'No active serial panel.',
   pickPortFirst: 'Select a port in the panel first.',
@@ -91,6 +98,7 @@ const en: HostText = {
   chip: 'Chip',
   vendor: 'Vendor',
   heldByPanel: (label) => `In use by panel "${label}"`,
+  remoteHost: (remote) => `Remote: ${remote}`,
   stateOpen: 'Connected',
   stateOpening: 'Connecting',
   stateReconnecting: 'Reconnecting',

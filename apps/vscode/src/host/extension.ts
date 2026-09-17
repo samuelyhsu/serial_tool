@@ -87,6 +87,18 @@ export function activate(context: vscode.ExtensionContext): SerialToolApi {
   const log = vscode.window.createOutputChannel(hostText().appName, { log: true });
   context.subscriptions.push(log);
 
+  // 跑在远端时枚举到的是远端那台机器的串口，界面上得让人一眼看出来。
+  // 只看 env.remoteName 不够：只要存在远程宿主，它在本地宿主里也有值
+  const remote =
+    context.extension.extensionKind === vscode.ExtensionKind.Workspace
+      ? vscode.env.remoteName
+      : undefined;
+  log.info(
+    remote === undefined
+      ? 'running in the local extension host'
+      : `running in the remote extension host (${remote}); listed ports are on that machine`,
+  );
+
   const leases = new PortLeases();
   let watcher: PortWatcher | null = null;
   const panels = new Map<vscode.WebviewPanel, SessionHost>();
@@ -202,7 +214,9 @@ export function activate(context: vscode.ExtensionContext): SerialToolApi {
     const ports = await current.refresh();
     const t = hostText();
     if (ports.length === 0) {
-      void vscode.window.showWarningMessage(t.noPortsFound);
+      void vscode.window.showWarningMessage(
+        remote === undefined ? t.noPortsFound : t.noPortsFoundOnRemote(remote),
+      );
       return undefined;
     }
     const holders = leases.holders();
@@ -347,10 +361,9 @@ export function activate(context: vscode.ExtensionContext): SerialToolApi {
     },
     readPrefs,
   });
-  context.subscriptions.push(
-    ports,
-    vscode.window.registerTreeDataProvider('serialTool.ports', ports),
-  );
+  const portsView = vscode.window.createTreeView('serialTool.ports', { treeDataProvider: ports });
+  if (remote !== undefined) portsView.description = hostText().remoteHost(remote);
+  context.subscriptions.push(ports, portsView);
 
   /**
    * 点端口的去处。
