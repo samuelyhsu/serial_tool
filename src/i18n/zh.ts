@@ -31,6 +31,7 @@ export const zh: Messages = {
   opening: '打开中…',
   reconnecting: '重连中…',
   switchLanguage: '切换语言 / Switch language',
+  resizePanes: '拖动调整左右分栏宽度（方向键微调，Home / End 到两端）',
   switchTheme: '切换深色 / 浅色主题',
   payloadLabel: '发送内容',
 

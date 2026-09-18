@@ -13,6 +13,7 @@ import { ErrorBoundary } from './ErrorBoundary';
 import { LogPane } from './LogPane/LogPane';
 import { PresetPane } from './PresetPane/PresetPane';
 import { SendPane } from './SendPane/SendPane';
+import { Splitter } from './Splitter/Splitter';
 import { StatusBar } from './StatusBar/StatusBar';
 import { Toolbar } from './Toolbar/Toolbar';
 import { UnsupportedBanner } from './UnsupportedBanner';
@@ -22,6 +23,8 @@ export function App(): React.JSX.Element {
   const t = useMessages();
   const theme = useUiStore((state) => state.theme);
   const language = useUiStore((state) => state.language);
+  const rightPaneWidth = useUiStore((state) => state.rightPaneWidth);
+  const setRightPaneWidth = useUiStore((state) => state.setRightPaneWidth);
   const supported = useConnectionStore((state) => state.supported);
   const refreshPorts = useConnectionStore((state) => state.refreshPorts);
   const sessionState = useConnectionStore((state) => state.sessionState);
@@ -65,8 +68,10 @@ export function App(): React.JSX.Element {
       <div className={styles.shell}>
         <Toolbar />
         {supported ? null : <UnsupportedBanner messages={t} />}
+        {/* 右栏宽度那个 CSS 变量由 Splitter 独家写入，这里不设内联样式（原因见它的注释） */}
         <main className={styles.main}>
           <LogPane />
+          <Splitter width={rightPaneWidth} onResize={setRightPaneWidth} />
           <div className={styles.right}>
             <SendPane />
             <PresetPane />

@@ -1,0 +1,28 @@
+/* 宽度只在这里定：App.module.css 那一列写的是 auto，由这条撑出来 */
+.divider {
+  width: 5px;
+  position: relative;
+  background: var(--line);
+  cursor: col-resize;
+  /* 触屏上拖它就是拖它，不要变成滚页面 */
+  touch-action: none;
+}
+
+/* 视觉上是条细线，命中区往两边各扩 3px —— 5px 的线用鼠标去够太苛刻 */
+.divider::after {
+  content: '';
+  position: absolute;
+  inset: 0 -3px;
+}
+
+.divider:hover,
+.divider:focus-visible,
+.divider[data-dragging] {
+  background: var(--blue);
+}
+
+/* 拖动期间把命中区撑满全屏：指针扫过两侧面板时不会选中文字、也不会触发 hover */
+.divider[data-dragging]::after {
+  position: fixed;
+  inset: 0;
+}

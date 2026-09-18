@@ -33,6 +33,7 @@ export const en: Messages = {
   opening: 'opening…',
   reconnecting: 'reconnecting…',
   switchLanguage: 'Switch language / 切换语言',
+  resizePanes: 'Drag to resize the panes (arrow keys nudge, Home / End jump to the limits)',
   switchTheme: 'Switch dark / light theme',
   payloadLabel: 'Payload',
 

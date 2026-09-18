@@ -66,6 +66,8 @@ export interface Messages {
   readonly reconnecting: string;
   readonly switchLanguage: string;
   readonly switchTheme: string;
+  /** 左右分栏之间那条可拖动的分隔线。 */
+  readonly resizePanes: string;
   readonly payloadLabel: string;
 
   // 接收区

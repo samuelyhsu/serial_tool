@@ -24,12 +24,44 @@ export function isValidIdleFrameMs(value: number): boolean {
 }
 
 /**
+ * 右栏宽度的取值范围。
+ *
+ * 下限是多条发送一行还摆得开的宽度：那一行七个控件的固定列加起来就有 ~360px，
+ * 再窄数据框只剩个位数像素，整行就没法用了。上限只挡手滑 —— 拖动时真正的上限
+ * 按窗口宽度另算，要给接收区留下 LEFT_PANE_MIN。
+ *
+ * **默认值不在这里**：它是 tokens.css 的 --right-pane-width，那边是唯一定义处。
+ * 没拖过时 store 里是 null，界面不设内联样式，宽度就由样式表说了算。
+ */
+export const RIGHT_PANE_MIN = 380;
+export const RIGHT_PANE_MAX = 1200;
+/** 拖到最宽时也要给接收区留下的宽度。 */
+export const LEFT_PANE_MIN = 320;
+
+export function clampRightPaneWidth(value: number): number {
+  return Math.min(RIGHT_PANE_MAX, Math.max(RIGHT_PANE_MIN, Math.round(value) || RIGHT_PANE_MIN));
+}
+
+/**
  * 接收区的显示偏好。语言与主题各自独立成键，沿用既有的存储格式。
  *
  * 用分层作用域存（见 storage.ts）：同时开多个页面时，一个盯着 HEX、一个盯着 TXT
  * 是很自然的用法，它们不该互相拉扯；而新开的页面仍然继承你最后一次的选择。
  */
 const VIEW_PREFS_KEY = 'viewPrefs';
+
+/**
+ * 分栏布局。与 viewPrefs 分开存：一个是「接收区怎么显示」，一个是「两栏怎么分」，
+ * 混在一个键里的话，改一次分帧方式会把宽度也重写一遍。
+ */
+const LAYOUT_KEY = 'layout';
+
+/** null 表示没拖过，宽度交给样式表。 */
+function loadRightPaneWidth(): number | null {
+  const raw = readLayeredJson<unknown>(LAYOUT_KEY, null);
+  if (!isRecord(raw) || typeof raw.rightPaneWidth !== 'number') return null;
+  return Number.isFinite(raw.rightPaneWidth) ? clampRightPaneWidth(raw.rightPaneWidth) : null;
+}
 
 interface ViewPrefs {
   view: LogView;
@@ -98,6 +130,8 @@ interface UiState {
   onlyMatch: boolean;
   frameMode: FrameMode;
   idleFrameMs: number;
+  /** 用户拖出来的右栏宽度；null 表示没拖过，用样式表里的默认值。 */
+  rightPaneWidth: number | null;
 
   toggleLanguage: () => void;
   toggleTheme: () => void;
@@ -109,6 +143,7 @@ interface UiState {
   setOnlyMatch: (value: boolean) => void;
   setFrameMode: (mode: FrameMode) => void;
   setIdleFrameMs: (value: number) => void;
+  setRightPaneWidth: (value: number) => void;
 }
 
 function initialLanguage(): Language {
@@ -120,6 +155,7 @@ export const useUiStore = create<UiState>()((set) => ({
   // 没存过偏好时跟随系统，而不是硬性锁定深色
   theme: readStored('theme') === null ? systemTheme() : readStoredEnum('theme', THEMES, 'dark'),
   ...loadViewPrefs(),
+  rightPaneWidth: loadRightPaneWidth(),
   // filter 有意不持久化：日志本身是内存态、刷新后为空，
   // 恢复一个针对空日志的过滤词只会制造「怎么什么都没有」的困惑
   filter: '',
@@ -155,7 +191,14 @@ export const useUiStore = create<UiState>()((set) => ({
     // 「看不出当前哪个在生效」正是这套控件上一版的毛病。
     set(idleFrameMs === 0 ? { idleFrameMs, frameMode: 'raw' } : { idleFrameMs });
   },
+
+  setRightPaneWidth: (value) => set({ rightPaneWidth: clampRightPaneWidth(value) }),
 }));
+
+useUiStore.subscribe(({ rightPaneWidth }) => {
+  // 没拖过就别写：存一个和样式表一模一样的数，将来改默认值时这些页面反而跟不上
+  if (rightPaneWidth !== null) saveSoon(LAYOUT_KEY, { rightPaneWidth }, 'layered');
+});
 
 useUiStore.subscribe(
   ({ view, showTimestamp, autoScroll, showTx, onlyMatch, frameMode, idleFrameMs }) => {

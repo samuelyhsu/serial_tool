@@ -17,7 +17,8 @@
 .main {
   flex: 1 1 auto;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--right-pane-width);
+  /* 中间那列是拖动把手，宽度由它自己撑出来（见 Splitter.module.css） */
+  grid-template-columns: minmax(0, 1fr) auto var(--right-pane-width);
   /* 必须显式声明行轨道：只写 columns 会产生一个隐式的 auto 行，
      它由内容撑高、不受父级 1fr 轨道约束，日志一多就把整块顶出可视区。 */
   grid-template-rows: minmax(0, 1fr);
@@ -41,7 +42,6 @@
   grid-template-rows: minmax(200px, 1fr) minmax(0, auto);
   min-width: 0;
   min-height: 0;
-  border-left: 1px solid var(--line);
 }
 
 /* 窄屏时预设区落到下方，避免固定的右栏把接收区挤没。
@@ -50,12 +50,17 @@
 @media (max-width: 1100px) {
   .main {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr) auto;
+    grid-template-rows: minmax(0, 1fr) auto auto;
     overflow: auto;
   }
 
+  /* 上下堆叠时左右分栏不存在了，把手也就没有意义。
+     按 role 选而不是按类名，断点才不必在两个文件里各写一遍 */
+  .main > [role='separator'] {
+    display: none;
+  }
+
   .right {
-    border-left: none;
     border-top: 1px solid var(--line);
   }
 }

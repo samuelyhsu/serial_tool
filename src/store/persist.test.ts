@@ -490,3 +490,60 @@ describe('多页面各连一个端口', () => {
     expect(app.log.allEntries().at(-1)?.notice).toEqual({ code: 'port-busy' });
   });
 });
+
+describe('分栏宽度持久化', () => {
+  it('拖出来的宽度刷新后还在', async () => {
+    let app = await reload();
+    app.ui.useUiStore.getState().setRightPaneWidth(620);
+    app.persist.flushPersist();
+
+    app = await reload();
+    expect(app.ui.useUiStore.getState().rightPaneWidth).toBe(620);
+  });
+
+  /**
+   * 没拖过就一个字节都别写。存下一个和样式表一模一样的数，等于把默认值复制到每个
+   * 用过这个页面的浏览器里 —— 以后调默认宽度，这些人反而是唯一跟不上的。
+   */
+  it('没拖过时不往存储里写这一项', async () => {
+    const app = await reload();
+    // 改个别的偏好，把订阅推一遍
+    app.ui.useUiStore.getState().setView('hex');
+    app.persist.flushPersist();
+
+    expect(stored('layout')).toBeNull();
+    expect(app.ui.useUiStore.getState().rightPaneWidth).toBeNull();
+  });
+
+  it('存量里超出范围的值夹回区间内', async () => {
+    localStorage.setItem('wst.layout', JSON.stringify({ rightPaneWidth: 99999 }));
+
+    const app = await reload();
+
+    expect(app.ui.useUiStore.getState().rightPaneWidth).toBe(app.ui.RIGHT_PANE_MAX);
+  });
+
+  it('存量里不是数字就当没拖过', async () => {
+    localStorage.setItem('wst.layout', JSON.stringify({ rightPaneWidth: '600px' }));
+
+    const app = await reload();
+
+    expect(app.ui.useUiStore.getState().rightPaneWidth).toBeNull();
+  });
+
+  it('按分层作用域存：本页面优先，新开的页面沿用最后一次', async () => {
+    let app = await reload();
+    app.ui.useUiStore.getState().setRightPaneWidth(600);
+    app.persist.flushPersist();
+    expect(sessionStorage.getItem('wst.layout')).toContain('600');
+
+    // 别的页面后来拖成了 700：本页面刷新后仍是自己那一份
+    localStorage.setItem('wst.layout', JSON.stringify({ rightPaneWidth: 700 }));
+    app = await reload();
+    expect(app.ui.useUiStore.getState().rightPaneWidth).toBe(600);
+
+    sessionStorage.clear();
+    app = await reload();
+    expect(app.ui.useUiStore.getState().rightPaneWidth).toBe(700);
+  });
+});
