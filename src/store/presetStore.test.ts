@@ -363,3 +363,74 @@ describe('预设的帧尾', () => {
     expect(isBlankTab(after.tabs[1]!, tabPresets(after.presets, 1))).toBe(false);
   });
 });
+
+describe('指令库的整理', () => {
+  /**
+   * 指令集是按项目攒的：手上一份电机的、一份传感器的。
+   * 只有整体替换的话，两份永远拼不到一起。
+   */
+  it('追加导入接在现有分组之后，已有内容一条不动', () => {
+    const firstLabel = presetLabel(usePresetStore.getState().presets[0]!, zh);
+    const raw = JSON.stringify({
+      version: 2,
+      tabs: [{ title: '电机', presets: [{ name: 'go', data: 'G1' }] }],
+    });
+
+    usePresetStore.getState().appendAll(importOrThrow(raw));
+
+    const after = usePresetStore.getState();
+    expect(after.tabs).toHaveLength(PRESET_DEFAULT_TABS + 1);
+    expect(after.tabs.at(-1)!.title).toBe('电机');
+    expect(presetLabel(after.presets[0]!, zh)).toBe(firstLabel);
+    // 跳到第一个新分组：追加完了总要看一眼进来的是什么
+    expect(after.activeTab).toBe(PRESET_DEFAULT_TABS);
+  });
+
+  it('组内上下挪一格就是和相邻那条换位置', () => {
+    const [a, b] = usePresetStore.getState().presets;
+
+    usePresetStore.getState().movePreset(b!.id, -1);
+
+    expect(
+      usePresetStore
+        .getState()
+        .presets.slice(0, 2)
+        .map((preset) => preset.id),
+    ).toEqual([b!.id, a!.id]);
+  });
+
+  it('挪到组的边界外就不动，跨组得显式按 Shift', () => {
+    const last = usePresetStore.getState().presets[PRESET_TAB_SIZE - 1]!;
+
+    usePresetStore.getState().movePreset(last.id, 1);
+
+    expect(usePresetStore.getState().presets[PRESET_TAB_SIZE - 1]!.id).toBe(last.id);
+  });
+
+  it('跨组挪到目标组的第一个空行，原位置补一行空的', () => {
+    const moved = usePresetStore.getState().presets[0]!;
+
+    expect(usePresetStore.getState().movePresetToTab(moved.id, 1)).toBe(true);
+
+    const after = usePresetStore.getState();
+    expect(tabPresets(after.presets, 1)[0]!.id).toBe(moved.id);
+    expect(after.activeTab).toBe(1);
+    // 每组恒为 PRESET_TAB_SIZE 条是别处都在依赖的前提，腾出来的位置不能留个洞
+    expect(after.presets).toHaveLength(PRESET_DEFAULT_TABS * PRESET_TAB_SIZE);
+    expect(after.presets[0]!.data).toBe('');
+  });
+
+  it('目标组满了就挪不过去，也不顶掉人家那一行', () => {
+    const store = usePresetStore.getState();
+    for (const preset of tabPresets(store.presets, 1)) store.setData(preset.id, 'X');
+
+    const moved = usePresetStore.getState().presets[0]!;
+    expect(usePresetStore.getState().movePresetToTab(moved.id, 1)).toBe(false);
+    expect(usePresetStore.getState().presets[0]!.id).toBe(moved.id);
+  });
+
+  it('没有相邻分组时挪不动', () => {
+    const store = usePresetStore.getState();
+    expect(store.movePresetToTab(store.presets[0]!.id, -1)).toBe(false);
+  });
+});

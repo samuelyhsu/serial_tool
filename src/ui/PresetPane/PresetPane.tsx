@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { CHECKSUM_ALGORITHMS, checksumBytes, findChecksum } from '@/core/checksum';
 import { formatHex } from '@/core/codec/hex';
 import { downloadText } from '@/lib/download';
@@ -8,6 +8,7 @@ import { EOL_KEYS, payloadToBytes, type EolKey } from '@/store/payload';
 import {
   isBlankTab,
   parseImportedPresets,
+  PRESET_TAB_SIZE,
   PRESET_TAB_TITLE_MAX,
   presetLabel,
   presetTabTitle,
@@ -27,12 +28,16 @@ export function PresetPane(): React.JSX.Element {
   const t = useMessages();
   const tabsId = useId();
   const fileRef = useRef<HTMLInputElement>(null);
+  // 一个 file input 服务两个按钮：点的是哪个决定文件进来之后是替换还是追加
+  const importMode = useRef<'replace' | 'append'>('replace');
+  const [query, setQuery] = useState('');
 
   const presets = usePresetStore((s) => s.presets);
   const tabs = usePresetStore((s) => s.tabs);
   const activeTab = usePresetStore((s) => s.activeTab);
   const issues = usePresetStore((s) => s.issues);
   const replaceAll = usePresetStore((s) => s.replaceAll);
+  const appendAll = usePresetStore((s) => s.appendAll);
   const exportPayload = usePresetStore((s) => s.exportPayload);
   const toggleSequence = usePresetStore((s) => s.toggleSequence);
   // 节奏三项归 store 管，才能跟着预设一起持久化
@@ -54,14 +59,66 @@ export function PresetPane(): React.JSX.Element {
   const tabDomId = (tabId: string): string => `${tabsId}-${tabId}`;
   const panelId = `${tabsId}-panel`;
 
+  /**
+   * 搜索跨全部分组 —— 真实的场景是「记得有条指令叫 xxx，不记得在哪一组」。
+   * 命中项按分组分节列出，不必再猜它属于谁。null 表示没在搜索。
+   */
+  const found = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (needle === '') return null;
+    return tabs
+      .map((tab, index) => ({
+        tab,
+        index,
+        hits: tabPresets(presets, index).filter(
+          (preset) =>
+            presetLabel(preset, t).toLowerCase().includes(needle) ||
+            preset.data.toLowerCase().includes(needle),
+        ),
+      }))
+      .filter((group) => group.hits.length > 0);
+  }, [query, tabs, presets, t]);
+
+  /**
+   * Alt+1..9 / Alt+0 发当前分组的第 1..10 条。
+   *
+   * 认 `code` 而不是 `key`：按住 Alt 时 key 在部分键盘布局下已经不是数字了。
+   * 搜索结果里「当前分组的第 N 条」没有意义，那时整条快捷键歇着。
+   */
+  useEffect(() => {
+    if (found !== null) return;
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      const digit = /^Digit(\d)$/.exec(event.code)?.[1];
+      if (digit === undefined) return;
+
+      const store = usePresetStore.getState();
+      const slot = digit === '0' ? PRESET_TAB_SIZE - 1 : Number(digit) - 1;
+      const preset = tabPresets(store.presets, store.activeTab)[slot];
+      if (!preset || preset.data.trim() === '') return;
+      event.preventDefault();
+      if (!useConnectionStore.getState().isOpen()) return;
+      void store.sendOnce(preset.id);
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [found]);
+
   const onExport = useCallback(() => {
     downloadText('serial-presets.json', exportPayload(), 'application/json');
     useLogStore.getState().appendMessage(t.exportedPresets);
   }, [exportPayload, t]);
 
+  const onPickFile = useCallback((mode: 'replace' | 'append') => {
+    importMode.current = mode;
+    fileRef.current?.click();
+  }, []);
+
   const onImportFile = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
+      const mode = importMode.current;
       event.target.value = '';
       if (!file) return;
 
@@ -72,15 +129,20 @@ export function PresetPane(): React.JSX.Element {
           log.appendMessage(t.importFailed(result.reason));
           return;
         }
-        replaceAll(result);
-        log.appendMessage(t.importedPresets(result.presets.length));
+        if (mode === 'append') {
+          appendAll(result);
+          log.appendMessage(t.appendedPresets(result.presets.length));
+        } else {
+          replaceAll(result);
+          log.appendMessage(t.importedPresets(result.presets.length));
+        }
         if (result.skipped > 0) {
           // 原型是静默截断的；跳过了多少条必须让用户知道（缺陷 D17）
           log.appendMessage(t.importFailed(`${result.skipped} skipped`));
         }
       });
     },
-    [replaceAll, t],
+    [appendAll, replaceAll, t],
   );
 
   const onStopAll = useCallback(() => {
@@ -94,8 +156,29 @@ export function PresetPane(): React.JSX.Element {
         <PresetTabs tabDomId={tabDomId} panelId={panelId} />
 
         <div className={styles.headActions}>
-          <button type="button" className="btn" onClick={() => fileRef.current?.click()}>
+          <input
+            type="search"
+            className={`field field--sunk field--sm ${styles.search}`}
+            value={query}
+            placeholder={t.searchPresets}
+            aria-label={t.searchPresets}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+          <button
+            type="button"
+            className="btn"
+            title={t.importHint}
+            onClick={() => onPickFile('replace')}
+          >
             {t.import}
+          </button>
+          <button
+            type="button"
+            className="btn"
+            title={t.appendHint}
+            onClick={() => onPickFile('append')}
+          >
+            {t.append}
           </button>
           <button type="button" className="btn" onClick={onExport}>
             {t.export}
@@ -127,15 +210,39 @@ export function PresetPane(): React.JSX.Element {
         id={panelId}
         aria-labelledby={tabs[activeTab] ? tabDomId(tabs[activeTab].id) : undefined}
       >
-        {visiblePresets.map((preset) => (
-          <PresetRow
-            key={preset.id}
-            preset={preset}
-            invalid={issues[preset.id]?.kind === 'parse'}
-            looping={isTaskRunning(running, presetTask(preset.id))}
-            canSend={isOpen}
-          />
-        ))}
+        {found === null ? (
+          visiblePresets.map((preset, index) => (
+            <PresetRow
+              key={preset.id}
+              preset={preset}
+              slot={index}
+              movable
+              invalid={issues[preset.id]?.kind === 'parse'}
+              looping={isTaskRunning(running, presetTask(preset.id))}
+              canSend={isOpen}
+            />
+          ))
+        ) : found.length === 0 ? (
+          <p className={styles.noMatch}>{t.noMatch}</p>
+        ) : (
+          found.map(({ tab, index, hits }) => (
+            <Fragment key={tab.id}>
+              {/* 命中项脱离了原来的位置，所以得标出它来自哪一组 */}
+              <div className={styles.groupLabel}>{presetTabTitle(tab, index, t)}</div>
+              {hits.map((preset) => (
+                <PresetRow
+                  key={preset.id}
+                  preset={preset}
+                  slot={null}
+                  movable={false}
+                  invalid={issues[preset.id]?.kind === 'parse'}
+                  looping={isTaskRunning(running, presetTask(preset.id))}
+                  canSend={isOpen}
+                />
+              ))}
+            </Fragment>
+          ))
+        )}
       </div>
 
       {/* 底部压成一行：说明 · 间隔 · 循环 · 全部停止。
@@ -393,6 +500,10 @@ function PresetTabs({ tabDomId, panelId }: TabsProps): React.JSX.Element {
 
 interface RowProps {
   preset: Preset;
+  /** 组内序号，用来标出 Alt+N 快捷键；搜索结果里的行不属于任何位置，传 null。 */
+  slot: number | null;
+  /** 搜索结果里顺序没有意义，那时不接移动快捷键。 */
+  movable: boolean;
   invalid: boolean;
   looping: boolean;
   canSend: boolean;
@@ -404,8 +515,18 @@ interface RowProps {
  * 名称与帧尾都不摊开成控件：名称就是发送按钮上的文字（点 ✎ 改），帧尾只占一个徽标，
  * 点开才在行下方展开选择器。两者都是「设一次就不动」的东西，不值得为它们常驻下拉框
  * 把每行撑高一档 —— 行高一涨，一屏能看的预设就少几条。
+ *
+ * 调顺序同理走快捷键而不是箭头按钮：一行已经排了七个控件，再塞两个 18px 的箭头，
+ * 数据框就只剩六十来像素，什么都看不清了。
  */
-function PresetRow({ preset, invalid, looping, canSend }: RowProps): React.JSX.Element {
+function PresetRow({
+  preset,
+  slot,
+  movable,
+  invalid,
+  looping,
+  canSend,
+}: RowProps): React.JSX.Element {
   const t = useMessages();
   const nameRef = useRef<HTMLInputElement>(null);
   const [renaming, setRenaming] = useState(false);
@@ -419,9 +540,15 @@ function PresetRow({ preset, invalid, looping, canSend }: RowProps): React.JSX.E
   const toggleMode = usePresetStore((s) => s.toggleMode);
   const sendOnce = usePresetStore((s) => s.sendOnce);
   const toggleLoop = usePresetStore((s) => s.toggleLoop);
+  const movePreset = usePresetStore((s) => s.movePreset);
+  const movePresetToTab = usePresetStore((s) => s.movePresetToTab);
+  const tabCount = usePresetStore((s) => s.tabs.length);
+  const activeTab = usePresetStore((s) => s.activeTab);
 
   const label = presetLabel(preset, t);
   const empty = preset.data.trim() === '';
+  // Alt+0 是第 10 条：十个槽位、十个数字键，0 排在 9 后面
+  const shortcut = slot === null ? null : `Alt+${slot === PRESET_TAB_SIZE - 1 ? 0 : slot + 1}`;
 
   // 徽标上显示的就是这一条真正会追加的东西。两种模式各看各的字段（见 Preset.eol 的说明）
   const algorithm = findChecksum(preset.checksum);
@@ -449,9 +576,29 @@ function PresetRow({ preset, invalid, looping, canSend }: RowProps): React.JSX.E
     setRenaming(false);
   }, [rename, preset.id, draft]);
 
+  const onMoveKey = (event: React.KeyboardEvent): void => {
+    if (!event.altKey || event.ctrlKey || event.metaKey) return;
+    const delta = event.key === 'ArrowUp' ? -1 : event.key === 'ArrowDown' ? 1 : 0;
+    if (delta === 0) return;
+    event.preventDefault();
+
+    if (!event.shiftKey) {
+      movePreset(preset.id, delta);
+      return;
+    }
+    // 没有相邻分组就是键按空了，不必说什么；有分组却挪不过去才要解释
+    const to = activeTab + delta;
+    if (to < 0 || to >= tabCount) return;
+    if (!movePresetToTab(preset.id, delta)) useLogStore.getState().appendMessage(t.tabFull);
+  };
+
   return (
     <>
-      <div className={styles.row} data-looping={looping}>
+      <div
+        className={styles.row}
+        data-looping={looping}
+        onKeyDown={movable ? onMoveKey : undefined}
+      >
         <input
           type="checkbox"
           className={styles.seq}
@@ -467,6 +614,7 @@ function PresetRow({ preset, invalid, looping, canSend }: RowProps): React.JSX.E
           value={preset.data}
           spellCheck={false}
           placeholder={t.dataPlaceholder}
+          title={movable ? t.moveHint : undefined}
           aria-label={`${label} ${t.colData}`}
           aria-invalid={invalid}
           onChange={(event) => setData(preset.id, event.target.value)}
@@ -508,7 +656,7 @@ function PresetRow({ preset, invalid, looping, canSend }: RowProps): React.JSX.E
             type="button"
             className={styles.sendBtn}
             disabled={!canSend || invalid || empty}
-            title={label}
+            title={shortcut === null ? label : `${label} (${shortcut})`}
             onClick={() => void sendOnce(preset.id)}
           >
             {label}

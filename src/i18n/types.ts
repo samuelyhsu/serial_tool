@@ -113,7 +113,16 @@ export interface Messages {
   // 预设区
   readonly multiSend: string;
   readonly import: string;
+  readonly importHint: string;
+  /** 追加导入：接在现有分组之后，不动已有内容。 */
+  readonly append: string;
+  readonly appendHint: string;
   readonly export: string;
+  readonly searchPresets: string;
+  readonly noMatch: string;
+  /** 数据框的悬停提示：怎么调顺序、怎么挪到别的分组。 */
+  readonly moveHint: string;
+  readonly tabFull: string;
   readonly colSequence: string;
   readonly colFormat: string;
   readonly colData: string;
@@ -176,6 +185,7 @@ export interface Messages {
   readonly hexError: (error: HexParseError) => string;
   readonly lossyHexSwitch: string;
   readonly importedPresets: (count: number) => string;
+  readonly appendedPresets: (count: number) => string;
   readonly importFailed: (reason: string) => string;
   readonly exportedLog: (lines: number) => string;
   readonly exportedPresets: string;

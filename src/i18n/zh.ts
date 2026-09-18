@@ -80,7 +80,14 @@ export const zh: Messages = {
 
   multiSend: '多条发送',
   import: '导入',
+  importHint: '用文件里的内容替换全部分组',
+  append: '追加',
+  appendHint: '把文件里的分组接在现有分组之后',
   export: '导出',
+  searchPresets: '搜索预设',
+  noMatch: '没有匹配的预设',
+  moveHint: 'Alt+↑↓ 调整顺序，Alt+Shift+↑↓ 挪到相邻分组',
+  tabFull: '相邻分组没有空行了',
   colSequence: '序列',
   colFormat: '格式',
   colData: '数据',
@@ -168,6 +175,7 @@ export const zh: Messages = {
 
   lossyHexSwitch: '当前数据含有非法 UTF-8 字节，转成 TXT 会丢失内容，已保持 HEX 模式',
   importedPresets: (count) => `已导入 ${count} 条预设`,
+  appendedPresets: (count) => `已追加 ${count} 条预设`,
   importFailed: (reason) => `导入失败：${reason}`,
   exportedLog: (lines) => `日志已导出，共 ${lines} 行`,
   exportedPresets: '发送预设已导出',

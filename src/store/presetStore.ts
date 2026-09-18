@@ -312,6 +312,22 @@ interface PresetState {
   /** 删掉一组连同它的预设，至少留一组；组里还在循环的预设一并停掉。 */
   removeTab: (id: string) => void;
   replaceAll: (collection: PresetCollection) => void;
+  /**
+   * 把导入的分组接在现有分组后面，并跳到第一个新分组。
+   *
+   * 有这条是因为指令集是按项目攒的：手上一份电机的、一份传感器的，
+   * 只能整体替换的话两者永远拼不到一起。追加不动已有内容，也就不必停掉在跑的循环。
+   */
+  appendAll: (collection: PresetCollection) => void;
+  /** 在组内上下挪一格。到组的边界就不动 —— 跨组要显式用 movePresetToTab。 */
+  movePreset: (id: string, delta: -1 | 1) => void;
+  /**
+   * 挪到相邻分组的第一个空行，并跟过去。
+   *
+   * 每组固定 10 条，所以这里是「找个空位放下」而不是插入：目标组满了就挪不过去，
+   * 交回 false 让调用方去告诉用户，而不是悄悄把人家那一行顶掉。
+   */
+  movePresetToTab: (id: string, direction: -1 | 1) => boolean;
   exportPayload: () => string;
 }
 
@@ -520,6 +536,46 @@ export const usePresetStore = create<PresetState>()((set, get) => {
     replaceAll: ({ tabs, presets }) => {
       useTasksStore.getState().stopAll();
       set({ tabs, presets, activeTab: 0, issues: {} });
+    },
+
+    appendAll: ({ tabs, presets }) =>
+      set((state) => ({
+        tabs: [...state.tabs, ...tabs],
+        presets: [...state.presets, ...presets],
+        activeTab: state.tabs.length,
+      })),
+
+    movePreset: (id, delta) => {
+      const { presets } = get();
+      const index = presets.findIndex((preset) => preset.id === id);
+      const target = index + delta;
+      if (index < 0 || target < 0 || target >= presets.length) return;
+      if (Math.floor(index / PRESET_TAB_SIZE) !== Math.floor(target / PRESET_TAB_SIZE)) return;
+
+      const next = [...presets];
+      next[index] = presets[target]!;
+      next[target] = presets[index]!;
+      set({ presets: next });
+    },
+
+    movePresetToTab: (id, direction) => {
+      const { presets, tabs } = get();
+      const index = presets.findIndex((preset) => preset.id === id);
+      if (index < 0) return false;
+
+      const to = Math.floor(index / PRESET_TAB_SIZE) + direction;
+      if (to < 0 || to >= tabs.length) return false;
+
+      const slot = tabPresets(presets, to).findIndex(isBlank);
+      if (slot < 0) return false;
+
+      const next = [...presets];
+      next[to * PRESET_TAB_SIZE + slot] = presets[index]!;
+      // 腾出来的位置补一行空的：每组恒为 PRESET_TAB_SIZE 条是别处都在依赖的前提。
+      // 预设自己的 id 不变，它若正在循环，任务照跑不误
+      next[index] = blankPreset(index % PRESET_TAB_SIZE);
+      set({ presets: next, activeTab: to });
+      return true;
     },
 
     exportPayload: () => JSON.stringify(serializePresets(get().tabs, get().presets), null, 2),

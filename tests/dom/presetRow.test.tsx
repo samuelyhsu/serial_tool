@@ -1,6 +1,7 @@
 import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useConnectionStore } from '@/store/connectionStore';
 import { __resetLogStoreForTests } from '@/store/logStore';
 import { PRESET_DEFAULT_TABS, PRESET_TAB_SIZE, usePresetStore } from '@/store/presetStore';
 import { useTasksStore } from '@/store/tasksStore';
@@ -422,5 +423,93 @@ describe('多条发送', () => {
     await userEvent.type(repeat, '3');
 
     expect(usePresetStore.getState().sequenceRepeat).toBe(3);
+  });
+
+  /** 攒到几十条以后，「记得有条叫 xxx，不记得在哪一组」才是找指令的常态。 */
+  it('搜索跨全部分组，命中项标出它来自哪一组', async () => {
+    render(<PresetPane />);
+    await userEvent.click(tabs()[1]!);
+    await userEvent.type(screen.getAllByRole('textbox')[0]!, 'NEEDLE');
+    await userEvent.click(tabs()[0]!);
+
+    await userEvent.type(screen.getByRole('searchbox', { name: '搜索预设' }), 'needle');
+
+    expect(rows()).toHaveLength(1);
+    // 标签页上也有一个「分组 2」，要找的是列表里那个
+    expect(within(screen.getByRole('tabpanel')).getByText('分组 2')).toBeInTheDocument();
+  });
+
+  it('按名称也能搜到，不只是数据', async () => {
+    render(<PresetPane />);
+    await userEvent.type(screen.getByRole('searchbox', { name: '搜索预设' }), '查询版本');
+
+    expect(rows()).toHaveLength(1);
+  });
+
+  it('搜不到时给一句话，而不是一片空白', async () => {
+    render(<PresetPane />);
+    await userEvent.type(screen.getByRole('searchbox', { name: '搜索预设' }), 'zzzz');
+
+    expect(screen.getByText('没有匹配的预设')).toBeInTheDocument();
+    expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
+  });
+
+  /** 一行已经排了七个控件，再塞两个箭头按钮数据框就没法看了，所以走快捷键。 */
+  it('Alt+↑ 把一行往上挪一格', async () => {
+    render(<PresetPane />);
+    const second = usePresetStore.getState().presets[1]!;
+
+    act(() => screen.getAllByRole('textbox')[1]!.focus());
+    await userEvent.keyboard('{Alt>}{ArrowUp}{/Alt}');
+
+    expect(usePresetStore.getState().presets[0]!.id).toBe(second.id);
+  });
+
+  it('Alt+Shift+↓ 挪到下一个分组，并跟过去', async () => {
+    render(<PresetPane />);
+    const first = usePresetStore.getState().presets[0]!;
+
+    act(() => screen.getAllByRole('textbox')[0]!.focus());
+    await userEvent.keyboard('{Alt>}{Shift>}{ArrowDown}{/Shift}{/Alt}');
+
+    expect(usePresetStore.getState().activeTab).toBe(1);
+    expect(usePresetStore.getState().presets[PRESET_TAB_SIZE]!.id).toBe(first.id);
+  });
+
+  it('搜索结果里不接移动快捷键 —— 那里的顺序没有意义', async () => {
+    render(<PresetPane />);
+    await userEvent.type(screen.getByRole('searchbox', { name: '搜索预设' }), '查询版本');
+    const before = usePresetStore.getState().presets.map((preset) => preset.id);
+
+    act(() => screen.getAllByRole('textbox')[0]!.focus());
+    await userEvent.keyboard('{Alt>}{ArrowDown}{/Alt}');
+
+    expect(usePresetStore.getState().presets.map((preset) => preset.id)).toEqual(before);
+  });
+
+  it('Alt+2 发当前分组的第二条，Alt+0 发第十条', async () => {
+    const sendOnce = vi.fn(() => Promise.resolve());
+    usePresetStore.setState({ sendOnce });
+    useConnectionStore.setState({ sessionState: 'open' });
+    render(<PresetPane />);
+    const presets = usePresetStore.getState().presets;
+
+    await userEvent.keyboard('{Alt>}2{/Alt}');
+    expect(sendOnce).toHaveBeenLastCalledWith(presets[1]!.id);
+
+    await userEvent.keyboard('{Alt>}0{/Alt}');
+    expect(sendOnce).toHaveBeenLastCalledWith(presets[PRESET_TAB_SIZE - 1]!.id);
+  });
+
+  it('空行没有快捷键可按', async () => {
+    const sendOnce = vi.fn(() => Promise.resolve());
+    usePresetStore.setState({ sendOnce });
+    useConnectionStore.setState({ sessionState: 'open' });
+    render(<PresetPane />);
+    await userEvent.click(tabs()[1]!);
+
+    await userEvent.keyboard('{Alt>}1{/Alt}');
+
+    expect(sendOnce).not.toHaveBeenCalled();
   });
 });

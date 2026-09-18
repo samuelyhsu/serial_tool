@@ -89,7 +89,32 @@
   flex: none;
   margin-left: auto;
   display: flex;
+  align-items: center;
   gap: 6px;
+}
+
+.search {
+  width: 84px;
+  padding: 3px 6px;
+}
+
+/* 搜索结果跨分组，每一段前面标出它来自哪一组 */
+.groupLabel {
+  padding: 4px 10px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line2);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--dim);
+  letter-spacing: 0.04em;
+}
+
+.noMatch {
+  margin: 0;
+  padding: 16px 10px;
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--faint);
 }
 
 /* 一行七列：勾选 · 格式 · 数据 · 帧尾 · 发送 · 改名 · 周期 · 循环

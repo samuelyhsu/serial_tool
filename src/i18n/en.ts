@@ -83,7 +83,14 @@ export const en: Messages = {
 
   multiSend: 'Multi send',
   import: 'Import',
+  importHint: 'Replace every group with the contents of the file',
+  append: 'Append',
+  appendHint: 'Add the groups in the file after the existing ones',
   export: 'Export',
+  searchPresets: 'Search presets',
+  noMatch: 'No preset matches',
+  moveHint: 'Alt+Up/Down reorders, Alt+Shift+Up/Down moves across groups',
+  tabFull: 'The adjacent group has no empty row left',
   colSequence: 'Seq',
   colFormat: 'Fmt',
   colData: 'Payload',
@@ -173,6 +180,7 @@ export const en: Messages = {
   lossyHexSwitch:
     'Payload contains bytes that are not valid UTF-8 — staying in HEX to avoid data loss',
   importedPresets: (count) => `Imported ${count} presets`,
+  appendedPresets: (count) => `Appended ${count} presets`,
   importFailed: (reason) => `Import failed: ${reason}`,
   exportedLog: (lines) => `Log exported, ${lines} lines`,
   exportedPresets: 'Presets exported',
