@@ -17,7 +17,7 @@
 .main {
   flex: 1 1 auto;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 470px;
+  grid-template-columns: minmax(0, 1fr) var(--right-pane-width);
   /* 必须显式声明行轨道：只写 columns 会产生一个隐式的 auto 行，
      它由内容撑高、不受父级 1fr 轨道约束，日志一多就把整块顶出可视区。 */
   grid-template-rows: minmax(0, 1fr);
@@ -35,7 +35,8 @@
 .right {
   display: grid;
   /* 列同样要 minmax(0, …)：隐式的 auto 列按子元素的内容宽度算下限，多条发送的分组一多，
-     标签条的内容宽度会顺着传上来，把整个右栏撑出 470px，头部的按钮被推到屏幕外 */
+     标签条的内容宽度会顺着传上来，把整个右栏撑得比 --right-pane-width 还宽，
+     头部的按钮被推到屏幕外 */
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(200px, 1fr) minmax(0, auto);
   min-width: 0;
@@ -43,7 +44,9 @@
   border-left: 1px solid var(--line);
 }
 
-/* 窄屏时预设区落到下方，避免 420px 固定列把接收区挤没 */
+/* 窄屏时预设区落到下方，避免固定的右栏把接收区挤没。
+   这个断点只能写字面量 —— @media 的条件里用不了自定义属性，
+   所以它是唯一一处需要跟着 --right-pane-width 一起看的数 */
 @media (max-width: 1100px) {
   .main {
     grid-template-columns: minmax(0, 1fr);

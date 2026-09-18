@@ -477,7 +477,7 @@ interface MenuProps {
  * 分组管理与导入导出。
  *
  * 这五项都是偶尔才用一次的（新建、删除分组，导入、追加、导出），常驻在头部的话
- * 加上搜索框要吃掉两百多像素，而 470px 的右栏里分组标签条只剩两三个可见 ——
+ * 加上搜索框要吃掉两百多像素，右栏里分组标签条就只剩两三个可见 ——
  * 标签条才是天天在点的东西。收进菜单之后头部只留搜索框和一个「⋯」。
  */
 function PresetMenu({ focus, setFocus, onPickFile, onExport }: MenuProps): React.JSX.Element {

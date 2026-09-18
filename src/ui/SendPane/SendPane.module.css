@@ -16,7 +16,7 @@
   flex-wrap: wrap;
 }
 
-/* 右栏只有 470px 宽，编辑区竖向堆叠：文本框占满剩余高度，操作行在下 */
+/* 右栏窄，编辑区竖向堆叠：文本框占满剩余高度，操作行在下 */
 .editor {
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
