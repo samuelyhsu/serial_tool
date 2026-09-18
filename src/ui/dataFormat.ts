@@ -11,3 +11,22 @@ export const FORMAT_LABEL = {
 } as const;
 
 export type DataFormat = keyof typeof FORMAT_LABEL;
+
+/**
+ * 结束符标签。与 TXT / HEX 同理：`\r\n` 是转义写法而不是可翻译文案。
+ * 单条发送与每条预设共用，两处显示同一个词。
+ */
+export const EOL_LABEL = {
+  none: '—',
+  crlf: '\\r\\n',
+  lf: '\\n',
+  cr: '\\r',
+} as const;
+
+/**
+ * 校验和在窄处的短名：`CRC-16/IBM-3740 (CCITT-FALSE)` → `IBM-3740`。
+ * 预设行的帧尾徽标只有几十像素，全名靠 title 给。
+ */
+export function shortChecksumLabel(label: string): string {
+  return (label.split('/')[1] ?? label).split(' ')[0] ?? label;
+}

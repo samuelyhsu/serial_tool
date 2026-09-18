@@ -92,12 +92,12 @@
   gap: 6px;
 }
 
-/* 一行六列：勾选 · 格式 · 数据 · 发送 · 改名 · 周期 · 循环
+/* 一行七列：勾选 · 格式 · 数据 · 帧尾 · 发送 · 改名 · 周期 · 循环
    （改名按钮紧贴发送按钮，不占独立表头） */
 .columns,
 .row {
   display: grid;
-  grid-template-columns: 20px 40px minmax(0, 1fr) 84px 20px 58px 28px;
+  grid-template-columns: 20px 40px minmax(0, 1fr) 46px 84px 20px 58px 28px;
   gap: 6px;
   align-items: center;
 }
@@ -151,6 +151,59 @@
 
 .data[aria-invalid='true'] {
   border-color: var(--red);
+}
+
+/* 帧尾徽标：常态下低调得几乎看不见，设了东西才点亮 —— 一列 10 行里
+   哪几条会追加字节，扫一眼就知道 */
+.suffixBtn {
+  min-width: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--faint);
+  cursor: pointer;
+  padding: 3px 2px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.suffixBtn:hover {
+  border-color: var(--line2);
+  color: var(--text);
+}
+
+.suffixBtn[data-set='true'] {
+  background: var(--amber-row);
+  color: var(--amber);
+}
+
+.suffixBtn[aria-expanded='true'] {
+  border-color: var(--blue);
+}
+
+/* 展开在行下方，左侧留白对齐到数据列，看上去就是「从那一行长出来的」 */
+.suffixBar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 6px 76px;
+  background: var(--sunk);
+  border-bottom: 1px solid var(--line2);
+}
+
+.suffixSelect {
+  min-width: 0;
+  max-width: 200px;
+}
+
+.suffixPreview {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--amber);
+  white-space: nowrap;
 }
 
 /* 发送按钮上显示的就是这条预设的名字 */

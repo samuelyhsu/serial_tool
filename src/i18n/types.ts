@@ -118,8 +118,11 @@ export interface Messages {
   readonly colFormat: string;
   readonly colData: string;
   readonly colSend: string;
+  readonly colSuffix: string;
   readonly colPeriod: string;
   readonly colLoop: string;
+  /** 帧尾徽标的操作名：点开就能改这一条追加什么。 */
+  readonly editSuffix: string;
   readonly dataPlaceholder: string;
   readonly sequenceLoop: string;
   readonly gap: string;

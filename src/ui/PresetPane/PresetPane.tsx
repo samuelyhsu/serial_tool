@@ -1,7 +1,10 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { CHECKSUM_ALGORITHMS, checksumBytes, findChecksum } from '@/core/checksum';
+import { formatHex } from '@/core/codec/hex';
 import { downloadText } from '@/lib/download';
 import { useConnectionStore } from '@/store/connectionStore';
 import { useLogStore } from '@/store/logStore';
+import { EOL_KEYS, payloadToBytes, type EolKey } from '@/store/payload';
 import {
   isBlankTab,
   parseImportedPresets,
@@ -13,6 +16,7 @@ import {
   type Preset,
 } from '@/store/presetStore';
 import { isTaskRunning, presetTask, SEQUENCE_TASK, useTasksStore } from '@/store/tasksStore';
+import { EOL_LABEL, shortChecksumLabel } from '../dataFormat';
 import { FormatToggle } from '../FormatToggle';
 import { useConfirm } from '../useConfirm';
 import { useMessages } from '../useMessages';
@@ -106,6 +110,7 @@ export function PresetPane(): React.JSX.Element {
         <span>{t.colSequence}</span>
         <span>{t.colFormat}</span>
         <span>{t.colData}</span>
+        <span>{t.colSuffix}</span>
         <span>{t.colSend}</span>
         <span />
         <span>{t.colPeriod}</span>
@@ -367,16 +372,18 @@ interface RowProps {
 }
 
 /**
- * 一条预设一行，列序固定：勾选 · 格式 · 数据 · 发送 · 周期 · 循环。
+ * 一条预设一行，列序固定：勾选 · 格式 · 数据 · 帧尾 · 发送 · 周期 · 循环。
  *
- * 名称不单独占一列 —— 它就是发送按钮上的文字，点旁边的 ✎ 才切换成输入框改名，
- * 改完即收起。这样常态下一行只有六个控件，比原来的两行布局密度和可读性都更好。
+ * 名称与帧尾都不摊开成控件：名称就是发送按钮上的文字（点 ✎ 改），帧尾只占一个徽标，
+ * 点开才在行下方展开选择器。两者都是「设一次就不动」的东西，不值得为它们常驻下拉框
+ * 把每行撑高一档 —— 行高一涨，一屏能看的预设就少几条。
  */
 function PresetRow({ preset, invalid, looping, canSend }: RowProps): React.JSX.Element {
   const t = useMessages();
   const nameRef = useRef<HTMLInputElement>(null);
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState('');
+  const [suffixOpen, setSuffixOpen] = useState(false);
 
   const rename = usePresetStore((s) => s.rename);
   const setData = usePresetStore((s) => s.setData);
@@ -388,6 +395,19 @@ function PresetRow({ preset, invalid, looping, canSend }: RowProps): React.JSX.E
 
   const label = presetLabel(preset, t);
   const empty = preset.data.trim() === '';
+
+  // 徽标上显示的就是这一条真正会追加的东西。两种模式各看各的字段（见 Preset.eol 的说明）
+  const algorithm = findChecksum(preset.checksum);
+  const textMode = preset.mode === 'text';
+  const appending = textMode ? preset.eol !== 'none' : algorithm !== undefined;
+  const suffixText = textMode
+    ? EOL_LABEL[preset.eol]
+    : algorithm
+      ? shortChecksumLabel(algorithm.label)
+      : EOL_LABEL.none;
+  const suffixTitle = textMode
+    ? `${t.eol}: ${preset.eol === 'none' ? t.none : EOL_LABEL[preset.eol]}`
+    : `${t.checksum}: ${algorithm?.label ?? t.none}`;
 
   // select() 按规范不移动焦点，必须先 focus()
   useEffect(() => {
@@ -403,91 +423,192 @@ function PresetRow({ preset, invalid, looping, canSend }: RowProps): React.JSX.E
   }, [rename, preset.id, draft]);
 
   return (
-    <div className={styles.row} data-looping={looping}>
-      <input
-        type="checkbox"
-        className={styles.seq}
-        checked={preset.inSequence}
-        aria-label={`${label} ${t.colSequence}`}
-        onChange={(event) => setInSequence(preset.id, event.target.checked)}
-      />
-
-      <FormatToggle compact value={preset.mode} onChange={() => toggleMode(preset.id)} />
-
-      <input
-        className={styles.data}
-        value={preset.data}
-        spellCheck={false}
-        placeholder={t.dataPlaceholder}
-        aria-label={`${label} ${t.colData}`}
-        aria-invalid={invalid}
-        onChange={(event) => setData(preset.id, event.target.value)}
-      />
-
-      {renaming ? (
+    <>
+      <div className={styles.row} data-looping={looping}>
         <input
-          ref={nameRef}
-          className={styles.nameInput}
-          value={draft}
-          maxLength={16}
-          aria-label={t.renamePreset}
-          onChange={(event) => setDraft(event.target.value)}
-          onBlur={commit}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') {
-              event.preventDefault();
-              commit();
-            } else if (event.key === 'Escape') {
-              event.preventDefault();
-              setRenaming(false);
-            }
-          }}
+          type="checkbox"
+          className={styles.seq}
+          checked={preset.inSequence}
+          aria-label={`${label} ${t.colSequence}`}
+          onChange={(event) => setInSequence(preset.id, event.target.checked)}
         />
-      ) : (
+
+        <FormatToggle compact value={preset.mode} onChange={() => toggleMode(preset.id)} />
+
+        <input
+          className={styles.data}
+          value={preset.data}
+          spellCheck={false}
+          placeholder={t.dataPlaceholder}
+          aria-label={`${label} ${t.colData}`}
+          aria-invalid={invalid}
+          onChange={(event) => setData(preset.id, event.target.value)}
+        />
+
         <button
           type="button"
-          className={styles.sendBtn}
-          disabled={!canSend || invalid || empty}
-          title={label}
-          onClick={() => void sendOnce(preset.id)}
+          className={styles.suffixBtn}
+          data-set={appending}
+          aria-expanded={suffixOpen}
+          aria-label={`${t.editSuffix}: ${label}`}
+          title={suffixTitle}
+          onClick={() => setSuffixOpen((open) => !open)}
         >
-          {label}
+          {suffixText}
         </button>
+
+        {renaming ? (
+          <input
+            ref={nameRef}
+            className={styles.nameInput}
+            value={draft}
+            maxLength={16}
+            aria-label={t.renamePreset}
+            onChange={(event) => setDraft(event.target.value)}
+            onBlur={commit}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                commit();
+              } else if (event.key === 'Escape') {
+                event.preventDefault();
+                setRenaming(false);
+              }
+            }}
+          />
+        ) : (
+          <button
+            type="button"
+            className={styles.sendBtn}
+            disabled={!canSend || invalid || empty}
+            title={label}
+            onClick={() => void sendOnce(preset.id)}
+          >
+            {label}
+          </button>
+        )}
+
+        <button
+          type="button"
+          className={styles.renameBtn}
+          title={t.renamePreset}
+          aria-label={`${t.renamePreset}: ${label}`}
+          onClick={() => {
+            setDraft(label);
+            setRenaming(true);
+          }}
+        >
+          ✎
+        </button>
+
+        <input
+          type="number"
+          className={`field field--sunk field--sm ${styles.intervalInput}`}
+          value={preset.intervalMs}
+          min={10}
+          step={10}
+          aria-label={`${label} ${t.colPeriod}`}
+          onChange={(event) => setInterval(preset.id, Number(event.target.value))}
+        />
+
+        <button
+          type="button"
+          className={`btn ${styles.loopBtn} ${looping ? 'btn--on' : ''}`}
+          aria-pressed={looping}
+          aria-label={`${looping ? t.stop : t.loop}: ${label}`}
+          disabled={!looping && (!canSend || invalid || empty)}
+          onClick={() => toggleLoop(preset.id)}
+        >
+          {looping ? '■' : '↻'}
+        </button>
+      </div>
+
+      {suffixOpen ? <SuffixEditor preset={preset} onClose={() => setSuffixOpen(false)} /> : null}
+    </>
+  );
+}
+
+interface SuffixEditorProps {
+  preset: Preset;
+  onClose: () => void;
+}
+
+/**
+ * 行下方展开的帧尾选择器，与单条发送同一套控件：TXT 选结束符，HEX 选校验和并
+ * 实时显示将要追加的字节。
+ *
+ * 在这之前预设是写死不追加的，于是「单条发送能一键加 CRC，存成预设就得自己手算」——
+ * 同一条报文换个地方发就变了样，属于能力不对等而不是取舍。
+ */
+function SuffixEditor({ preset, onClose }: SuffixEditorProps): React.JSX.Element {
+  const t = useMessages();
+  const fieldId = useId();
+  const selectRef = useRef<HTMLSelectElement>(null);
+  const setEol = usePresetStore((s) => s.setEol);
+  const setChecksum = usePresetStore((s) => s.setChecksum);
+
+  useEffect(() => {
+    selectRef.current?.focus();
+  }, []);
+
+  // 按当前载荷实时算，选之前就能看到会多出哪几个字节（与单条发送的预览同一个意思）
+  const preview = useMemo(() => {
+    const algorithm = findChecksum(preset.checksum);
+    if (!algorithm || preset.mode !== 'hex') return null;
+    const parsed = payloadToBytes(preset.data, 'hex');
+    return parsed.ok ? formatHex(checksumBytes(parsed.bytes, algorithm)) : null;
+  }, [preset.data, preset.mode, preset.checksum]);
+
+  return (
+    <div
+      className={styles.suffixBar}
+      onKeyDown={(event) => {
+        if (event.key !== 'Escape') return;
+        event.preventDefault();
+        onClose();
+      }}
+    >
+      <label className="label" htmlFor={fieldId}>
+        {preset.mode === 'text' ? t.eol : t.checksum}
+      </label>
+
+      {preset.mode === 'text' ? (
+        <select
+          id={fieldId}
+          ref={selectRef}
+          className="field field--sm"
+          value={preset.eol}
+          onChange={(event) => setEol(preset.id, event.target.value as EolKey)}
+        >
+          {EOL_KEYS.map((key) => (
+            <option key={key} value={key}>
+              {key === 'none' ? t.none : EOL_LABEL[key]}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <>
+          <select
+            id={fieldId}
+            ref={selectRef}
+            className={`field field--sm ${styles.suffixSelect}`}
+            value={preset.checksum}
+            onChange={(event) => setChecksum(preset.id, event.target.value)}
+          >
+            <option value="none">{t.none}</option>
+            {CHECKSUM_ALGORITHMS.map((algorithm) => (
+              <option key={algorithm.id} value={algorithm.id}>
+                {algorithm.label}
+              </option>
+            ))}
+          </select>
+          {preview !== null ? (
+            <span className={styles.suffixPreview} title={t.checksumAppendTip}>
+              {preview}
+            </span>
+          ) : null}
+        </>
       )}
-
-      <button
-        type="button"
-        className={styles.renameBtn}
-        title={t.renamePreset}
-        aria-label={`${t.renamePreset}: ${label}`}
-        onClick={() => {
-          setDraft(label);
-          setRenaming(true);
-        }}
-      >
-        ✎
-      </button>
-
-      <input
-        type="number"
-        className={`field field--sunk field--sm ${styles.intervalInput}`}
-        value={preset.intervalMs}
-        min={10}
-        step={10}
-        aria-label={`${label} ${t.colPeriod}`}
-        onChange={(event) => setInterval(preset.id, Number(event.target.value))}
-      />
-
-      <button
-        type="button"
-        className={`btn ${styles.loopBtn} ${looping ? 'btn--on' : ''}`}
-        aria-pressed={looping}
-        aria-label={`${looping ? t.stop : t.loop}: ${label}`}
-        disabled={!looping && (!canSend || invalid || empty)}
-        onClick={() => toggleLoop(preset.id)}
-      >
-        {looping ? '■' : '↻'}
-      </button>
     </div>
   );
 }

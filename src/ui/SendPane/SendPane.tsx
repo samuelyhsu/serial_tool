@@ -5,16 +5,10 @@ import { useConnectionStore } from '@/store/connectionStore';
 import { buildFrame, payloadToBytes, EOL_KEYS, type EolKey } from '@/store/payload';
 import { useSendStore } from '@/store/sendStore';
 import { isTaskRunning, SINGLE_TASK, useTasksStore } from '@/store/tasksStore';
+import { EOL_LABEL } from '../dataFormat';
 import { FormatToggle } from '../FormatToggle';
 import { useMessages } from '../useMessages';
 import styles from './SendPane.module.css';
-
-const EOL_LABELS: Record<EolKey, string> = {
-  none: '—',
-  crlf: '\\r\\n',
-  lf: '\\n',
-  cr: '\\r',
-};
 
 export function SendPane(): React.JSX.Element {
   const t = useMessages();
@@ -88,7 +82,7 @@ export function SendPane(): React.JSX.Element {
             >
               {EOL_KEYS.map((key) => (
                 <option key={key} value={key}>
-                  {key === 'none' ? t.none : EOL_LABELS[key]}
+                  {key === 'none' ? t.none : EOL_LABEL[key]}
                 </option>
               ))}
             </select>
