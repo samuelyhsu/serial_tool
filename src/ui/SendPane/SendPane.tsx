@@ -84,6 +84,11 @@ export function SendPane(): React.JSX.Element {
             ) : null}
           </>
         ) : null}
+
+        {/* 解析不通过时留一个占位，读数的位置才不会跟着报文的对错来回跳 */}
+        <span className={styles.byteCount} title={t.byteCountTip}>
+          {frame.ok ? `${frame.bytes.length} ${t.bytes}` : '—'}
+        </span>
       </div>
 
       <div className={styles.editor}>

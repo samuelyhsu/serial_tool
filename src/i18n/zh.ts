@@ -77,6 +77,7 @@ export const zh: Messages = {
   bytes: '字节',
   checksum: '校验和',
   checksumAppendTip: '按当前载荷实时计算，发送时自动追加在数据末尾',
+  byteCountTip: '真正写到串口上的字节数：转义已解析、校验和已计入',
 
   multiSend: '多条发送',
   import: '导入',

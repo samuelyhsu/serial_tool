@@ -80,6 +80,7 @@ export const en: Messages = {
   bytes: 'bytes',
   checksum: 'Checksum',
   checksumAppendTip: 'Computed live from the payload and appended automatically when sending',
+  byteCountTip: 'Bytes actually written to the port: escapes resolved, checksum included',
 
   multiSend: 'Multi send',
   import: 'Import',

@@ -93,6 +93,15 @@
   color: var(--red-text);
 }
 
+/* 真正写出去的字节数。靠右站着，TXT 模式下这一行只剩格式按钮时也不至于空一大片 */
+.byteCount {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--dim);
+  white-space: nowrap;
+}
+
 .checksumSelect {
   max-width: 210px;
 }

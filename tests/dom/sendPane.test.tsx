@@ -34,10 +34,31 @@ describe('SendPane', () => {
     expect(useSendStore.getState().frameBytes()).toHaveLength(9);
   });
 
-  /** 界面上不再显示字节数与格式标识，避免窄栏里堆无用信息。 */
-  it('标题行不显示字节数和格式标识', () => {
+  /**
+   * 「最终会发出去多少字节」是对着抓包看的时候唯一要对的那个数。
+   * TXT 下转义已经解析完、HEX 下校验和已经计入，界面上的读数必须是那一串的长度。
+   */
+  it('标题行显示真正会发出去的字节数', async () => {
     render(<SendPane />);
+    expect(screen.getByText('7 字节')).toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText('发送内容'), String.raw`\r\n`);
+    expect(screen.getByText('9 字节')).toBeInTheDocument();
+  });
+
+  it('报文解析不通过时读数位置留一个占位', async () => {
+    useSendStore.setState({ payload: '', mode: 'hex' });
+    render(<SendPane />);
+
+    await userEvent.type(screen.getByLabelText('发送内容'), 'ZZ');
+
+    expect(screen.getByText('—')).toBeInTheDocument();
     expect(screen.queryByText(/字节/)).not.toBeInTheDocument();
+  });
+
+  /** 格式标识仍然不显示：窄栏里堆无用信息。 */
+  it('标题行不显示格式标识', () => {
+    render(<SendPane />);
     expect(screen.queryByText(/· TXT/)).not.toBeInTheDocument();
   });
 
