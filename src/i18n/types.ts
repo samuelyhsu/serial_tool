@@ -103,7 +103,6 @@ export interface Messages {
 
   // 发送区
   readonly singleSend: string;
-  readonly eol: string;
   readonly send: string;
   readonly singlePlaceholder: string;
   readonly period: string;

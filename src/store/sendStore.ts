@@ -7,9 +7,7 @@ import { useLogStore } from './logStore';
 import {
   buildFrame,
   convertPayload,
-  EOL_KEYS,
   payloadToBytes,
-  type EolKey,
   type PayloadError,
   type PayloadMode,
 } from './payload';
@@ -21,8 +19,7 @@ const MODES: readonly PayloadMode[] = ['text', 'hex'];
 const DEFAULTS = {
   payload: 'AT+VER?',
   mode: 'text' as PayloadMode,
-  // 默认都不追加任何东西：不该在用户没要求时擅自改动报文
-  eol: 'none' as EolKey,
+  // 默认不追加任何东西：不该在用户没要求时擅自改动报文
   checksum: 'none' as ChecksumId,
   intervalMs: 1000,
 };
@@ -37,7 +34,6 @@ function loadSendState(): typeof DEFAULTS {
   return {
     payload: pickString(raw, 'payload', DEFAULTS.payload),
     mode: pickEnum(raw, 'mode', MODES, DEFAULTS.mode),
-    eol: pickEnum(raw, 'eol', EOL_KEYS, DEFAULTS.eol),
     checksum: checksum === 'none' || findChecksum(checksum) ? checksum : DEFAULTS.checksum,
     intervalMs: pickInt(raw, 'intervalMs', DEFAULTS.intervalMs, (v) => v >= 10),
   };
@@ -48,7 +44,6 @@ const restored = loadSendState();
 interface SendState {
   payload: string;
   mode: PayloadMode;
-  eol: EolKey;
   /** HEX 模式下自动追加的校验和；'none' 表示不追加。 */
   checksum: ChecksumId;
   intervalMs: number;
@@ -59,7 +54,6 @@ interface SendState {
 
   setPayload: (payload: string) => void;
   setMode: (mode: PayloadMode) => void;
-  setEol: (eol: EolKey) => void;
   setChecksum: (checksum: ChecksumId) => void;
   setIntervalMs: (intervalMs: number) => void;
   frameBytes: () => Uint8Array | null;
@@ -103,8 +97,6 @@ export const useSendStore = create<SendState>()((set, get) => ({
     });
   },
 
-  setEol: (eol) => set({ eol }),
-
   setChecksum: (checksum) => set({ checksum }),
 
   setIntervalMs: (intervalMs) => {
@@ -114,8 +106,8 @@ export const useSendStore = create<SendState>()((set, get) => ({
   },
 
   frameBytes: () => {
-    const { payload, mode, eol, checksum } = get();
-    const result = buildFrame(payload, mode, eol, checksum);
+    const { payload, mode, checksum } = get();
+    const result = buildFrame(payload, mode, checksum);
     return result.ok ? result.bytes : null;
   },
 
@@ -148,9 +140,9 @@ export const useSendStore = create<SendState>()((set, get) => ({
   },
 }));
 
-useSendStore.subscribe(({ payload, mode, eol, checksum, intervalMs }) => {
+useSendStore.subscribe(({ payload, mode, checksum, intervalMs }) => {
   // 分层作用域：在 A 页面打字不该让 B 页面的发送框跟着变（见 storage.ts）
-  saveSoon(SEND_KEY, { payload, mode, eol, checksum, intervalMs }, 'layered');
+  saveSoon(SEND_KEY, { payload, mode, checksum, intervalMs }, 'layered');
 
   // 循环期间改报文要即时生效。浏览器侧靠执行体重读状态自然就有；
   // 交给宿主执行时内容在那一头，必须显式推过去。

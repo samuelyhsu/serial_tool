@@ -16,17 +16,6 @@ export const FORMAT_LABEL = {
 export type DataFormat = keyof typeof FORMAT_LABEL;
 
 /**
- * 结束符标签。与 TXT / HEX 同理：`\r\n` 是转义写法而不是可翻译文案。
- * 单条发送与每条预设共用，两处显示同一个词。
- */
-export const EOL_LABEL = {
-  none: '—',
-  crlf: '\\r\\n',
-  lf: '\\n',
-  cr: '\\r',
-} as const;
-
-/**
  * 把报文解析错误翻成一句话。
  *
  * 分派写在这里而不是 i18n 目录里：两种模式各有各的解析器，但「该说哪一种话」

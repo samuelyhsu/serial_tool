@@ -13,7 +13,6 @@ describe('SendPane', () => {
     useSendStore.setState({
       payload: 'AT+VER?',
       mode: 'text',
-      eol: 'none',
       checksum: 'none',
       intervalMs: 1000,
       parseError: null,
@@ -28,8 +27,8 @@ describe('SendPane', () => {
     expect(useSendStore.getState().frameBytes()).toHaveLength(7);
   });
 
-  it('选了结束符后计入发送字节', () => {
-    useSendStore.setState({ eol: 'crlf' });
+  it('报文里的转义计入发送字节', () => {
+    useSendStore.setState({ payload: String.raw`AT+VER?\r\n` });
     render(<SendPane />);
     // "AT+VER?" 7 字节 + CRLF 2 字节
     expect(useSendStore.getState().frameBytes()).toHaveLength(9);

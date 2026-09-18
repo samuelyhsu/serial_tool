@@ -69,7 +69,6 @@ export const zh: Messages = {
     `更早的 ${count} 条未在此显示 —— 它们仍在缓冲里，点「保存」可导出完整日志`,
 
   singleSend: '单条发送',
-  eol: '结束符',
   send: '发送',
   singlePlaceholder: '输入要发送的内容，Ctrl+Enter 发送',
   period: '周期',

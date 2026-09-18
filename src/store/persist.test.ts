@@ -101,15 +101,6 @@ describe('发送区持久化', () => {
     expect(restored.intervalMs).toBe(250);
   });
 
-  it('TXT 结束符刷新后还在', async () => {
-    let app = await reload();
-    app.send.useSendStore.getState().setEol('crlf');
-    app.persist.flushPersist();
-
-    app = await reload();
-    expect(app.send.useSendStore.getState().eol).toBe('crlf');
-  });
-
   it('目录里已不存在的校验和退回 none', async () => {
     localStorage.setItem('wst.sendPane', JSON.stringify({ checksum: 'crc16-nonexistent' }));
     const app = await reload();

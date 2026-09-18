@@ -72,7 +72,6 @@ export const en: Messages = {
     `${count} earlier entries are not shown here — they are still buffered; use Save to export the full log`,
 
   singleSend: 'Single send',
-  eol: 'EOL',
   send: 'Send',
   singlePlaceholder: 'Type payload, Ctrl+Enter to send',
   period: 'Every',

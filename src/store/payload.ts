@@ -54,37 +54,22 @@ export function convertPayload(data: string, from: PayloadMode, to: PayloadMode)
   };
 }
 
-export const EOL_SEQUENCES = {
-  none: '',
-  crlf: '\r\n',
-  lf: '\n',
-  cr: '\r',
-} as const;
-
-export type EolKey = keyof typeof EOL_SEQUENCES;
-export const EOL_KEYS = Object.keys(EOL_SEQUENCES) as EolKey[];
-
 /**
  * 组装最终要写出去的字节。
  *
- * 两种模式各有自己的「帧尾」，互斥：
- *  - TXT：追加结束符（CR/LF 之类），在编码之前拼进字符串；
- *  - HEX：追加校验和，按所选算法对**载荷字节**计算，再按该算法的约定字节序展开。
- *
- * 两者默认都是「无」—— 工具不该在用户没要求时擅自往报文里塞字节。
+ * 只有 HEX 还有「帧尾」这回事 —— 追加校验和，按所选算法对**载荷字节**计算，
+ * 再按该算法的约定字节序展开，默认是「无」。TXT 不需要：要追加什么直接写进
+ * 报文里的转义（`AT\r\n`），而且那样连分隔符在中间的协议也表达得出来。
  */
 export function buildFrame(
   data: string,
   mode: PayloadMode,
-  eol: EolKey = 'none',
   checksum: ChecksumId = 'none',
 ): BytesResult {
-  if (mode === 'text') return payloadToBytes(data + EOL_SEQUENCES[eol], 'text');
-
-  const payload = payloadToBytes(data, 'hex');
+  const payload = payloadToBytes(data, mode);
   if (!payload.ok) return payload;
 
-  const algorithm = findChecksum(checksum);
+  const algorithm = mode === 'hex' ? findChecksum(checksum) : undefined;
   if (!algorithm) return payload;
 
   const suffix = checksumBytes(payload.bytes, algorithm);

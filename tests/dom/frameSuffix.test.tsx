@@ -22,7 +22,6 @@ describe('帧尾控件', () => {
     useSendStore.setState({
       payload: 'AT',
       mode: 'text',
-      eol: 'none',
       checksum: 'none',
       parseError: null,
       modeIssue: null,
@@ -31,23 +30,26 @@ describe('帧尾控件', () => {
 
   afterEach(cleanup);
 
-  it('TXT 模式显示结束符，不显示校验和', () => {
+  /**
+   * TXT 要追加什么直接写进报文里的转义（`AT\r\n`），所以那边不再有帧尾控件 ——
+   * 挂一个只能往末尾加东西的下拉框，反而比转义能表达的少。
+   */
+  it('TXT 模式没有帧尾控件', () => {
     render(<SendPane />);
-    expect(screen.getByLabelText('结束符')).toBeInTheDocument();
     expect(screen.queryByLabelText('校验和')).not.toBeInTheDocument();
-  });
-
-  it('HEX 模式显示校验和，不显示结束符', () => {
-    useSendStore.setState({ mode: 'hex', payload: '01 03' });
-    render(<SendPane />);
-    expect(screen.getByLabelText('校验和')).toBeInTheDocument();
     expect(screen.queryByLabelText('结束符')).not.toBeInTheDocument();
   });
 
-  it('结束符默认无，不往载荷后面加任何字节', () => {
+  it('HEX 模式显示校验和', () => {
+    useSendStore.setState({ mode: 'hex', payload: '01 03' });
     render(<SendPane />);
-    expect(screen.getByLabelText('结束符')).toHaveValue('none');
-    expect(bytesOf()).toEqual([0x41, 0x54]);
+    expect(screen.getByLabelText('校验和')).toBeInTheDocument();
+  });
+
+  it('TXT 里的转义算进发送字节', async () => {
+    render(<SendPane />);
+    await userEvent.type(screen.getByLabelText('发送内容'), '\\r\\n');
+    expect(bytesOf()).toEqual([0x41, 0x54, 0x0d, 0x0a]);
   });
 
   it('校验和默认无，不往载荷后面加任何字节', () => {
@@ -55,12 +57,6 @@ describe('帧尾控件', () => {
     render(<SendPane />);
     expect(screen.getByLabelText('校验和')).toHaveValue('none');
     expect(bytesOf()).toEqual([0x01, 0x03, 0x00, 0x00, 0x00, 0x02]);
-  });
-
-  it('选了结束符后计入发送字节', async () => {
-    render(<SendPane />);
-    await userEvent.selectOptions(screen.getByLabelText('结束符'), 'crlf');
-    expect(bytesOf()).toEqual([0x41, 0x54, 0x0d, 0x0a]);
   });
 
   it('校验和下拉框列出全部算法', () => {

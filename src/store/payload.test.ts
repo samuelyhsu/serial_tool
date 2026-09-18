@@ -85,15 +85,14 @@ describe('convertPayload', () => {
 });
 
 describe('buildFrame', () => {
-  it('文本模式追加结束符', () => {
-    expect(bytes(buildFrame('AT', 'text', 'crlf'))).toEqual([0x41, 0x54, 0x0d, 0x0a]);
-    expect(bytes(buildFrame('AT', 'text', 'lf'))).toEqual([0x41, 0x54, 0x0a]);
-    expect(bytes(buildFrame('AT', 'text', 'cr'))).toEqual([0x41, 0x54, 0x0d]);
-    expect(bytes(buildFrame('AT', 'text', 'none'))).toEqual([0x41, 0x54]);
+  /** 结束符不再是一个设置项：要追加什么直接写进报文里的转义。 */
+  it('文本模式按转义算字节，不额外追加任何东西', () => {
+    expect(bytes(buildFrame(String.raw`AT\r\n`, 'text'))).toEqual([0x41, 0x54, 0x0d, 0x0a]);
+    expect(bytes(buildFrame('AT', 'text'))).toEqual([0x41, 0x54]);
   });
 
-  it('HEX 模式不追加结束符', () => {
-    expect(bytes(buildFrame('01 02', 'hex', 'crlf'))).toEqual([1, 2]);
+  it('校验和只对 HEX 生效，TXT 传了也不追加', () => {
+    expect(bytes(buildFrame('AT', 'text', 'crc16-modbus'))).toEqual([0x41, 0x54]);
   });
 
   it('HEX 非法时不产出字节', () => {
