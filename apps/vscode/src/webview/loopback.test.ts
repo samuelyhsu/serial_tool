@@ -199,7 +199,9 @@ async function loopback(options: { prefs?: Record<string, unknown> } = {}): Prom
   };
 }
 
-beforeEach(() => {
+beforeEach(async () => {
+  // 同 store/tasks.test.ts：攒批中的写入会跨用例落盘，先丢掉再清存储
+  (await import('@/lib/persist')).__resetPersistForTests();
   localStorage.clear();
   sessionStorage.clear();
 });
@@ -534,5 +536,72 @@ describe('webview ⇄ 扩展宿主 回环', () => {
     expect(app.log.allEntries().some((entry) => entry.notice?.code === 'connection-lost')).toBe(
       true,
     );
+  });
+
+  /** 把两条预设摆进序列，其余全部取消勾选。 */
+  function armSequence(app: Loopback): void {
+    const store = app.preset.usePresetStore;
+    for (const item of store.getState().presets) store.getState().setInSequence(item.id, false);
+    const [a, b] = store.getState().presets;
+    store.getState().setData(a!.id, 'AA');
+    store.getState().setData(b!.id, 'BB');
+    store.getState().setInSequence(a!.id, true);
+    store.getState().setInSequence(b!.id, true);
+  }
+
+  function sentTexts(app: Loopback): string[] {
+    const decoder = new TextDecoder();
+    return app.transport().written.map((bytes) => decoder.decode(bytes));
+  }
+
+  /**
+   * 「跑 N 遍就停」的判定必须也在宿主那一侧。
+   *
+   * 只在 webview 里数遍数的话，面板一隐藏计数就随它一起没了，序列会一直发到用户
+   * 切回来为止 —— 而限定遍数要防的正是这件事。两侧的单元测试对此一律是绿的。
+   */
+  it('面板被隐藏后，跑够遍数的序列自己停了下来', async () => {
+    const app = await loopback();
+    app.connection.useConnectionStore.getState().selectPort('COM3');
+    await app.connection.useConnectionStore.getState().toggleConnection();
+    await app.settle();
+
+    armSequence(app);
+    app.preset.usePresetStore.getState().setSequenceGapMs(20);
+    app.preset.usePresetStore.getState().setSequenceRepeat(2);
+    app.preset.usePresetStore.getState().toggleSequence();
+    await app.settle();
+
+    app.hidePanel();
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    expect(sentTexts(app)).toEqual(['AA', 'BB', 'AA', 'BB']);
+  });
+
+  /**
+   * 每步延时同理：它随 frames 一起交出去，宿主照着走。
+   * 只在 webview 侧算的话，面板一隐藏就退回统一间隔 —— 序列还在跑，节奏却变了，
+   * 表现出来是「挂了一下午回来，设备被刷屏刷挂了」。
+   */
+  it('面板被隐藏后，每步延时仍按每条预设自己的周期走', async () => {
+    const app = await loopback();
+    app.connection.useConnectionStore.getState().selectPort('COM3');
+    await app.connection.useConnectionStore.getState().toggleConnection();
+    await app.settle();
+
+    armSequence(app);
+    const [a, b] = app.preset.usePresetStore.getState().presets;
+    app.preset.usePresetStore.getState().setInterval(a!.id, 500);
+    app.preset.usePresetStore.getState().setInterval(b!.id, 500);
+    // 统一间隔故意调得极小：退回它的话 200ms 里会发出去十几条
+    app.preset.usePresetStore.getState().setSequenceGapMs(10);
+    app.preset.usePresetStore.getState().setSequenceStep('each');
+    app.preset.usePresetStore.getState().toggleSequence();
+    await app.settle();
+
+    app.hidePanel();
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    expect(sentTexts(app)).toEqual(['AA']);
   });
 });

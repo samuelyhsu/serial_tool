@@ -14,6 +14,7 @@ import {
   tabPresets,
   usePresetStore,
   type Preset,
+  type SequenceStep,
 } from '@/store/presetStore';
 import { isTaskRunning, presetTask, SEQUENCE_TASK, useTasksStore } from '@/store/tasksStore';
 import { EOL_LABEL, shortChecksumLabel } from '../dataFormat';
@@ -24,7 +25,6 @@ import styles from './PresetPane.module.css';
 
 export function PresetPane(): React.JSX.Element {
   const t = useMessages();
-  const gapId = useId();
   const tabsId = useId();
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -35,9 +35,13 @@ export function PresetPane(): React.JSX.Element {
   const replaceAll = usePresetStore((s) => s.replaceAll);
   const exportPayload = usePresetStore((s) => s.exportPayload);
   const toggleSequence = usePresetStore((s) => s.toggleSequence);
-  // 间隔归 store 管，才能跟着预设一起持久化
+  // 节奏三项归 store 管，才能跟着预设一起持久化
   const gapMs = usePresetStore((s) => s.sequenceGapMs);
   const setGapMs = usePresetStore((s) => s.setSequenceGapMs);
+  const step = usePresetStore((s) => s.sequenceStep);
+  const setStep = usePresetStore((s) => s.setSequenceStep);
+  const repeat = usePresetStore((s) => s.sequenceRepeat);
+  const setRepeat = usePresetStore((s) => s.setSequenceRepeat);
 
   const running = useTasksStore((s) => s.running);
   const stopAll = useTasksStore((s) => s.stopAll);
@@ -144,19 +148,42 @@ export function PresetPane(): React.JSX.Element {
         </span>
 
         <div className={styles.footerRight}>
-          <label className="label" htmlFor={gapId}>
-            {t.gap}
-          </label>
+          {/* 步间隔的两种取法放在同一个下拉里，选「每条」时右边的统一间隔自动失效 ——
+              两个各自独立的控件会让人以为它们叠加 */}
+          <select
+            className={`field field--sm ${styles.stepSelect}`}
+            aria-label={t.gapMode}
+            value={step}
+            onChange={(event) => setStep(event.target.value as SequenceStep)}
+          >
+            <option value="gap">{t.gapModeUniform}</option>
+            <option value="each">{t.gapModeEach}</option>
+          </select>
           <input
-            id={gapId}
             type="number"
             className={`field field--sunk field--sm ${styles.gapInput}`}
             value={gapMs}
             min={10}
             step={10}
+            aria-label={t.gap}
+            disabled={step === 'each'}
+            title={step === 'each' ? t.gapModeEachHint : undefined}
             onChange={(event) => setGapMs(Number(event.target.value))}
           />
           <span className="label">ms</span>
+          <span className="label" aria-hidden="true">
+            ×
+          </span>
+          <input
+            type="number"
+            className={`field field--sunk field--sm ${styles.repeatInput}`}
+            value={repeat}
+            min={0}
+            step={1}
+            aria-label={t.repeat}
+            title={t.repeatHint}
+            onChange={(event) => setRepeat(Number(event.target.value))}
+          />
           {/* 按钮上只放「循环 / 停止」，完整语义交给 aria-label，否则一行放不下 */}
           <button
             type="button"

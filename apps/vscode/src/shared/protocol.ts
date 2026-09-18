@@ -1,4 +1,5 @@
 import type { FramingConfig } from '@/core/framing/frameAssembler';
+import type { TaskFrame } from '@/core/scheduler/framePlan';
 import type { SessionNotice } from '@/core/session/notices';
 import type { Direction, SessionState } from '@/core/session/serialSession';
 import type { PortDescriptor } from '@/core/transport/portDescriptor';
@@ -56,14 +57,26 @@ export type RequestBody =
    * 用**帧列表**而不是单帧来表达：单条循环、单条预设循环是长度为 1 的列表，
    * 顺序循环则是按勾选顺序排好的多条，宿主每一拍取下一条。一种形状覆盖三种用法。
    */
-  | { method: 'tasks.start'; taskId: string; frames: Uint8Array[]; intervalMs: number }
+  | {
+      method: 'tasks.start';
+      taskId: string;
+      frames: TaskFrame[];
+      intervalMs: number;
+      repeat?: number;
+    }
   /**
    * 改运行中任务的内容或周期。
    *
    * 必须能改内容：浏览器版里每一拍都重读最新报文，用户在循环期间改一个字节即时生效。
    * 换成宿主执行后若把内容冻在启动那一刻，这条行为就悄悄丢了。
    */
-  | { method: 'tasks.update'; taskId: string; frames?: Uint8Array[]; intervalMs?: number }
+  | {
+      method: 'tasks.update';
+      taskId: string;
+      frames?: TaskFrame[];
+      intervalMs?: number;
+      repeat?: number;
+    }
   | { method: 'tasks.stop'; taskId: string }
   | { method: 'tasks.stopAll' };
 

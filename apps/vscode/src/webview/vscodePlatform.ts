@@ -129,7 +129,7 @@ export function createVsCodePlatform(deps: VsCodePlatformDeps): VsCodePlatform {
     start: (id, spec) => {
       if (spec.frames !== undefined) {
         // 交给宿主：面板被隐藏、甚至切到别的编辑器组，它都照跑
-        void client.startTask(id, spec.frames, spec.intervalMs).catch(() => undefined);
+        void client.startTask(id, spec.frames, spec.intervalMs, spec.repeat).catch(() => undefined);
       } else {
         localScheduler.start(id, spec);
         emitTasks();

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { findChecksum, type ChecksumId } from '@/core/checksum';
 import type { HexParseError } from '@/core/codec/hex';
+import { FramePlan, type TaskFrame } from '@/core/scheduler/framePlan';
 import { BUILTIN_PRESET_KEYS, type BuiltinPresetKey, type Messages } from '@/i18n/types';
 import { saveSoon } from '@/lib/persist';
 import { readLayeredJson, readStoredJson } from '@/lib/storage';
@@ -150,9 +151,24 @@ function blankTab(): PresetCollection {
 }
 
 const PRESETS_KEY = 'presets';
-/** 顺序循环的间隔单独存：它不是预设内容，不该混进导出文件的格式里。 */
+/** 顺序循环的节奏单独存：它不是预设内容，不该混进导出文件的格式里。 */
 const SEQUENCE_GAP_KEY = 'sequenceGapMs';
+const SEQUENCE_REPEAT_KEY = 'sequenceRepeat';
+const SEQUENCE_STEP_KEY = 'sequenceStep';
 const DEFAULT_SEQUENCE_GAP_MS = 300;
+
+/**
+ * 顺序循环两步之间等多久。
+ *
+ *  - `gap`：统一用 sequenceGapMs（默认，也是一直以来唯一的行为）；
+ *  - `each`：各用各条预设自己的周期。上电初始化那种「发完这条要等模块重启两秒、
+ *    下一条紧接着发」的序列，统一间隔表达不了。
+ *
+ * 要有这个开关而不是直接改成 each，是因为每行的周期框默认都是 1000ms，而多数人
+ * 把 gap 调到了几十毫秒 —— 一声不响换过去等于把所有人现成的序列拖慢十几倍。
+ */
+export type SequenceStep = 'gap' | 'each';
+const SEQUENCE_STEPS: readonly SequenceStep[] = ['gap', 'each'];
 
 /**
  * 当前选中的分组按分层作用域存（见 lib/storage.ts）：每个页面记自己的，新开的页面沿用
@@ -174,6 +190,17 @@ function loadSequenceGap(): number {
   return typeof raw === 'number' && Number.isInteger(raw) && raw >= 10
     ? raw
     : DEFAULT_SEQUENCE_GAP_MS;
+}
+
+/** 不设上限：「跑 5000 遍」是老化测试的常规用法。 */
+function loadSequenceRepeat(): number {
+  const raw = readStoredJson<unknown>(SEQUENCE_REPEAT_KEY, null);
+  return typeof raw === 'number' && Number.isInteger(raw) && raw >= 0 ? raw : 0;
+}
+
+function loadSequenceStep(): SequenceStep {
+  const raw = readStoredJson<unknown>(SEQUENCE_STEP_KEY, null);
+  return SEQUENCE_STEPS.includes(raw as SequenceStep) ? (raw as SequenceStep) : 'gap';
 }
 
 /** 第 index 组的那 PRESET_TAB_SIZE 条。 */
@@ -254,8 +281,11 @@ interface PresetState {
   tabs: readonly PresetTab[];
   /** 当前显示的分组，从 0 开始。 */
   activeTab: number;
-  /** 顺序循环两条之间的间隔。 */
+  /** 顺序循环两条之间的间隔；sequenceStep 为 'each' 时只当作没单独定周期那些的兜底。 */
   sequenceGapMs: number;
+  /** 整条队列跑几遍，0 表示一直跑。 */
+  sequenceRepeat: number;
+  sequenceStep: SequenceStep;
   /** 每条预设当前的问题（HEX 解析失败 / 模式切换被拒），按 id 索引。 */
   issues: Readonly<Record<string, PresetIssue>>;
 
@@ -270,6 +300,8 @@ interface PresetState {
   sendOnce: (id: string) => Promise<void>;
   toggleLoop: (id: string) => void;
   setSequenceGapMs: (gapMs: number) => void;
+  setSequenceRepeat: (repeat: number) => void;
+  setSequenceStep: (step: SequenceStep) => void;
   toggleSequence: () => void;
 
   selectTab: (index: number) => void;
@@ -300,8 +332,6 @@ function withIssue(
   return next;
 }
 
-let sequenceCursor = 0;
-
 export const usePresetStore = create<PresetState>()((set, get) => {
   const patch = (id: string, changes: Partial<Preset>): void =>
     set((state) => {
@@ -322,6 +352,8 @@ export const usePresetStore = create<PresetState>()((set, get) => {
     tabs: initial.tabs,
     activeTab: loadActiveTab(initial.tabs.length),
     sequenceGapMs: loadSequenceGap(),
+    sequenceRepeat: loadSequenceRepeat(),
+    sequenceStep: loadSequenceStep(),
     issues: {},
 
     // 用户一改名就切断与内置翻译的关联，语言切换不会再覆盖他的命名
@@ -390,7 +422,19 @@ export const usePresetStore = create<PresetState>()((set, get) => {
       });
     },
 
-    setSequenceGapMs: (gapMs) => set({ sequenceGapMs: Math.max(10, Math.round(gapMs) || 10) }),
+    setSequenceGapMs: (gapMs) => {
+      const clamped = Math.max(10, Math.round(gapMs) || 10);
+      set({ sequenceGapMs: clamped });
+      useTasksStore.getState().update(SEQUENCE_TASK, { intervalMs: clamped });
+    },
+
+    setSequenceRepeat: (repeat) => {
+      const clamped = Math.max(0, Math.round(repeat) || 0);
+      set({ sequenceRepeat: clamped });
+      useTasksStore.getState().update(SEQUENCE_TASK, { repeat: clamped });
+    },
+
+    setSequenceStep: (step) => set({ sequenceStep: step }),
 
     toggleSequence: () => {
       const tasks = useTasksStore.getState();
@@ -404,19 +448,23 @@ export const usePresetStore = create<PresetState>()((set, get) => {
       }
       if (!get().presets.some((preset) => preset.inSequence)) return;
 
-      sequenceCursor = 0;
+      // 每一拍都按最新状态重建：循环期间增删预设、改内容、改遍数都即时生效。
+      // 交给宿主执行时同一个计划由下面的订阅推过去，两侧算的是同一套。
+      const plan = (): FramePlan =>
+        new FramePlan(sequenceFrames(get().presets, get().sequenceStep), get().sequenceRepeat);
+
       tasks.start(SEQUENCE_TASK, {
         intervalMs: get().sequenceGapMs,
-        // 顺序循环也能交给宿主：把整条队列按勾选顺序交出去，它每一拍取下一条。
-        // 队列在循环期间变化时由下面的订阅重新推送，游标不会跳回第一条。
-        frames: sequenceFrames(get().presets),
-        run: async () => {
-          // 每次都取最新的勾选列表，循环期间增删预设不会错位
-          const queue = get().presets.filter((preset) => preset.inSequence);
-          if (queue.length === 0) return;
-          const preset = queue[sequenceCursor % queue.length]!;
-          sequenceCursor += 1;
-          await get().sendOnce(preset.id);
+        frames: sequenceFrames(get().presets, get().sequenceStep),
+        repeat: get().sequenceRepeat,
+        nextIntervalMs: (tick) => plan().delayBefore(tick),
+        run: async (tick) => {
+          const current = plan();
+          const frame = current.at(tick);
+          if (!frame) return;
+          await useConnectionStore.getState().send(frame.bytes);
+          // 停在最后一帧发完的那一刻，而不是等下一拍到点（见 FramePlan.isFinal）
+          if (current.isFinal(tick)) useTasksStore.getState().stop(SEQUENCE_TASK);
         },
       });
     },
@@ -635,27 +683,41 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-/** 一条预设对应的帧。内容解析不通过时没有帧可发。 */
-function presetFrames(preset: Preset): Uint8Array[] {
+/** 一条预设最终写出去的字节。内容解析不通过时没有帧可发。 */
+function presetBytes(preset: Preset): Uint8Array | null {
   const result = buildFrame(preset.data, preset.mode, preset.eol, preset.checksum);
-  return result.ok ? [result.bytes] : [];
+  return result.ok ? result.bytes : null;
 }
 
-/** 顺序循环的队列：按勾选顺序排好的多条帧。 */
-function sequenceFrames(presets: readonly Preset[]): Uint8Array[] {
-  return presets.filter((preset) => preset.inSequence).flatMap(presetFrames);
+function presetFrames(preset: Preset): TaskFrame[] {
+  const bytes = presetBytes(preset);
+  return bytes ? [{ bytes }] : [];
 }
 
-usePresetStore.subscribe(({ presets, tabs, activeTab, sequenceGapMs }) => {
-  saveSoon(PRESETS_KEY, serializePresets(tabs, presets));
-  saveSoon(SEQUENCE_GAP_KEY, sequenceGapMs);
-  saveSoon(ACTIVE_TAB_KEY, activeTab, 'layered');
+/** 顺序循环的队列：按勾选顺序排好，each 模式下每条各带自己的步延时。 */
+function sequenceFrames(presets: readonly Preset[], step: SequenceStep): TaskFrame[] {
+  return presets.flatMap((preset) => {
+    if (!preset.inSequence) return [];
+    const bytes = presetBytes(preset);
+    if (!bytes) return [];
+    return [step === 'each' ? { bytes, delayMs: preset.intervalMs } : { bytes }];
+  });
+}
 
-  // 循环期间改预设内容 / 增删队列成员要即时生效。浏览器侧靠执行体重读状态自然就有；
-  // 交给宿主执行时内容在那一头，必须显式推过去。
-  const tasks = useTasksStore.getState();
-  tasks.update(SEQUENCE_TASK, { frames: sequenceFrames(presets) });
-  for (const preset of presets) {
-    tasks.update(presetTask(preset.id), { frames: presetFrames(preset) });
-  }
-});
+usePresetStore.subscribe(
+  ({ presets, tabs, activeTab, sequenceGapMs, sequenceRepeat, sequenceStep }) => {
+    saveSoon(PRESETS_KEY, serializePresets(tabs, presets));
+    saveSoon(SEQUENCE_GAP_KEY, sequenceGapMs);
+    saveSoon(SEQUENCE_REPEAT_KEY, sequenceRepeat);
+    saveSoon(SEQUENCE_STEP_KEY, sequenceStep);
+    saveSoon(ACTIVE_TAB_KEY, activeTab, 'layered');
+
+    // 循环期间改预设内容 / 增删队列成员要即时生效。浏览器侧靠执行体重读状态自然就有；
+    // 交给宿主执行时内容在那一头，必须显式推过去。
+    const tasks = useTasksStore.getState();
+    tasks.update(SEQUENCE_TASK, { frames: sequenceFrames(presets, sequenceStep) });
+    for (const preset of presets) {
+      tasks.update(presetTask(preset.id), { frames: presetFrames(preset) });
+    }
+  },
+);

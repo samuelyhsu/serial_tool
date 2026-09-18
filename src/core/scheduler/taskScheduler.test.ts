@@ -142,4 +142,59 @@ describe('TaskScheduler', () => {
     await vi.advanceTimersByTimeAsync(100);
     expect(run).not.toHaveBeenCalled();
   });
+
+  /**
+   * 变长间隔靠 nextIntervalMs，而排期总是**领先执行一拍** —— 排第 k 拍时第 k-1 拍
+   * 还没跑。问错拍号的话整条序列会整体错开一位：每一帧都按上一帧的延时发出去，
+   * 而次数、顺序、总时长全都对得上，只有示波器上看得出来。
+   */
+  it('第几拍问的就是第几拍的间隔，与执行体看到的拍号一致', async () => {
+    const seen: { tick: number; at: number }[] = [];
+    // 三个差异明显的值：错开一位时时间线完全对不上
+    const delays = [10, 50, 200];
+    const started = Date.now();
+
+    scheduler.start('seq', {
+      intervalMs: 1000,
+      nextIntervalMs: (tick) => delays[tick % delays.length],
+      run: (tick) => {
+        seen.push({ tick, at: Date.now() - started });
+      },
+    });
+
+    await vi.advanceTimersByTimeAsync(300);
+
+    expect(seen.map((item) => item.tick)).toEqual([0, 1, 2, 3]);
+    // 第 0 拍立即；此后每一拍之前等的是它自己那一份
+    expect(seen.map((item) => item.at)).toEqual([0, 50, 250, 260]);
+  });
+
+  it('nextIntervalMs 返回 undefined 的那一拍回落到任务周期', async () => {
+    const seen: number[] = [];
+    const started = Date.now();
+
+    scheduler.start('mixed', {
+      intervalMs: 100,
+      nextIntervalMs: (tick) => (tick === 1 ? 20 : undefined),
+      run: () => {
+        seen.push(Date.now() - started);
+      },
+    });
+
+    await vi.advanceTimersByTimeAsync(200);
+    expect(seen).toEqual([0, 20, 120]);
+  });
+
+  /** 「跑 N 遍就停」由执行体自己在最后一帧发完时停掉，不需要调度器认识遍数。 */
+  it('执行体可以在自己那一拍里把任务停掉', async () => {
+    const run = vi.fn((tick: number) => {
+      if (tick === 2) scheduler.stop('limited');
+    });
+
+    scheduler.start('limited', { intervalMs: 10, run });
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(run).toHaveBeenCalledTimes(3);
+    expect(scheduler.isRunning('limited')).toBe(false);
+  });
 });

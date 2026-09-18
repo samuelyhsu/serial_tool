@@ -126,6 +126,13 @@ export interface Messages {
   readonly dataPlaceholder: string;
   readonly sequenceLoop: string;
   readonly gap: string;
+  /** 步间隔的取法：统一一个值，还是各用各条预设的周期。 */
+  readonly gapMode: string;
+  readonly gapModeUniform: string;
+  readonly gapModeEach: string;
+  readonly gapModeEachHint: string;
+  readonly repeat: string;
+  readonly repeatHint: string;
   readonly startSequence: string;
   readonly stopSequence: string;
   readonly stopAll: string;

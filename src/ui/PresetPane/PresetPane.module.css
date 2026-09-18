@@ -295,7 +295,21 @@
 }
 
 .gapInput {
-  width: 66px;
+  width: 60px;
+}
+
+.gapInput:disabled {
+  opacity: 0.4;
+}
+
+.stepSelect {
+  width: 64px;
+  padding-right: 2px;
+}
+
+.repeatInput {
+  width: 44px;
+  text-align: right;
 }
 
 .seqBtn {

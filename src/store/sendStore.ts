@@ -143,7 +143,7 @@ export const useSendStore = create<SendState>()((set, get) => ({
       // frames 交给会话所在的那一侧执行 —— 在 VS Code 里就是扩展宿主进程，
       // 面板被隐藏时 webview 连同定时器一起销毁，只有它能让循环继续跑下去。
       // 报文当前解析不通过就先给空列表，改对了由下面的订阅补进去。
-      frames: bytes ? [bytes] : [],
+      frames: bytes ? [{ bytes }] : [],
       // 浏览器侧的执行体：每次触发都读最新内容，循环期间改报文即时生效
       run: () => get().sendOnce(),
     });
@@ -157,5 +157,5 @@ useSendStore.subscribe(({ payload, mode, eol, checksum, intervalMs }) => {
   // 循环期间改报文要即时生效。浏览器侧靠执行体重读状态自然就有；
   // 交给宿主执行时内容在那一头，必须显式推过去。
   const bytes = useSendStore.getState().frameBytes();
-  useTasksStore.getState().update(SINGLE_TASK, { frames: bytes ? [bytes] : [] });
+  useTasksStore.getState().update(SINGLE_TASK, { frames: bytes ? [{ bytes }] : [] });
 });

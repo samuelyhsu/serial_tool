@@ -1,4 +1,5 @@
 import type { FramingConfig } from '@/core/framing/frameAssembler';
+import type { TaskFrame } from '@/core/scheduler/framePlan';
 import type { ConnectionOptions } from '@/core/transport/types';
 import type { HostEvent, HostMessage, HostRequest, RequestBody } from '../shared/protocol';
 
@@ -148,11 +149,21 @@ export class SessionClient {
 
   /* ---------------- 周期发送（在宿主进程里跑） ---------------- */
 
-  startTask(taskId: string, frames: Uint8Array[], intervalMs: number): Promise<void> {
-    return this.#call({ method: 'tasks.start', taskId, frames, intervalMs }).then(() => undefined);
+  startTask(
+    taskId: string,
+    frames: TaskFrame[],
+    intervalMs: number,
+    repeat?: number,
+  ): Promise<void> {
+    return this.#call({ method: 'tasks.start', taskId, frames, intervalMs, repeat }).then(
+      () => undefined,
+    );
   }
 
-  updateTask(taskId: string, patch: { frames?: Uint8Array[]; intervalMs?: number }): Promise<void> {
+  updateTask(
+    taskId: string,
+    patch: { frames?: TaskFrame[]; intervalMs?: number; repeat?: number },
+  ): Promise<void> {
     return this.#call({ method: 'tasks.update', taskId, ...patch }).then(() => undefined);
   }
 

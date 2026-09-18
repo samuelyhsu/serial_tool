@@ -4,6 +4,7 @@ import {
   LOG_CAPACITY_PREF_KEY,
   parseLogCapacity,
 } from '@/core/buffer/logCapacity';
+import { FramePlan, type TaskFrame } from '@/core/scheduler/framePlan';
 import { TaskScheduler } from '@/core/scheduler/taskScheduler';
 import type { SendFailure } from '@/core/session/notices';
 import { SerialSession, type SessionState } from '@/core/session/serialSession';
@@ -70,7 +71,7 @@ export class SessionHost {
    * 换内容只是改这里一个值，不必停掉再重启任务 —— 重启会把节拍打回原点，
    * 用户改一个字节就多发一帧。
    */
-  readonly #taskFrames = new Map<string, { frames: Uint8Array[]; cursor: number }>();
+  readonly #taskPlans = new Map<string, FramePlan>();
   #flushTimer: ReturnType<typeof setTimeout> | null = null;
   #unwatch: (() => void) | null = null;
   #unlease: (() => void) | null = null;
@@ -251,17 +252,15 @@ export class SessionHost {
         return undefined;
 
       case 'tasks.start':
-        this.#startTask(body.taskId, body.frames, body.intervalMs);
+        this.#startTask(body.taskId, body.frames, body.intervalMs, body.repeat);
         return undefined;
 
       case 'tasks.update':
-        this.#updateTask(body.taskId, body.frames, body.intervalMs);
+        this.#updateTask(body.taskId, body.frames, body.intervalMs, body.repeat);
         return undefined;
 
       case 'tasks.stop':
-        this.#scheduler.stop(body.taskId);
-        this.#taskFrames.delete(body.taskId);
-        this.#postTasks();
+        this.#stopTask(body.taskId);
         return undefined;
 
       case 'tasks.stopAll':
@@ -272,7 +271,7 @@ export class SessionHost {
 
   dispose(): void {
     this.#scheduler.stopAll();
-    this.#taskFrames.clear();
+    this.#taskPlans.clear();
     this.#unwatch?.();
     this.#unlease?.();
     this.#unwatch = null;
@@ -341,14 +340,15 @@ export class SessionHost {
     });
   }
 
-  #startTask(taskId: string, frames: Uint8Array[], intervalMs: number): void {
+  #startTask(taskId: string, frames: TaskFrame[], intervalMs: number, repeat?: number): void {
     // 允许以空列表启动：报文当前解析不通过时，浏览器版也是「循环转着但不发东西」，
     // 等用户把内容改对了再开始发。这里靠 update() 补上内容达到同样效果。
-    this.#taskFrames.set(taskId, { frames, cursor: 0 });
+    this.#taskPlans.set(taskId, new FramePlan(frames, repeat));
 
     this.#scheduler.start(taskId, {
       intervalMs,
-      run: () => this.#runTask(taskId),
+      run: (tick) => this.#runTask(taskId, tick),
+      nextIntervalMs: (tick) => this.#taskPlans.get(taskId)?.delayBefore(tick),
       onError: () => {
         // 发送失败已经由 session 通过 write-error 通知写进日志了，这里不再重复
       },
@@ -356,35 +356,45 @@ export class SessionHost {
     this.#postTasks();
   }
 
-  /**
-   * 发下一帧。
-   *
-   * 单条循环是长度 1 的列表，取模之后永远是同一帧；顺序循环则每拍前进一条。
-   * 一种形状覆盖两种用法，宿主这边不必知道调用方是哪一种。
-   */
-  #runTask(taskId: string): Promise<void> {
-    const state = this.#taskFrames.get(taskId);
-    if (!state || state.frames.length === 0) return Promise.resolve();
-    const frame = state.frames[state.cursor % state.frames.length]!;
-    state.cursor += 1;
+  /** 发这一拍的帧。发哪一条、跑没跑到头都由 FramePlan 说了算，与 webview 侧同一套。 */
+  #runTask(taskId: string, tick: number): Promise<void> {
+    const plan = this.#taskPlans.get(taskId);
+    const frame = plan?.at(tick);
+    if (!plan || !frame) return Promise.resolve();
     // 失败原因已经作为通知推给界面了，调度器只管节拍
-    return this.#session.send(frame).then(() => undefined);
+    return this.#session.send(frame.bytes).then(() => {
+      // 跑够遍数就自己停；界面的按钮状态跟着 tasks 事件回落
+      if (plan.isFinal(tick)) this.#stopTask(taskId);
+    });
   }
 
-  /** 改运行中任务的内容或周期。任务没在跑时什么都不做。 */
-  #updateTask(taskId: string, frames?: Uint8Array[], intervalMs?: number): void {
+  /**
+   * 改运行中任务的内容、周期或遍数。任务没在跑时什么都不做。
+   *
+   * 拍号归调度器管，换内容不会把它打回原点 —— 顺序循环期间增删预设不该让队列
+   * 跳回第一条，用户改一个字节也不该多发一帧。
+   */
+  #updateTask(taskId: string, frames?: TaskFrame[], intervalMs?: number, repeat?: number): void {
     if (!this.#scheduler.isRunning(taskId)) return;
-    if (frames !== undefined) {
-      const state = this.#taskFrames.get(taskId);
-      // 保留 cursor：顺序循环期间增删预设不该让它跳回第一条
-      this.#taskFrames.set(taskId, { frames, cursor: state?.cursor ?? 0 });
+    if (frames !== undefined || repeat !== undefined) {
+      const plan = this.#taskPlans.get(taskId);
+      this.#taskPlans.set(
+        taskId,
+        new FramePlan(frames ?? plan?.frames ?? [], repeat ?? plan?.repeat),
+      );
     }
     if (intervalMs !== undefined) this.#scheduler.updateInterval(taskId, intervalMs);
   }
 
+  #stopTask(taskId: string): void {
+    this.#scheduler.stop(taskId);
+    this.#taskPlans.delete(taskId);
+    this.#postTasks();
+  }
+
   #stopAllTasks(): void {
     this.#scheduler.stopAll();
-    this.#taskFrames.clear();
+    this.#taskPlans.clear();
     this.#postTasks();
   }
 

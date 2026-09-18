@@ -1,4 +1,5 @@
 import type { FramingConfig } from '@/core/framing/frameAssembler';
+import type { TaskFrame } from '@/core/scheduler/framePlan';
 import type { PeriodicTaskSpec } from '@/core/scheduler/taskScheduler';
 import type { SessionEvents } from '@/core/session/serialSession';
 import type { PortDescriptor } from '@/core/transport/portDescriptor';
@@ -42,11 +43,10 @@ export interface SessionLike {
  * 面板隐藏后 webview 连同定时器一起被销毁，而「挂个心跳跑一下午」正是常见用法。
  */
 /**
- * 一个周期任务。
+ * 一个周期任务。内容与节奏怎么算见 core/scheduler/framePlan.ts。
  *
- * `frames` 是这个任务要循环发的内容，按拍轮流取：单条循环、单条预设循环是长度 1，
- * 顺序循环是按勾选顺序排好的多条。**带 frames 的任务可以整个交给扩展宿主执行**，
- * 面板隐藏也照跑 —— 这是 VS Code 里唯一能让「挂个心跳跑一下午」成立的方式。
+ * **带 frames 的任务可以整个交给扩展宿主执行**，面板隐藏也照跑 ——
+ * 这是 VS Code 里唯一能让「挂个心跳跑一下午」成立的方式。
  *
  * `run` 是浏览器环境下的执行体，它每一拍重读最新状态，因此内容改动即时生效。
  * 宿主环境靠 update() 推送新的 frames 来达到同样效果。
@@ -56,13 +56,15 @@ export interface SessionLike {
  * 切个标签页才会发现循环停了。可选字段是那个 bug 唯一的入口，堵掉它比事后加测试更管用。
  */
 export interface TaskSpec extends PeriodicTaskSpec {
-  frames: Uint8Array[];
+  frames: TaskFrame[];
+  repeat?: number;
 }
 
-/** 改运行中任务的周期或内容。两者都可选，只改一样就只传一样。 */
+/** 改运行中任务的周期、内容或遍数。都可选，只改一样就只传一样。 */
 export interface TaskPatch {
   intervalMs?: number;
-  frames?: Uint8Array[];
+  frames?: TaskFrame[];
+  repeat?: number;
 }
 
 export interface TasksLike {

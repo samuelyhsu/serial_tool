@@ -397,4 +397,30 @@ describe('多条发送', () => {
     await userEvent.click(badge);
     expect(screen.queryByRole('combobox', { name: '结束符' })).not.toBeInTheDocument();
   });
+
+  /**
+   * 每行都摆着一个「周期」框，而它在顺序循环里一直是被忽略的 —— 用户没有理由
+   * 知道这件事。现在两种取法摆在同一个下拉里，选哪个一目了然。
+   */
+  it('步间隔选「每条」时，统一间隔那一格失效', async () => {
+    render(<PresetPane />);
+    const gap = screen.getByRole('spinbutton', { name: '间隔' });
+    expect(gap).toBeEnabled();
+
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: '步间隔' }), 'each');
+
+    expect(gap).toBeDisabled();
+    expect(usePresetStore.getState().sequenceStep).toBe('each');
+  });
+
+  it('遍数写进 store，0 表示一直循环', async () => {
+    render(<PresetPane />);
+    const repeat = screen.getByRole('spinbutton', { name: '重复遍数' });
+    expect(repeat).toHaveValue(0);
+
+    await userEvent.clear(repeat);
+    await userEvent.type(repeat, '3');
+
+    expect(usePresetStore.getState().sequenceRepeat).toBe(3);
+  });
 });

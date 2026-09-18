@@ -162,7 +162,7 @@ describe('SessionHost（一个面板一条会话）', () => {
     await panel.host.handle({
       method: 'tasks.start',
       taskId: 't1',
-      frames: [new Uint8Array([1])],
+      frames: [{ bytes: new Uint8Array([1]) }],
       intervalMs: 100,
     });
 
@@ -185,7 +185,7 @@ describe('SessionHost（一个面板一条会话）', () => {
     await panel.host.handle({
       method: 'tasks.start',
       taskId: 't1',
-      frames: [new Uint8Array([0xa5])],
+      frames: [{ bytes: new Uint8Array([0xa5]) }],
       intervalMs: 100,
     });
 
@@ -194,13 +194,81 @@ describe('SessionHost（一个面板一条会话）', () => {
     expect(panel.typed('tasks').at(-1)?.running).toEqual(['t1']);
   });
 
+  it('跑够遍数就自己停，并把停了这件事告诉界面', async () => {
+    const panel = makePanel('panel-1');
+    await panel.host.handle({ method: 'session.open', portKey: 'COM3', options: OPTIONS });
+    await panel.host.handle({
+      method: 'tasks.start',
+      taskId: 'sequence',
+      frames: [{ bytes: new Uint8Array([1]) }, { bytes: new Uint8Array([2]) }],
+      intervalMs: 100,
+      repeat: 2,
+    });
+
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(panel.transport().written).toEqual([
+      new Uint8Array([1]),
+      new Uint8Array([2]),
+      new Uint8Array([1]),
+      new Uint8Array([2]),
+    ]);
+    // 面板上的按钮靠这条事件回落。宿主自己停掉却不说，界面就会一直亮着「循环中」
+    expect(panel.typed('tasks').at(-1)?.running).toEqual([]);
+  });
+
+  /** 上电初始化那种序列，每一步要等的时间差得很远，统一间隔表达不了。 */
+  it('每一帧可以各带各的延时', async () => {
+    const panel = makePanel('panel-1');
+    await panel.host.handle({ method: 'session.open', portKey: 'COM3', options: OPTIONS });
+    await panel.host.handle({
+      method: 'tasks.start',
+      taskId: 'sequence',
+      frames: [
+        { bytes: new Uint8Array([1]), delayMs: 20 },
+        { bytes: new Uint8Array([2]), delayMs: 300 },
+      ],
+      intervalMs: 100,
+    });
+
+    // 第 0 拍立即发；第 1 帧之前等它自己那 300ms，而不是任务周期的 100ms
+    await vi.advanceTimersByTimeAsync(150);
+    expect(panel.transport().written).toEqual([new Uint8Array([1])]);
+
+    await vi.advanceTimersByTimeAsync(160);
+    expect(panel.transport().written).toEqual([new Uint8Array([1]), new Uint8Array([2])]);
+
+    // 绕回第一帧时等的是第一帧那 20ms
+    await vi.advanceTimersByTimeAsync(25);
+    expect(panel.transport().written).toHaveLength(3);
+  });
+
+  it('改遍数对已经在跑的任务生效', async () => {
+    const panel = makePanel('panel-1');
+    await panel.host.handle({ method: 'session.open', portKey: 'COM3', options: OPTIONS });
+    await panel.host.handle({
+      method: 'tasks.start',
+      taskId: 'sequence',
+      frames: [{ bytes: new Uint8Array([1]) }],
+      intervalMs: 100,
+    });
+
+    await vi.advanceTimersByTimeAsync(250);
+    await panel.host.handle({ method: 'tasks.update', taskId: 'sequence', repeat: 4 });
+    await vi.advanceTimersByTimeAsync(500);
+
+    // 拍号归调度器管，改遍数不会把它打回原点：第 3 拍发完就到头了
+    expect(panel.transport().written).toHaveLength(4);
+    expect(panel.typed('tasks').at(-1)?.running).toEqual([]);
+  });
+
   it('顺序循环按队列轮流发，一轮完了从头开始', async () => {
     const panel = makePanel('panel-1');
     await panel.host.handle({ method: 'session.open', portKey: 'COM3', options: OPTIONS });
     await panel.host.handle({
       method: 'tasks.start',
       taskId: 'sequence',
-      frames: [new Uint8Array([1]), new Uint8Array([2])],
+      frames: [{ bytes: new Uint8Array([1]) }, { bytes: new Uint8Array([2]) }],
       intervalMs: 100,
     });
 
@@ -224,7 +292,7 @@ describe('SessionHost（一个面板一条会话）', () => {
     await panel.host.handle({
       method: 'tasks.start',
       taskId: 't1',
-      frames: [new Uint8Array([1])],
+      frames: [{ bytes: new Uint8Array([1]) }],
       intervalMs: 100,
     });
     await vi.advanceTimersByTimeAsync(120);
@@ -233,7 +301,7 @@ describe('SessionHost（一个面板一条会话）', () => {
     await panel.host.handle({
       method: 'tasks.update',
       taskId: 't1',
-      frames: [new Uint8Array([9])],
+      frames: [{ bytes: new Uint8Array([9]) }],
     });
     // 换内容这一下本身不该发出任何东西
     expect(panel.transport().written).toHaveLength(before);
@@ -249,7 +317,7 @@ describe('SessionHost（一个面板一条会话）', () => {
     await panel.host.handle({
       method: 'tasks.update',
       taskId: 'ghost',
-      frames: [new Uint8Array([1])],
+      frames: [{ bytes: new Uint8Array([1]) }],
       intervalMs: 50,
     });
     await vi.advanceTimersByTimeAsync(300);
@@ -276,7 +344,7 @@ describe('SessionHost（一个面板一条会话）', () => {
     await panel.host.handle({
       method: 'tasks.update',
       taskId: 't1',
-      frames: [new Uint8Array([7])],
+      frames: [{ bytes: new Uint8Array([7]) }],
     });
     await vi.advanceTimersByTimeAsync(150);
 
@@ -289,7 +357,7 @@ describe('SessionHost（一个面板一条会话）', () => {
     await panel.host.handle({
       method: 'tasks.start',
       taskId: 't1',
-      frames: [new Uint8Array([1])],
+      frames: [{ bytes: new Uint8Array([1]) }],
       intervalMs: 100,
     });
     await panel.host.handle({ method: 'session.close' });

@@ -90,7 +90,11 @@ async function load() {
   };
 }
 
-beforeEach(() => {
+beforeEach(async () => {
+  // 上一条用例攒批中的写入会在 250ms 后落盘 —— 那时这里已经清过了，于是新用例的
+  // store 初始化时读到的是别人留下的预设。表现为「单跑绿、全量红」，得先把它丢掉。
+  // 这里拿到的正是上一条用例 resetModules 之后那个 persist 实例。
+  (await import('@/lib/persist')).__resetPersistForTests();
   localStorage.clear();
   sessionStorage.clear();
 });
@@ -105,7 +109,7 @@ describe('周期任务把内容交给平台执行', () => {
 
     const started = app.recorded.start.at(-1);
     expect(started?.id).toBe(app.tasks.SINGLE_TASK);
-    expect(started?.spec.frames).toEqual([new Uint8Array([0x01, 0x02])]);
+    expect(started?.spec.frames).toEqual([{ bytes: new Uint8Array([0x01, 0x02]) }]);
   });
 
   it('单条预设循环同样带 frames', async () => {
@@ -116,7 +120,7 @@ describe('周期任务把内容交给平台执行', () => {
     app.preset.usePresetStore.getState().toggleLoop(first.id);
 
     const started = app.recorded.start.find((item) => item.id.startsWith('preset:'));
-    expect(started?.spec.frames).toEqual([new TextEncoder().encode('AT')]);
+    expect(started?.spec.frames).toEqual([{ bytes: new TextEncoder().encode('AT') }]);
   });
 
   /** 顺序循环没有「一条固定内容」，但整条队列同样可以一次性交出去。 */
@@ -135,8 +139,8 @@ describe('周期任务把内容交给平台执行', () => {
 
     const started = app.recorded.start.find((item) => item.id === app.tasks.SEQUENCE_TASK);
     expect(started?.spec.frames).toEqual([
-      new TextEncoder().encode('AAA'),
-      new TextEncoder().encode('BBB'),
+      { bytes: new TextEncoder().encode('AAA') },
+      { bytes: new TextEncoder().encode('BBB') },
     ]);
   });
 
@@ -151,7 +155,7 @@ describe('周期任务把内容交给平台执行', () => {
 
     expect(app.recorded.update.at(-1)).toEqual({
       id: app.tasks.SINGLE_TASK,
-      patch: { frames: [new Uint8Array([0x02])] },
+      patch: { frames: [{ bytes: new Uint8Array([0x02]) }] },
     });
   });
 
@@ -211,7 +215,7 @@ describe('周期任务把内容交给平台执行', () => {
 
     app.recorded.update.length = 0;
     app.send.useSendStore.getState().setPayload('AB');
-    expect(app.recorded.update.at(-1)?.patch.frames).toEqual([new Uint8Array([0xab])]);
+    expect(app.recorded.update.at(-1)?.patch.frames).toEqual([{ bytes: new Uint8Array([0xab]) }]);
   });
 });
 
@@ -232,7 +236,7 @@ describe('预设的帧尾跟着交给平台', () => {
     app.preset.usePresetStore.getState().toggleLoop(first.id);
 
     const started = app.recorded.start.find((item) => item.id.startsWith('preset:'));
-    expect(started?.spec.frames).toEqual([new TextEncoder().encode('AT\r\n')]);
+    expect(started?.spec.frames).toEqual([{ bytes: new TextEncoder().encode('AT\r\n') }]);
   });
 
   it('校验和算进 frames', async () => {
@@ -247,7 +251,7 @@ describe('预设的帧尾跟着交给平台', () => {
     const started = app.recorded.start.find((item) => item.id.startsWith('preset:'));
     // 这条查询的 CRC-16/MODBUS 是 0x0BC4，按 Modbus 的约定低字节先发
     expect(started?.spec.frames).toEqual([
-      new Uint8Array([0x01, 0x03, 0x00, 0x00, 0x00, 0x02, 0xc4, 0x0b]),
+      { bytes: new Uint8Array([0x01, 0x03, 0x00, 0x00, 0x00, 0x02, 0xc4, 0x0b]) },
     ]);
   });
 
@@ -262,7 +266,7 @@ describe('预设的帧尾跟着交给平台', () => {
 
     expect(app.recorded.update.at(-1)).toEqual({
       id: app.tasks.presetTask(first.id),
-      patch: { frames: [new TextEncoder().encode('AT\n')] },
+      patch: { frames: [{ bytes: new TextEncoder().encode('AT\n') }] },
     });
   });
 
@@ -282,8 +286,88 @@ describe('预设的帧尾跟着交给平台', () => {
 
     const started = app.recorded.start.find((item) => item.id === app.tasks.SEQUENCE_TASK);
     expect(started?.spec.frames).toEqual([
-      new TextEncoder().encode('AAA\r\n'),
-      new TextEncoder().encode('BBB'),
+      { bytes: new TextEncoder().encode('AAA\r\n') },
+      { bytes: new TextEncoder().encode('BBB') },
+    ]);
+  });
+});
+
+describe('顺序循环的节奏交给平台', () => {
+  /** 两条预设进队列，其余取消勾选。 */
+  function armSequence(app: Awaited<ReturnType<typeof load>>) {
+    const store = app.preset.usePresetStore;
+    for (const preset of store.getState().presets) store.getState().setInSequence(preset.id, false);
+    const [a, b] = store.getState().presets;
+    store.getState().setData(a!.id, 'A');
+    store.getState().setInterval(a!.id, 40);
+    store.getState().setData(b!.id, 'B');
+    store.getState().setInterval(b!.id, 900);
+    store.getState().setInSequence(a!.id, true);
+    store.getState().setInSequence(b!.id, true);
+    return store;
+  }
+
+  function sequenceSpec(app: Awaited<ReturnType<typeof load>>) {
+    return app.recorded.start.find((item) => item.id === app.tasks.SEQUENCE_TASK)?.spec;
+  }
+
+  it('统一间隔模式下不给每帧定延时', async () => {
+    const app = await load();
+    const store = armSequence(app);
+
+    store.getState().toggleSequence();
+
+    expect(sequenceSpec(app)?.frames).toEqual([
+      { bytes: new TextEncoder().encode('A') },
+      { bytes: new TextEncoder().encode('B') },
+    ]);
+  });
+
+  it('每条模式下把各行的周期当作步延时交出去', async () => {
+    const app = await load();
+    const store = armSequence(app);
+    store.getState().setSequenceStep('each');
+
+    store.getState().toggleSequence();
+
+    expect(sequenceSpec(app)?.frames).toEqual([
+      { bytes: new TextEncoder().encode('A'), delayMs: 40 },
+      { bytes: new TextEncoder().encode('B'), delayMs: 900 },
+    ]);
+  });
+
+  it('遍数随启动一起交出去', async () => {
+    const app = await load();
+    const store = armSequence(app);
+    store.getState().setSequenceRepeat(3);
+
+    store.getState().toggleSequence();
+
+    expect(sequenceSpec(app)?.repeat).toBe(3);
+  });
+
+  it('循环期间改遍数、改间隔、改步延时模式都推给平台', async () => {
+    const app = await load();
+    const store = armSequence(app);
+    store.getState().toggleSequence();
+    app.recorded.update.length = 0;
+
+    store.getState().setSequenceRepeat(5);
+    expect(app.recorded.update).toContainEqual({
+      id: app.tasks.SEQUENCE_TASK,
+      patch: { repeat: 5 },
+    });
+
+    store.getState().setSequenceGapMs(25);
+    expect(app.recorded.update).toContainEqual({
+      id: app.tasks.SEQUENCE_TASK,
+      patch: { intervalMs: 25 },
+    });
+
+    store.getState().setSequenceStep('each');
+    expect(app.recorded.update.at(-1)?.patch.frames).toEqual([
+      { bytes: new TextEncoder().encode('A'), delayMs: 40 },
+      { bytes: new TextEncoder().encode('B'), delayMs: 900 },
     ]);
   });
 });

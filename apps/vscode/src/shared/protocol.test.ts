@@ -52,10 +52,14 @@ const REQUESTS: Record<RequestMethod, RequestBody> = {
   'tasks.start': {
     method: 'tasks.start',
     taskId: 't1',
-    frames: [new Uint8Array([0xa5])],
+    frames: [{ bytes: new Uint8Array([0xa5]) }],
     intervalMs: 100,
   },
-  'tasks.update': { method: 'tasks.update', taskId: 't1', frames: [new Uint8Array([1])] },
+  'tasks.update': {
+    method: 'tasks.update',
+    taskId: 't1',
+    frames: [{ bytes: new Uint8Array([1]) }],
+  },
   'tasks.stop': { method: 'tasks.stop', taskId: 't1' },
   'tasks.stopAll': { method: 'tasks.stopAll' },
 };
