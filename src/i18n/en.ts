@@ -97,10 +97,8 @@ export const en: Messages = {
   colFormat: 'Fmt',
   colData: 'Payload',
   colSend: 'Send',
-  colSuffix: 'Suffix',
   colPeriod: 'Every ms',
   colLoop: 'Loop',
-  editSuffix: 'Set frame suffix',
   dataPlaceholder: 'Payload',
   sequenceLoop: 'Sequence loop',
   gap: 'Gap',
@@ -179,8 +177,12 @@ export const en: Messages = {
       ? `Invalid hex: character ${error.index + 1} ("${error.char}") is not a hex digit`
       : `Invalid hex: "${error.token}" has an odd number of digits`,
 
-  lossyHexSwitch:
-    'Payload contains bytes that are not valid UTF-8 — staying in HEX to avoid data loss',
+  escapeError: (error) =>
+    error.kind === 'unknown-escape'
+      ? `Escape error: "\\${error.char}" at character ${error.index + 1} is not a known escape`
+      : error.kind === 'bad-hex-escape'
+        ? `Escape error: \\x at character ${error.index + 1} needs two hex digits`
+        : 'Escape error: the trailing backslash has nothing after it; write \\\\ to send a backslash',
   importedPresets: (count) => `Imported ${count} presets`,
   appendedPresets: (count) => `Appended ${count} presets`,
   importFailed: (reason) => `Import failed: ${reason}`,

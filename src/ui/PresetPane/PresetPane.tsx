@@ -1,10 +1,7 @@
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { CHECKSUM_ALGORITHMS, checksumBytes, findChecksum } from '@/core/checksum';
-import { formatHex } from '@/core/codec/hex';
 import { downloadText } from '@/lib/download';
 import { useConnectionStore } from '@/store/connectionStore';
 import { useLogStore } from '@/store/logStore';
-import { EOL_KEYS, payloadToBytes, type EolKey } from '@/store/payload';
 import {
   isBlankTab,
   parseImportedPresets,
@@ -18,7 +15,6 @@ import {
   type SequenceStep,
 } from '@/store/presetStore';
 import { isTaskRunning, presetTask, SEQUENCE_TASK, useTasksStore } from '@/store/tasksStore';
-import { EOL_LABEL, shortChecksumLabel } from '../dataFormat';
 import { FormatToggle } from '../FormatToggle';
 import { useConfirm } from '../useConfirm';
 import { useMessages } from '../useMessages';
@@ -191,7 +187,6 @@ export function PresetPane(): React.JSX.Element {
         <span>{t.colSequence}</span>
         <span>{t.colFormat}</span>
         <span>{t.colData}</span>
-        <span>{t.colSuffix}</span>
         <span>{t.colSend}</span>
         <span />
         <span>{t.colPeriod}</span>
@@ -211,7 +206,7 @@ export function PresetPane(): React.JSX.Element {
               preset={preset}
               slot={index}
               movable
-              invalid={issues[preset.id]?.kind === 'parse'}
+              invalid={issues[preset.id] !== undefined}
               looping={isTaskRunning(running, presetTask(preset.id))}
               canSend={isOpen}
             />
@@ -229,7 +224,7 @@ export function PresetPane(): React.JSX.Element {
                   preset={preset}
                   slot={null}
                   movable={false}
-                  invalid={issues[preset.id]?.kind === 'parse'}
+                  invalid={issues[preset.id] !== undefined}
                   looping={isTaskRunning(running, presetTask(preset.id))}
                   canSend={isOpen}
                 />
@@ -688,7 +683,6 @@ function PresetRow({
   const nameRef = useRef<HTMLInputElement>(null);
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState('');
-  const [suffixOpen, setSuffixOpen] = useState(false);
 
   const rename = usePresetStore((s) => s.rename);
   const setData = usePresetStore((s) => s.setData);
@@ -706,19 +700,6 @@ function PresetRow({
   const empty = preset.data.trim() === '';
   // Alt+0 是第 10 条：十个槽位、十个数字键，0 排在 9 后面
   const shortcut = slot === null ? null : `Alt+${slot === PRESET_TAB_SIZE - 1 ? 0 : slot + 1}`;
-
-  // 徽标上显示的就是这一条真正会追加的东西。两种模式各看各的字段（见 Preset.eol 的说明）
-  const algorithm = findChecksum(preset.checksum);
-  const textMode = preset.mode === 'text';
-  const appending = textMode ? preset.eol !== 'none' : algorithm !== undefined;
-  const suffixText = textMode
-    ? EOL_LABEL[preset.eol]
-    : algorithm
-      ? shortChecksumLabel(algorithm.label)
-      : EOL_LABEL.none;
-  const suffixTitle = textMode
-    ? `${t.eol}: ${preset.eol === 'none' ? t.none : EOL_LABEL[preset.eol]}`
-    : `${t.checksum}: ${algorithm?.label ?? t.none}`;
 
   // select() 按规范不移动焦点，必须先 focus()
   useEffect(() => {
@@ -776,18 +757,6 @@ function PresetRow({
           aria-invalid={invalid}
           onChange={(event) => setData(preset.id, event.target.value)}
         />
-
-        <button
-          type="button"
-          className={styles.suffixBtn}
-          data-set={appending}
-          aria-expanded={suffixOpen}
-          aria-label={`${t.editSuffix}: ${label}`}
-          title={suffixTitle}
-          onClick={() => setSuffixOpen((open) => !open)}
-        >
-          {suffixText}
-        </button>
 
         {renaming ? (
           <input
@@ -854,93 +823,6 @@ function PresetRow({
           {looping ? '■' : '↻'}
         </button>
       </div>
-
-      {suffixOpen ? <SuffixEditor preset={preset} onClose={() => setSuffixOpen(false)} /> : null}
     </>
-  );
-}
-
-interface SuffixEditorProps {
-  preset: Preset;
-  onClose: () => void;
-}
-
-/**
- * 行下方展开的帧尾选择器，与单条发送同一套控件：TXT 选结束符，HEX 选校验和并
- * 实时显示将要追加的字节。
- *
- * 在这之前预设是写死不追加的，于是「单条发送能一键加 CRC，存成预设就得自己手算」——
- * 同一条报文换个地方发就变了样，属于能力不对等而不是取舍。
- */
-function SuffixEditor({ preset, onClose }: SuffixEditorProps): React.JSX.Element {
-  const t = useMessages();
-  const fieldId = useId();
-  const selectRef = useRef<HTMLSelectElement>(null);
-  const setEol = usePresetStore((s) => s.setEol);
-  const setChecksum = usePresetStore((s) => s.setChecksum);
-
-  useEffect(() => {
-    selectRef.current?.focus();
-  }, []);
-
-  // 按当前载荷实时算，选之前就能看到会多出哪几个字节（与单条发送的预览同一个意思）
-  const preview = useMemo(() => {
-    const algorithm = findChecksum(preset.checksum);
-    if (!algorithm || preset.mode !== 'hex') return null;
-    const parsed = payloadToBytes(preset.data, 'hex');
-    return parsed.ok ? formatHex(checksumBytes(parsed.bytes, algorithm)) : null;
-  }, [preset.data, preset.mode, preset.checksum]);
-
-  return (
-    <div
-      className={styles.suffixBar}
-      onKeyDown={(event) => {
-        if (event.key !== 'Escape') return;
-        event.preventDefault();
-        onClose();
-      }}
-    >
-      <label className="label" htmlFor={fieldId}>
-        {preset.mode === 'text' ? t.eol : t.checksum}
-      </label>
-
-      {preset.mode === 'text' ? (
-        <select
-          id={fieldId}
-          ref={selectRef}
-          className="field field--sm"
-          value={preset.eol}
-          onChange={(event) => setEol(preset.id, event.target.value as EolKey)}
-        >
-          {EOL_KEYS.map((key) => (
-            <option key={key} value={key}>
-              {key === 'none' ? t.none : EOL_LABEL[key]}
-            </option>
-          ))}
-        </select>
-      ) : (
-        <>
-          <select
-            id={fieldId}
-            ref={selectRef}
-            className={`field field--sm ${styles.suffixSelect}`}
-            value={preset.checksum}
-            onChange={(event) => setChecksum(preset.id, event.target.value)}
-          >
-            <option value="none">{t.none}</option>
-            {CHECKSUM_ALGORITHMS.map((algorithm) => (
-              <option key={algorithm.id} value={algorithm.id}>
-                {algorithm.label}
-              </option>
-            ))}
-          </select>
-          {preview !== null ? (
-            <span className={styles.suffixPreview} title={t.checksumAppendTip}>
-              {preview}
-            </span>
-          ) : null}
-        </>
-      )}
-    </div>
   );
 }

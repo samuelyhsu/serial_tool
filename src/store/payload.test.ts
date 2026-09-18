@@ -38,17 +38,37 @@ describe('convertPayload', () => {
   /**
    * 缺陷 D3 的回归测试：原型会把这个 Modbus 帧的不可打印字节全变成 "."，
    * 用户再切回 HEX 时数据已经毁了。
+   *
+   * 现在不再是「拒绝切换」而是真的转得过去 —— 有了转义，每个字节都写得回文本。
    */
-  it('二进制报文拒绝转成文本，而不是静默丢数据', () => {
-    expect(convertPayload('01 03 00 00 00 02 C4 0B', 'hex', 'text')).toEqual({
-      ok: false,
-      reason: 'lossy',
+  it('二进制报文转成文本后一个字节不差，还能原样转回来', () => {
+    const hex = '01 03 00 00 00 02 C4 0B';
+
+    const toText = convertPayload(hex, 'hex', 'text');
+
+    expect(toText).toEqual({ ok: true, data: '\\x01\\x03\\x00\\x00\\x00\\x02\\xC4\\x0B' });
+    expect(convertPayload(toText.ok ? toText.data : '', 'text', 'hex')).toEqual({
+      ok: true,
+      data: hex,
     });
   });
 
-  it('HEX 本身格式非法时报 parse 错误', () => {
-    const result = convertPayload('QQ', 'hex', 'text');
-    expect(result).toMatchObject({ ok: false, reason: 'parse' });
+  it('HEX 本身格式非法时交回解析错误', () => {
+    expect(convertPayload('QQ', 'hex', 'text')).toMatchObject({
+      ok: false,
+      error: { source: 'hex' },
+    });
+  });
+
+  it('TXT 里的转义写错时同样交回解析错误', () => {
+    expect(convertPayload('AT\\q', 'text', 'hex')).toMatchObject({
+      ok: false,
+      error: { source: 'escape' },
+    });
+  });
+
+  it('带转义的文本转成 HEX 时按解析后的字节算', () => {
+    expect(convertPayload('AT\\r\\n', 'text', 'hex')).toEqual({ ok: true, data: '41 54 0D 0A' });
   });
 
   it('同模式转换原样返回', () => {

@@ -41,20 +41,34 @@ describe('多条发送', () => {
     }
   });
 
+  /**
+   * 帧尾不再是一个单独的设置项：要追加什么直接写在报文里，分隔符在中间的协议
+   * 也就表达得出来了。写错了要当场标红，不能静默把反斜杠当普通字符发出去。
+   */
+  it('TXT 里转义写错时数据框标红，发送按钮禁用', async () => {
+    render(<PresetPane />);
+    const data = screen.getAllByRole('textbox')[0]!;
+
+    await userEvent.clear(data);
+    await userEvent.type(data, 'AT\\q');
+
+    expect(data).toHaveAttribute('aria-invalid', 'true');
+    expect(within(rows()[0]!).getByRole('button', { name: '查询版本' })).toBeDisabled();
+  });
+
   it('不显示序号列', () => {
     render(<PresetPane />);
     expect(screen.queryByText('序')).not.toBeInTheDocument();
     expect(screen.queryByText('01')).not.toBeInTheDocument();
   });
 
-  it('列顺序为：序列 · 格式 · 数据 · 帧尾 · 发送 · 周期 · 循环', () => {
+  it('列顺序为：序列 · 格式 · 数据 · 发送 · 周期 · 循环', () => {
     render(<PresetPane />);
     const headers = screen.getByText('序列').parentElement!.querySelectorAll('span');
     expect([...headers].map((h) => h.textContent).filter(Boolean)).toEqual([
       '序列',
       '格式',
       '数据',
-      '帧尾',
       '发送',
       '周期 ms',
       '循环',
@@ -408,48 +422,6 @@ describe('多条发送', () => {
 
     await userEvent.click(tabs()[0]!);
     expect(screen.getAllByRole('textbox')[0]).toHaveValue('AT+VER?');
-  });
-
-  /**
-   * 帧尾徽标常态只占一个字符宽，点开才在行下方展开选择器 ——
-   * 行高不因为多了这项能力而变，一屏还是那么多条。
-   */
-  it('帧尾徽标显示当前会追加什么，点开可改', async () => {
-    render(<PresetPane />);
-    const badge = within(rows()[0]!).getByRole('button', { name: /设置帧尾/ });
-    expect(badge).toHaveTextContent('—');
-
-    await userEvent.click(badge);
-    await userEvent.selectOptions(screen.getByRole('combobox', { name: '结束符' }), 'crlf');
-
-    expect(usePresetStore.getState().presets[0]!.eol).toBe('crlf');
-    expect(badge).toHaveTextContent('\\r\\n');
-  });
-
-  it('HEX 行展开的是校验和', async () => {
-    render(<PresetPane />);
-    // 第三条内置示例是 Modbus 读温湿度，本来就是 HEX
-    const badge = within(rows()[2]!).getByRole('button', { name: /设置帧尾/ });
-
-    await userEvent.click(badge);
-    await userEvent.selectOptions(
-      screen.getByRole('combobox', { name: '校验和' }),
-      'crc16-modbus',
-    );
-
-    expect(usePresetStore.getState().presets[2]!.checksum).toBe('crc16-modbus');
-    expect(badge).toHaveTextContent('MODBUS');
-  });
-
-  it('再点一次徽标收起选择器', async () => {
-    render(<PresetPane />);
-    const badge = within(rows()[0]!).getByRole('button', { name: /设置帧尾/ });
-
-    await userEvent.click(badge);
-    expect(screen.getByRole('combobox', { name: '结束符' })).toBeInTheDocument();
-
-    await userEvent.click(badge);
-    expect(screen.queryByRole('combobox', { name: '结束符' })).not.toBeInTheDocument();
   });
 
   /**

@@ -1,3 +1,6 @@
+import type { Messages } from '@/i18n/types';
+import type { PayloadError } from '@/store/payload';
+
 /**
  * 数据格式标签。
  *
@@ -24,9 +27,13 @@ export const EOL_LABEL = {
 } as const;
 
 /**
- * 校验和在窄处的短名：`CRC-16/IBM-3740 (CCITT-FALSE)` → `IBM-3740`。
- * 预设行的帧尾徽标只有几十像素，全名靠 title 给。
+ * 把报文解析错误翻成一句话。
+ *
+ * 分派写在这里而不是 i18n 目录里：两种模式各有各的解析器，但「该说哪一种话」
+ * 是同一条逻辑，抄进 zh / en 两份就成了两处可以走岔的地方。
  */
-export function shortChecksumLabel(label: string): string {
-  return (label.split('/')[1] ?? label).split(' ')[0] ?? label;
+export function payloadErrorText(error: PayloadError, messages: Messages): string {
+  return error.source === 'hex'
+    ? messages.hexError(error.error)
+    : messages.escapeError(error.error);
 }

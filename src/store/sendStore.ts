@@ -1,11 +1,18 @@
 import { create } from 'zustand';
 import { findChecksum, type ChecksumId } from '@/core/checksum';
-import type { HexParseError } from '@/core/codec/hex';
 import { pickEnum, pickInt, pickString, saveSoon } from '@/lib/persist';
 import { readLayeredJson } from '@/lib/storage';
 import { useConnectionStore } from './connectionStore';
 import { useLogStore } from './logStore';
-import { buildFrame, convertPayload, EOL_KEYS, type EolKey, type PayloadMode } from './payload';
+import {
+  buildFrame,
+  convertPayload,
+  EOL_KEYS,
+  payloadToBytes,
+  type EolKey,
+  type PayloadError,
+  type PayloadMode,
+} from './payload';
 import { SINGLE_TASK, useTasksStore } from './tasksStore';
 
 const SEND_KEY = 'sendPane';
@@ -38,9 +45,6 @@ function loadSendState(): typeof DEFAULTS {
 
 const restored = loadSendState();
 
-/** 模式切换被拒绝时的原因，由 UI 翻译成提示文案。 */
-export type ModeSwitchIssue = { kind: 'lossy' } | { kind: 'parse'; error: HexParseError };
-
 interface SendState {
   payload: string;
   mode: PayloadMode;
@@ -48,10 +52,10 @@ interface SendState {
   /** HEX 模式下自动追加的校验和；'none' 表示不追加。 */
   checksum: ChecksumId;
   intervalMs: number;
-  /** 当前内容在 HEX 模式下的解析错误，null 表示没问题。 */
-  parseError: HexParseError | null;
+  /** 当前内容解析不通过的原因，null 表示没问题。TXT 也会有 —— 转义可能写错。 */
+  parseError: PayloadError | null;
   /** 最近一次模式切换被拒绝的原因；用户再次编辑即清除。 */
-  modeIssue: ModeSwitchIssue | null;
+  modeIssue: PayloadError | null;
 
   setPayload: (payload: string) => void;
   setMode: (mode: PayloadMode) => void;
@@ -63,9 +67,8 @@ interface SendState {
   toggleLoop: () => void;
 }
 
-function validate(payload: string, mode: PayloadMode): HexParseError | null {
-  if (mode !== 'hex') return null;
-  const result = buildFrame(payload, mode, 'none');
+function validate(payload: string, mode: PayloadMode): PayloadError | null {
+  const result = payloadToBytes(payload, mode);
   return result.ok ? null : result.error;
 }
 
@@ -87,14 +90,9 @@ export const useSendStore = create<SendState>()((set, get) => ({
     if (state.mode === mode) return;
 
     const converted = convertPayload(state.payload, state.mode, mode);
+    // 两个方向都无损了，只剩「当前内容本身就解析不通过」这一种失败（缺陷 D3 的后续）
     if (!converted.ok) {
-      // 缺陷 D3：不可无损还原时保持原模式，并把原因交给 UI 提示
-      set({
-        modeIssue:
-          converted.reason === 'lossy'
-            ? { kind: 'lossy' }
-            : { kind: 'parse', error: converted.error },
-      });
+      set({ modeIssue: converted.error });
       return;
     }
     set({

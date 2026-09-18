@@ -1,19 +1,35 @@
 import { checksumBytes, findChecksum, type ChecksumId } from '@/core/checksum';
+import { formatEscaped, parseEscaped, type EscapeError } from '@/core/codec/escape';
 import { formatHex, tryParseHex, type HexParseError } from '@/core/codec/hex';
-import { decodeUtf8, encodeUtf8, isLosslessUtf8 } from '@/core/codec/text';
 
 export type PayloadMode = 'text' | 'hex';
 
-export type BytesResult = { ok: true; bytes: Uint8Array } | { ok: false; error: HexParseError };
+/**
+ * 报文解析失败的原因。两种模式各有各的解析器，错误也就各有各的形状，
+ * 用 source 分辨 —— 翻译时要说的话完全不同（「第 3 个字符不是十六进制数字」
+ * 对着一段 TXT 报文毫无意义）。
+ */
+export type PayloadError =
+  | { source: 'hex'; error: HexParseError }
+  | { source: 'escape'; error: EscapeError };
 
-export type ConvertResult =
-  | { ok: true; data: string }
-  | { ok: false; reason: 'lossy' }
-  | { ok: false; reason: 'parse'; error: HexParseError };
+export type BytesResult = { ok: true; bytes: Uint8Array } | { ok: false; error: PayloadError };
 
+export type ConvertResult = { ok: true; data: string } | { ok: false; error: PayloadError };
+
+/**
+ * 报文文本 → 字节。
+ *
+ * TXT 不是「原样 UTF-8 编码」而是**带转义**的（见 codec/escape.ts）：
+ * 串口上要发的东西常常带控制字符，而输入框里打不出来。
+ */
 export function payloadToBytes(data: string, mode: PayloadMode): BytesResult {
-  if (mode === 'hex') return tryParseHex(data);
-  return { ok: true, bytes: encodeUtf8(data) };
+  if (mode === 'hex') {
+    const parsed = tryParseHex(data);
+    return parsed.ok ? parsed : { ok: false, error: { source: 'hex', error: parsed.error } };
+  }
+  const parsed = parseEscaped(data);
+  return parsed.ok ? parsed : { ok: false, error: { source: 'escape', error: parsed.error } };
 }
 
 /**
@@ -23,20 +39,19 @@ export function payloadToBytes(data: string, mode: PayloadMode): BytesResult {
  * 预设的模式切换用 `asciiStr(toBytes(data, true))`，把每个不可打印字节变成 "."，
  * 再切回去数据就永久没了（.dc.html:803、839）。
  *
- * 这里 text→hex 永远无损；hex→text 先做往返校验，不能无损还原就拒绝转换，
- * 由 UI 提示用户，而不是悄悄毁掉他的报文。
+ * 现在两个方向都无损，也就没有「拒绝切换」这回事了：任何字节都写得回 TXT ——
+ * 控制字符写成 `\r` 这类，其余写成 `\xHH`。在有转义之前，HEX → TXT 遇到非 UTF-8
+ * 只能拒绝，用户得自己想办法。唯一还会失败的是**当前内容本身就解析不通过**。
  */
 export function convertPayload(data: string, from: PayloadMode, to: PayloadMode): ConvertResult {
   if (from === to) return { ok: true, data };
 
-  if (to === 'hex') {
-    return { ok: true, data: formatHex(encodeUtf8(data)) };
-  }
-
-  const parsed = tryParseHex(data);
-  if (!parsed.ok) return { ok: false, reason: 'parse', error: parsed.error };
-  if (!isLosslessUtf8(parsed.bytes)) return { ok: false, reason: 'lossy' };
-  return { ok: true, data: decodeUtf8(parsed.bytes) };
+  const parsed = payloadToBytes(data, from);
+  if (!parsed.ok) return parsed;
+  return {
+    ok: true,
+    data: to === 'hex' ? formatHex(parsed.bytes) : formatEscaped(parsed.bytes),
+  };
 }
 
 export const EOL_SEQUENCES = {
@@ -61,7 +76,7 @@ export const EOL_KEYS = Object.keys(EOL_SEQUENCES) as EolKey[];
 export function buildFrame(
   data: string,
   mode: PayloadMode,
-  eol: EolKey,
+  eol: EolKey = 'none',
   checksum: ChecksumId = 'none',
 ): BytesResult {
   if (mode === 'text') return payloadToBytes(data + EOL_SEQUENCES[eol], 'text');

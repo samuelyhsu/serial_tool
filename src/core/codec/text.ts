@@ -42,8 +42,23 @@ export class StreamingUtf8Decoder {
 }
 
 /**
+ * 解码，不合法就交回 null。
+ *
+ * 与 decodeUtf8 的区别是不拿替换字符（U+FFFD）糊过去 —— 调用方需要知道这段字节
+ * 到底是不是文本，好决定换一种写法（见 codec/escape.ts 的 formatEscaped）。
+ */
+export function tryDecodeUtf8(bytes: Uint8Array): string | null {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    // fatal 模式遇到非法序列会抛 TypeError，正是「这不是文本」的信号
+    return null;
+  }
+}
+
+/**
  * 判断一段字节能否无损地表示为 UTF-8 文本。
- * HEX → 文本切换前用它做往返校验：不能无损还原就拒绝切换，避免原型那种静默丢数据（缺陷 D3）。
+ * 供日志渲染挑显示方式（见 host/lmTools.ts）。
  */
 export function isLosslessUtf8(bytes: Uint8Array): boolean {
   try {

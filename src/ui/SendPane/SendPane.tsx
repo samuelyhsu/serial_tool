@@ -5,7 +5,7 @@ import { useConnectionStore } from '@/store/connectionStore';
 import { buildFrame, payloadToBytes, EOL_KEYS, type EolKey } from '@/store/payload';
 import { useSendStore } from '@/store/sendStore';
 import { isTaskRunning, SINGLE_TASK, useTasksStore } from '@/store/tasksStore';
-import { EOL_LABEL } from '../dataFormat';
+import { EOL_LABEL, payloadErrorText } from '../dataFormat';
 import { FormatToggle } from '../FormatToggle';
 import { useMessages } from '../useMessages';
 import styles from './SendPane.module.css';
@@ -53,13 +53,9 @@ export function SendPane(): React.JSX.Element {
     return formatHex(checksumBytes(parsed.bytes, algorithm));
   }, [payload, mode, checksum]);
 
-  const issueText = parseError
-    ? t.hexError(parseError)
-    : modeIssue
-      ? modeIssue.kind === 'lossy'
-        ? t.lossyHexSwitch
-        : t.hexError(modeIssue.error)
-      : null;
+  // 当前内容的问题优先于「刚才那次模式切换没成」
+  const issue = parseError ?? modeIssue;
+  const issueText = issue === null ? null : payloadErrorText(issue, t);
 
   const canSend = isOpen && frame.ok && frame.bytes.length > 0;
 

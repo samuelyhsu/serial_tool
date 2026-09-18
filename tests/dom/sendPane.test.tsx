@@ -50,18 +50,24 @@ describe('SendPane', () => {
   });
 
   /**
-   * 缺陷 D3 的端到端回归：原型会把这个 Modbus 帧的不可打印字节全变成 "."，
-   * 用户再切回 HEX 时报文已经毁了。
+   * 缺陷 D3 的端到端回归：原型会把这个 Modbus 帧的不可打印字节全变成 "."。
+   *
+   * 有转义之前这边也只能拒绝切换（非 UTF-8 字节没法写成文本）。现在每个字节
+   * 都写得成 \xHH，两个方向都无损，切换不再有「拒绝」这回事。
    */
-  it('含非法 UTF-8 字节的报文拒绝切成文本，并给出提示', async () => {
+  it('含非法 UTF-8 字节的报文照样切得成文本，一个字节不差', async () => {
     useSendStore.setState({ payload: '01 03 00 00 00 02 C4 0B', mode: 'hex' });
     render(<SendPane />);
 
     await userEvent.click(screen.getByTitle('切换 TXT / HEX 模式'));
 
-    expect(useSendStore.getState().mode).toBe('hex');
+    expect(useSendStore.getState().mode).toBe('text');
+    expect(useSendStore.getState().payload).toBe('\\x01\\x03\\x00\\x00\\x00\\x02\\xC4\\x0B');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+
+    // 切回去还是原样
+    await userEvent.click(screen.getByTitle('切换 TXT / HEX 模式'));
     expect(useSendStore.getState().payload).toBe('01 03 00 00 00 02 C4 0B');
-    expect(screen.getByRole('alert')).toHaveTextContent('会丢失内容');
   });
 
   it('HEX 格式非法时标红并说明原因，发送按钮禁用', async () => {

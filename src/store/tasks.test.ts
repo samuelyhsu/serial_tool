@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { TaskFrame } from '@/core/scheduler/framePlan';
 import type { Platform, TaskPatch, TaskSpec } from './platform';
 
 /**
@@ -90,6 +91,21 @@ async function load() {
   };
 }
 
+/**
+ * 帧摊平成普通数组再比。
+ *
+ * `TextEncoder.encode()` 交回来的 Uint8Array 与 `Uint8Array.from()` 造的底层 buffer
+ * 不一样，toEqual 会卡在那上面，报「值看起来没有区别，但不相等」。自定义相等器也救不了 ——
+ * vitest 对 TypedArray 的比较在那之前就走完了。
+ */
+function plainFrames(frames: readonly TaskFrame[] | undefined) {
+  return frames?.map(({ bytes, ...rest }) => ({ ...rest, bytes: [...bytes] }));
+}
+
+function utf8(text: string): number[] {
+  return [...new TextEncoder().encode(text)];
+}
+
 beforeEach(async () => {
   // 上一条用例攒批中的写入会在 250ms 后落盘 —— 那时这里已经清过了，于是新用例的
   // store 初始化时读到的是别人留下的预设。表现为「单跑绿、全量红」，得先把它丢掉。
@@ -112,6 +128,18 @@ describe('周期任务把内容交给平台执行', () => {
     expect(started?.spec.frames).toEqual([{ bytes: new Uint8Array([0x01, 0x02]) }]);
   });
 
+  /** TXT 现在是带转义的：`\r\n` 要变成两个字节，而不是四个可打印字符。 */
+  it('TXT 预设里的转义按字节算进 frames', async () => {
+    const app = await load();
+    const first = app.preset.usePresetStore.getState().presets[0]!;
+    app.preset.usePresetStore.getState().setData(first.id, 'AT\\r\\n');
+
+    app.preset.usePresetStore.getState().toggleLoop(first.id);
+
+    const started = app.recorded.start.find((item) => item.id.startsWith('preset:'));
+    expect(plainFrames(started?.spec.frames)).toEqual([{ bytes: utf8('AT\r\n') }]);
+  });
+
   it('单条预设循环同样带 frames', async () => {
     const app = await load();
     const first = app.preset.usePresetStore.getState().presets[0]!;
@@ -120,7 +148,7 @@ describe('周期任务把内容交给平台执行', () => {
     app.preset.usePresetStore.getState().toggleLoop(first.id);
 
     const started = app.recorded.start.find((item) => item.id.startsWith('preset:'));
-    expect(started?.spec.frames).toEqual([{ bytes: new TextEncoder().encode('AT') }]);
+    expect(plainFrames(started?.spec.frames)).toEqual([{ bytes: utf8('AT') }]);
   });
 
   /** 顺序循环没有「一条固定内容」，但整条队列同样可以一次性交出去。 */
@@ -138,9 +166,9 @@ describe('周期任务把内容交给平台执行', () => {
     app.preset.usePresetStore.getState().toggleSequence();
 
     const started = app.recorded.start.find((item) => item.id === app.tasks.SEQUENCE_TASK);
-    expect(started?.spec.frames).toEqual([
-      { bytes: new TextEncoder().encode('AAA') },
-      { bytes: new TextEncoder().encode('BBB') },
+    expect(plainFrames(started?.spec.frames)).toEqual([
+      { bytes: utf8('AAA') },
+      { bytes: utf8('BBB') },
     ]);
   });
 
@@ -219,79 +247,6 @@ describe('周期任务把内容交给平台执行', () => {
   });
 });
 
-/**
- * 帧尾必须跟着交出去的 frames 一起走。
- *
- * 预设过去是写死「什么都不追加」的：同一条 Modbus 报文在单条发送里能自动补 CRC，
- * 存成预设却得自己手算。补上这项能力之后，最容易漏的恰恰是这条交给宿主执行的路径 ——
- * 界面上点一下是对的，切走标签页由宿主发出去的却是没有帧尾的裸报文。
- */
-describe('预设的帧尾跟着交给平台', () => {
-  it('结束符算进 frames', async () => {
-    const app = await load();
-    const first = app.preset.usePresetStore.getState().presets[0]!;
-    app.preset.usePresetStore.getState().setData(first.id, 'AT');
-    app.preset.usePresetStore.getState().setEol(first.id, 'crlf');
-
-    app.preset.usePresetStore.getState().toggleLoop(first.id);
-
-    const started = app.recorded.start.find((item) => item.id.startsWith('preset:'));
-    expect(started?.spec.frames).toEqual([{ bytes: new TextEncoder().encode('AT\r\n') }]);
-  });
-
-  it('校验和算进 frames', async () => {
-    const app = await load();
-    const store = app.preset.usePresetStore.getState();
-    const hex = store.presets.find((preset) => preset.mode === 'hex')!;
-    store.setData(hex.id, '01 03 00 00 00 02');
-    store.setChecksum(hex.id, 'crc16-modbus');
-
-    app.preset.usePresetStore.getState().toggleLoop(hex.id);
-
-    const started = app.recorded.start.find((item) => item.id.startsWith('preset:'));
-    // 这条查询的 CRC-16/MODBUS 是 0x0BC4，按 Modbus 的约定低字节先发
-    expect(started?.spec.frames).toEqual([
-      { bytes: new Uint8Array([0x01, 0x03, 0x00, 0x00, 0x00, 0x02, 0xc4, 0x0b]) },
-    ]);
-  });
-
-  it('循环期间改帧尾，新字节即时推过去', async () => {
-    const app = await load();
-    const first = app.preset.usePresetStore.getState().presets[0]!;
-    app.preset.usePresetStore.getState().setData(first.id, 'AT');
-    app.preset.usePresetStore.getState().toggleLoop(first.id);
-    app.recorded.update.length = 0;
-
-    app.preset.usePresetStore.getState().setEol(first.id, 'lf');
-
-    expect(app.recorded.update.at(-1)).toEqual({
-      id: app.tasks.presetTask(first.id),
-      patch: { frames: [{ bytes: new TextEncoder().encode('AT\n') }] },
-    });
-  });
-
-  it('顺序循环的队列里每条各带各的帧尾', async () => {
-    const app = await load();
-    const store = app.preset.usePresetStore.getState();
-    for (const preset of store.presets) store.setInSequence(preset.id, false);
-
-    const [a, b] = app.preset.usePresetStore.getState().presets;
-    store.setData(a!.id, 'AAA');
-    store.setEol(a!.id, 'crlf');
-    store.setData(b!.id, 'BBB');
-    store.setInSequence(a!.id, true);
-    store.setInSequence(b!.id, true);
-
-    app.preset.usePresetStore.getState().toggleSequence();
-
-    const started = app.recorded.start.find((item) => item.id === app.tasks.SEQUENCE_TASK);
-    expect(started?.spec.frames).toEqual([
-      { bytes: new TextEncoder().encode('AAA\r\n') },
-      { bytes: new TextEncoder().encode('BBB') },
-    ]);
-  });
-});
-
 describe('顺序循环的节奏交给平台', () => {
   /** 两条预设进队列，其余取消勾选。 */
   function armSequence(app: Awaited<ReturnType<typeof load>>) {
@@ -317,9 +272,9 @@ describe('顺序循环的节奏交给平台', () => {
 
     store.getState().toggleSequence();
 
-    expect(sequenceSpec(app)?.frames).toEqual([
-      { bytes: new TextEncoder().encode('A') },
-      { bytes: new TextEncoder().encode('B') },
+    expect(plainFrames(sequenceSpec(app)?.frames)).toEqual([
+      { bytes: utf8('A') },
+      { bytes: utf8('B') },
     ]);
   });
 
@@ -330,9 +285,9 @@ describe('顺序循环的节奏交给平台', () => {
 
     store.getState().toggleSequence();
 
-    expect(sequenceSpec(app)?.frames).toEqual([
-      { bytes: new TextEncoder().encode('A'), delayMs: 40 },
-      { bytes: new TextEncoder().encode('B'), delayMs: 900 },
+    expect(plainFrames(sequenceSpec(app)?.frames)).toEqual([
+      { bytes: utf8('A'), delayMs: 40 },
+      { bytes: utf8('B'), delayMs: 900 },
     ]);
   });
 
@@ -365,9 +320,9 @@ describe('顺序循环的节奏交给平台', () => {
     });
 
     store.getState().setSequenceStep('each');
-    expect(app.recorded.update.at(-1)?.patch.frames).toEqual([
-      { bytes: new TextEncoder().encode('A'), delayMs: 40 },
-      { bytes: new TextEncoder().encode('B'), delayMs: 900 },
+    expect(plainFrames(app.recorded.update.at(-1)?.patch.frames)).toEqual([
+      { bytes: utf8('A'), delayMs: 40 },
+      { bytes: utf8('B'), delayMs: 900 },
     ]);
   });
 });

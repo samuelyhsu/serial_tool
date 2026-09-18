@@ -94,10 +94,8 @@ export const zh: Messages = {
   colFormat: '格式',
   colData: '数据',
   colSend: '发送',
-  colSuffix: '帧尾',
   colPeriod: '周期 ms',
   colLoop: '循环',
-  editSuffix: '设置帧尾',
   dataPlaceholder: '数据',
   sequenceLoop: '顺序循环',
   gap: '间隔',
@@ -175,7 +173,12 @@ export const zh: Messages = {
       ? `HEX 格式错误：第 ${error.index + 1} 个字符 “${error.char}” 不是十六进制数字`
       : `HEX 格式错误：“${error.token}” 的位数是奇数，无法拼成完整字节`,
 
-  lossyHexSwitch: '当前数据含有非法 UTF-8 字节，转成 TXT 会丢失内容，已保持 HEX 模式',
+  escapeError: (error) =>
+    error.kind === 'unknown-escape'
+      ? `转义错误：第 ${error.index + 1} 个字符起的 “\\${error.char}” 不是已知的转义`
+      : error.kind === 'bad-hex-escape'
+        ? `转义错误：第 ${error.index + 1} 个字符起的 \\x 后面要跟两位十六进制数字`
+        : '转义错误：末尾的反斜杠后面缺字符；要发反斜杠本身请写 \\\\',
   importedPresets: (count) => `已导入 ${count} 条预设`,
   appendedPresets: (count) => `已追加 ${count} 条预设`,
   importFailed: (reason) => `导入失败：${reason}`,

@@ -325,59 +325,6 @@ describe('旧版（分页）数据迁移', () => {
   });
 });
 
-describe('预设的帧尾', () => {
-  it('导出再导入，帧尾原样回来', () => {
-    const store = usePresetStore.getState();
-    store.setEol(store.presets[0]!.id, 'crlf');
-    store.setChecksum(store.presets[2]!.id, 'crc16-modbus');
-
-    const restored = importOrThrow(usePresetStore.getState().exportPayload());
-
-    expect(restored.presets[0]!.eol).toBe('crlf');
-    expect(restored.presets[2]!.checksum).toBe('crc16-modbus');
-  });
-
-  /**
-   * 帧尾之前的文件没有这两个字段。默认必须是「什么都不加」——
-   * 否则一升级，所有存量预设发出去的字节都变了，而用户什么都没改过。
-   */
-  it('帧尾之前的文件导入后一律不追加', () => {
-    const raw = JSON.stringify({
-      version: 1,
-      presets: [{ name: 'a', data: 'AT', mode: 'text' }],
-    });
-    const imported = importOrThrow(raw);
-
-    expect(imported.presets[0]!.eol).toBe('none');
-    expect(imported.presets[0]!.checksum).toBe('none');
-  });
-
-  it('目录里不存在的校验和 id 退回不追加', () => {
-    const raw = JSON.stringify({
-      version: 1,
-      presets: [{ name: 'a', data: '01', mode: 'hex', checksum: 'crc16-nonesuch' }],
-    });
-    expect(importOrThrow(raw).presets[0]!.checksum).toBe('none');
-  });
-
-  it('不认识的结束符退回不追加', () => {
-    const raw = JSON.stringify({
-      version: 1,
-      presets: [{ name: 'a', data: 'AT', mode: 'text', eol: 'lfcr' }],
-    });
-    expect(importOrThrow(raw).presets[0]!.eol).toBe('none');
-  });
-
-  /** isBlankTab 决定删分组要不要二次确认：漏算一个字段就会静默删掉用户设过的东西。 */
-  it('只设了帧尾的行不再算空行', () => {
-    const store = usePresetStore.getState();
-    store.setEol(tabPresets(store.presets, 1)[0]!.id, 'crlf');
-
-    const after = usePresetStore.getState();
-    expect(isBlankTab(after.tabs[1]!, tabPresets(after.presets, 1))).toBe(false);
-  });
-});
-
 describe('指令库的整理', () => {
   /**
    * 指令集是按项目攒的：手上一份电机的、一份传感器的。

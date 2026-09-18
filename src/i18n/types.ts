@@ -1,3 +1,4 @@
+import type { EscapeError } from '@/core/codec/escape';
 import type { HexParseError } from '@/core/codec/hex';
 import type { SessionNotice } from '@/core/session/notices';
 
@@ -131,11 +132,8 @@ export interface Messages {
   readonly colFormat: string;
   readonly colData: string;
   readonly colSend: string;
-  readonly colSuffix: string;
   readonly colPeriod: string;
   readonly colLoop: string;
-  /** 帧尾徽标的操作名：点开就能改这一条追加什么。 */
-  readonly editSuffix: string;
   readonly dataPlaceholder: string;
   readonly sequenceLoop: string;
   readonly gap: string;
@@ -187,7 +185,8 @@ export interface Messages {
   readonly runningTasks: (count: number) => string;
   readonly notice: (notice: SessionNotice) => string;
   readonly hexError: (error: HexParseError) => string;
-  readonly lossyHexSwitch: string;
+  /** TXT 里的转义写错了。index 指向那个反斜杠。 */
+  readonly escapeError: (error: EscapeError) => string;
   readonly importedPresets: (count: number) => string;
   readonly appendedPresets: (count: number) => string;
   readonly importFailed: (reason: string) => string;

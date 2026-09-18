@@ -1,13 +1,17 @@
 import { create } from 'zustand';
-import { findChecksum, type ChecksumId } from '@/core/checksum';
-import type { HexParseError } from '@/core/codec/hex';
 import { FramePlan, type TaskFrame } from '@/core/scheduler/framePlan';
 import { BUILTIN_PRESET_KEYS, type BuiltinPresetKey, type Messages } from '@/i18n/types';
 import { saveSoon } from '@/lib/persist';
 import { readLayeredJson, readStoredJson } from '@/lib/storage';
 import { useConnectionStore } from './connectionStore';
 import { useLogStore } from './logStore';
-import { buildFrame, convertPayload, EOL_KEYS, type EolKey, type PayloadMode } from './payload';
+import {
+  buildFrame,
+  convertPayload,
+  payloadToBytes,
+  type PayloadError,
+  type PayloadMode,
+} from './payload';
 import { presetTask, SEQUENCE_TASK, useTasksStore } from './tasksStore';
 
 export interface Preset {
@@ -16,13 +20,12 @@ export interface Preset {
   labelKey: BuiltinPresetKey | null;
   name: string;
   data: string;
-  mode: PayloadMode;
   /**
-   * 帧尾。两种模式各用一个，互斥 —— 与单条发送同一套规则（见 payload.ts 的 buildFrame）。
-   * TXT 用 eol，HEX 用 checksum，默认都不追加。
+   * TXT 模式下 data 是**带转义**的（`AT+VER?\r\n`，见 codec/escape.ts）。
+   * 帧尾不再是一个单独的设置项 —— 要追加什么直接写在报文里，
+   * 分隔符在中间的协议也就表达得出来了。
    */
-  eol: EolKey;
-  checksum: ChecksumId;
+  mode: PayloadMode;
   intervalMs: number;
   inSequence: boolean;
 }
@@ -60,7 +63,7 @@ let counter = 0;
 const nextId = (): string => `p${++counter}`;
 const nextTabId = (): string => `t${++counter}`;
 
-const BUILTINS: readonly Omit<Preset, 'id' | 'name' | 'eol' | 'checksum'>[] = [
+const BUILTINS: readonly Omit<Preset, 'id' | 'name'>[] = [
   { labelKey: 'queryVersion', data: 'AT+VER?', mode: 'text', intervalMs: 1000, inSequence: true },
   { labelKey: 'readStatus', data: 'AT+STATUS?', mode: 'text', intervalMs: 500, inSequence: true },
   {
@@ -111,8 +114,6 @@ function blankPreset(indexInTab: number): Preset {
     name: `#${indexInTab + 1}`,
     data: '',
     mode: 'text',
-    eol: 'none',
-    checksum: 'none',
     intervalMs: DEFAULT_INTERVAL_MS,
     inSequence: false,
   };
@@ -124,8 +125,6 @@ function isBlank(preset: Preset): boolean {
     preset.labelKey === null &&
     preset.data === '' &&
     preset.mode === 'text' &&
-    preset.eol === 'none' &&
-    preset.checksum === 'none' &&
     preset.intervalMs === DEFAULT_INTERVAL_MS &&
     !preset.inSequence &&
     /^#\d+$/.test(preset.name)
@@ -219,8 +218,6 @@ function serializePresets(tabs: readonly PresetTab[], presets: readonly Preset[]
         labelKey: preset.labelKey,
         data: preset.data,
         mode: preset.mode,
-        eol: preset.eol,
-        checksum: preset.checksum,
         intervalMs: preset.intervalMs,
         inSequence: preset.inSequence,
       })),
@@ -244,14 +241,7 @@ function defaultCollection(): PresetCollection {
   // 第一组是内置示例（恰好 10 条），其余各组是空行
   const collection: PresetCollection = {
     tabs: [{ id: nextTabId(), title: null }],
-    presets: BUILTINS.map((preset) => ({
-      ...preset,
-      id: nextId(),
-      name: '',
-      // 内置示例一律不追加帧尾：示例该演示的是「怎么填」，不是替用户决定报文长什么样
-      eol: 'none',
-      checksum: 'none',
-    })),
+    presets: BUILTINS.map((preset) => ({ ...preset, id: nextId(), name: '' })),
   };
   while (collection.tabs.length < PRESET_DEFAULT_TABS) {
     const blank = blankTab();
@@ -271,9 +261,11 @@ export function presetTabTitle(tab: PresetTab, index: number, messages: Messages
   return tab.title ?? messages.presetTabTitle(index + 1);
 }
 
-export type PresetIssue =
-  | { id: string; kind: 'lossy' }
-  | { id: string; kind: 'parse'; error: HexParseError };
+/** 一条预设当前的报文问题。TXT 也会有 —— 转义写错了同样发不出去。 */
+export interface PresetIssue {
+  id: string;
+  error: PayloadError;
+}
 
 interface PresetState {
   /** 按分组顺序排列，恒为 tabs.length × PRESET_TAB_SIZE 条。 */
@@ -293,8 +285,6 @@ interface PresetState {
   setData: (id: string, data: string) => void;
   setInterval: (id: string, intervalMs: number) => void;
   setInSequence: (id: string, inSequence: boolean) => void;
-  setEol: (id: string, eol: EolKey) => void;
-  setChecksum: (id: string, checksum: ChecksumId) => void;
   toggleMode: (id: string) => void;
 
   sendOnce: (id: string) => Promise<void>;
@@ -332,9 +322,8 @@ interface PresetState {
 }
 
 function validate(preset: Preset): PresetIssue | null {
-  if (preset.mode !== 'hex') return null;
-  const result = buildFrame(preset.data, 'hex', 'none');
-  return result.ok ? null : { id: preset.id, kind: 'parse', error: result.error };
+  const result = payloadToBytes(preset.data, preset.mode);
+  return result.ok ? null : { id: preset.id, error: result.error };
 }
 
 function withIssue(
@@ -385,25 +374,14 @@ export const usePresetStore = create<PresetState>()((set, get) => {
 
     setInSequence: (id, inSequence) => patch(id, { inSequence }),
 
-    setEol: (id, eol) => patch(id, { eol }),
-
-    setChecksum: (id, checksum) => patch(id, { checksum }),
-
     toggleMode: (id) => {
       const preset = get().presets.find((item) => item.id === id);
       if (!preset) return;
       const target: PayloadMode = preset.mode === 'hex' ? 'text' : 'hex';
       const converted = convertPayload(preset.data, preset.mode, target);
+      // 两个方向都无损了，只剩「当前内容本身就解析不通过」这一种失败
       if (!converted.ok) {
-        set((state) => ({
-          issues: withIssue(
-            state.issues,
-            id,
-            converted.reason === 'lossy'
-              ? { id, kind: 'lossy' }
-              : { id, kind: 'parse', error: converted.error },
-          ),
-        }));
+        set((state) => ({ issues: withIssue(state.issues, id, { id, error: converted.error }) }));
         return;
       }
       patch(id, { mode: target, data: converted.data });
@@ -412,7 +390,7 @@ export const usePresetStore = create<PresetState>()((set, get) => {
     sendOnce: async (id) => {
       const preset = get().presets.find((item) => item.id === id);
       if (!preset) return;
-      const result = buildFrame(preset.data, preset.mode, preset.eol, preset.checksum);
+      const result = buildFrame(preset.data, preset.mode);
       if (!result.ok) return;
       await useConnectionStore.getState().send(result.bytes);
     },
@@ -708,11 +686,6 @@ function parsePresetItem(item: unknown): Preset | null {
     name,
     data: item.data,
     mode,
-    // 与 sendStore 的还原同一条规则：目录里不存在的算法 id 一律退回「不追加」，
-    // 这样删掉某个算法之后，存量文件不会带着一个算不出来的帧尾进到界面里
-    eol: (EOL_KEYS as readonly unknown[]).includes(item.eol) ? (item.eol as EolKey) : 'none',
-    checksum:
-      typeof item.checksum === 'string' && findChecksum(item.checksum) ? item.checksum : 'none',
     intervalMs: Number.isFinite(interval)
       ? Math.max(10, Math.round(interval))
       : DEFAULT_INTERVAL_MS,
@@ -740,7 +713,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 /** 一条预设最终写出去的字节。内容解析不通过时没有帧可发。 */
 function presetBytes(preset: Preset): Uint8Array | null {
-  const result = buildFrame(preset.data, preset.mode, preset.eol, preset.checksum);
+  const result = buildFrame(preset.data, preset.mode);
   return result.ok ? result.bytes : null;
 }
 
