@@ -119,6 +119,8 @@ export interface Messages {
   readonly appendHint: string;
   readonly export: string;
   readonly searchPresets: string;
+  /** 收着分组管理与导入导出的那个菜单。 */
+  readonly presetMenu: string;
   readonly noMatch: string;
   /** 数据框的悬停提示：怎么调顺序、怎么挪到别的分组。 */
   readonly moveHint: string;

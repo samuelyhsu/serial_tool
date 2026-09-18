@@ -131,26 +131,29 @@ describe('分组', () => {
 
 describe('删除分组', () => {
   it('连同这一组的预设一起删，其余分组与顺序不变', () => {
-    const [first, second, third] = usePresetStore.getState().tabs;
+    const before = usePresetStore.getState().tabs;
     const thirdPresets = tabPresets(usePresetStore.getState().presets, 2).map(
       (preset) => preset.id,
     );
 
-    usePresetStore.getState().removeTab(second!.id);
+    usePresetStore.getState().removeTab(before[1]!.id);
 
     const { tabs, presets } = usePresetStore.getState();
-    expect(tabs.map((tab) => tab.id)).toEqual([first!.id, third!.id]);
-    expect(presets).toHaveLength(2 * PRESET_TAB_SIZE);
+    expect(tabs.map((tab) => tab.id)).toEqual(
+      before.filter((_, index) => index !== 1).map((tab) => tab.id),
+    );
+    expect(presets).toHaveLength((PRESET_DEFAULT_TABS - 1) * PRESET_TAB_SIZE);
     expect(tabPresets(presets, 1).map((preset) => preset.id)).toEqual(thirdPresets);
   });
 
   it('至少留一组', () => {
-    const [first, second, third] = usePresetStore.getState().tabs;
-    usePresetStore.getState().removeTab(third!.id);
-    usePresetStore.getState().removeTab(second!.id);
-    usePresetStore.getState().removeTab(first!.id);
+    const first = usePresetStore.getState().tabs[0]!;
+    // 从后往前删一遍：最后那次落在仅剩的一组上，应该被挡住
+    for (const tab of [...usePresetStore.getState().tabs].reverse()) {
+      usePresetStore.getState().removeTab(tab.id);
+    }
 
-    expect(usePresetStore.getState().tabs.map((tab) => tab.id)).toEqual([first!.id]);
+    expect(usePresetStore.getState().tabs.map((tab) => tab.id)).toEqual([first.id]);
     expect(usePresetStore.getState().presets).toHaveLength(PRESET_TAB_SIZE);
   });
 
@@ -163,15 +166,24 @@ describe('删除分组', () => {
     expect(tabs[activeTab]!.id).toBe(selected.id);
   });
 
-  it('删的正是选中组，落到顶上来的那一组；它是最后一组时落到前一组', () => {
+  it('删的正是选中组，选中落到顶上来的那一组', () => {
     const [, second, third] = usePresetStore.getState().tabs;
     usePresetStore.getState().selectTab(1);
-    usePresetStore.getState().removeTab(second!.id);
-    const afterFirst = usePresetStore.getState();
-    expect(afterFirst.tabs[afterFirst.activeTab]!.id).toBe(third!.id);
 
-    usePresetStore.getState().removeTab(third!.id);
-    expect(usePresetStore.getState().activeTab).toBe(0);
+    usePresetStore.getState().removeTab(second!.id);
+
+    const after = usePresetStore.getState();
+    expect(after.tabs[after.activeTab]!.id).toBe(third!.id);
+  });
+
+  it('删的是最后一组时选中落到前一组', () => {
+    const before = usePresetStore.getState().tabs;
+    usePresetStore.getState().selectTab(before.length - 1);
+
+    usePresetStore.getState().removeTab(before.at(-1)!.id);
+
+    const after = usePresetStore.getState();
+    expect(after.tabs[after.activeTab]!.id).toBe(before.at(-2)!.id);
   });
 
   it('删掉的预设的错误标记一并清掉', () => {
@@ -206,7 +218,9 @@ describe('带分组的导出 → 导入', () => {
 
     const imported = importOrThrow(usePresetStore.getState().exportPayload());
 
-    expect(imported.tabs.map((tab) => tab.title)).toEqual([null, '电机', null]);
+    expect(imported.tabs.map((tab) => tab.title)).toEqual(
+      Array.from({ length: PRESET_DEFAULT_TABS }, (_, index) => (index === 1 ? '电机' : null)),
+    );
     expect(tabPresets(imported.presets, 1)[3]!.data).toBe('AT+MOTOR');
     expect(imported.skipped).toBe(0);
   });

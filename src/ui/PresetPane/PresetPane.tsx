@@ -28,9 +28,11 @@ export function PresetPane(): React.JSX.Element {
   const t = useMessages();
   const tabsId = useId();
   const fileRef = useRef<HTMLInputElement>(null);
-  // 一个 file input 服务两个按钮：点的是哪个决定文件进来之后是替换还是追加
+  // 一个 file input 服务两个菜单项：点的是哪个决定文件进来之后是替换还是追加
   const importMode = useRef<'replace' | 'append'>('replace');
   const [query, setQuery] = useState('');
+  // null 表示菜单收着。不是布尔，因为打开的方式决定焦点落在哪一项
+  const [menuFocus, setMenuFocus] = useState<MenuFocus | null>(null);
 
   const presets = usePresetStore((s) => s.presets);
   const tabs = usePresetStore((s) => s.tabs);
@@ -153,9 +155,14 @@ export function PresetPane(): React.JSX.Element {
   return (
     <aside className={styles.pane} aria-label={t.multiSend}>
       <div className={styles.head}>
-        <PresetTabs tabDomId={tabDomId} panelId={panelId} />
+        <PresetTabs
+          tabDomId={tabDomId}
+          panelId={panelId}
+          onRequestRemove={() => setMenuFocus('remove')}
+        />
 
         <div className={styles.headActions}>
+          {/* 搜索留在外面：它是攒到几十条之后天天要用的，不值得多点一下菜单 */}
           <input
             type="search"
             className={`field field--sunk field--sm ${styles.search}`}
@@ -164,25 +171,12 @@ export function PresetPane(): React.JSX.Element {
             aria-label={t.searchPresets}
             onChange={(event) => setQuery(event.target.value)}
           />
-          <button
-            type="button"
-            className="btn"
-            title={t.importHint}
-            onClick={() => onPickFile('replace')}
-          >
-            {t.import}
-          </button>
-          <button
-            type="button"
-            className="btn"
-            title={t.appendHint}
-            onClick={() => onPickFile('append')}
-          >
-            {t.append}
-          </button>
-          <button type="button" className="btn" onClick={onExport}>
-            {t.export}
-          </button>
+          <PresetMenu
+            focus={menuFocus}
+            setFocus={setMenuFocus}
+            onPickFile={onPickFile}
+            onExport={onExport}
+          />
           <input
             ref={fileRef}
             type="file"
@@ -318,23 +312,26 @@ export function PresetPane(): React.JSX.Element {
 interface TabsProps {
   tabDomId: (tabId: string) => string;
   panelId: string;
+  /** 在有内容的分组上按了 Delete：删除入口在菜单里，把菜单打开让人看见要确认什么。 */
+  onRequestRemove: () => void;
 }
 
 /**
  * 分组标签页，按 WAI-ARIA 的 tabs 模式：只有选中的那个进 Tab 键序列，
- * 左右方向键 / Home / End 切换分组，焦点跟着走。双击或 F2 改名，「+」新建，
- * 「−」或 Delete 删除选中的那一组。
+ * 左右方向键 / Home / End 切换分组，焦点跟着走。双击或 F2 改名。
+ *
+ * 新建与删除不在这里 —— 它们跟导入导出一样是偶尔才用一次的动作，常驻在头部
+ * 只会把标签条挤没（见 PresetMenu）。Delete 键仍然管用：没动过的空分组直接删掉
+ * （多点了一下「新建」很常见），有内容的则把菜单叫出来。
  */
-function PresetTabs({ tabDomId, panelId }: TabsProps): React.JSX.Element {
+function PresetTabs({ tabDomId, panelId, onRequestRemove }: TabsProps): React.JSX.Element {
   const t = useMessages();
   const tabs = usePresetStore((s) => s.tabs);
   const presets = usePresetStore((s) => s.presets);
   const activeTab = usePresetStore((s) => s.activeTab);
   const selectTab = usePresetStore((s) => s.selectTab);
   const renameTab = usePresetStore((s) => s.renameTab);
-  const addTab = usePresetStore((s) => s.addTab);
   const removeTab = usePresetStore((s) => s.removeTab);
-  const { armed, confirm, reset } = useConfirm<string>();
 
   const buttons = useRef<(HTMLButtonElement | null)[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -358,9 +355,6 @@ function PresetTabs({ tabDomId, panelId }: TabsProps): React.JSX.Element {
     pendingFocus.current = null;
   });
 
-  // 征询的始终是选中的那一组：换了组，之前那次征询就作废
-  useEffect(() => reset(), [activeTab, reset]);
-
   // 新建的分组排在最后，标签一多就在可视区外；jsdom 没有 scrollIntoView
   useEffect(() => {
     buttons.current[activeTab]?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
@@ -381,20 +375,15 @@ function PresetTabs({ tabDomId, panelId }: TabsProps): React.JSX.Element {
     setRenamingId(null);
   };
 
-  /** 没动过的空分组直接删（多点了一下「+」很常见），有内容的要按两下。 */
-  const removeAt = (index: number): void => {
+  const onDelete = (index: number): void => {
     const tab = tabs[index];
     if (!tab || tabs.length <= 1) return;
-    const remove = (): void => {
-      removeTab(tab.id);
-      pendingFocus.current = usePresetStore.getState().activeTab;
-    };
-    if (isBlankTab(tab, tabPresets(presets, index))) {
-      reset();
-      remove();
-    } else {
-      confirm(tab.id, remove);
+    if (!isBlankTab(tab, tabPresets(presets, index))) {
+      onRequestRemove();
+      return;
     }
+    removeTab(tab.id);
+    pendingFocus.current = usePresetStore.getState().activeTab;
   };
 
   const onTabKeyDown = (event: React.KeyboardEvent, index: number): void => {
@@ -423,78 +412,246 @@ function PresetTabs({ tabDomId, panelId }: TabsProps): React.JSX.Element {
       startRename(index);
     } else if (event.key === 'Delete') {
       event.preventDefault();
-      removeAt(index);
+      onDelete(index);
     }
   };
 
+  return (
+    <div className={styles.tabs} role="tablist" aria-label={t.presetTabs}>
+      {tabs.map((tab, index) =>
+        tab.id === renamingId ? (
+          <input
+            key={tab.id}
+            ref={inputRef}
+            className={styles.tabInput}
+            value={draft}
+            maxLength={PRESET_TAB_TITLE_MAX}
+            aria-label={t.renameTab}
+            onChange={(event) => setDraft(event.target.value)}
+            onBlur={() => finishRename(true)}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter' && event.key !== 'Escape') return;
+              event.preventDefault();
+              pendingFocus.current = index;
+              finishRename(event.key === 'Enter');
+            }}
+          />
+        ) : (
+          <button
+            key={tab.id}
+            ref={(element) => {
+              buttons.current[index] = element;
+            }}
+            type="button"
+            role="tab"
+            id={tabDomId(tab.id)}
+            className={styles.tab}
+            aria-selected={index === activeTab}
+            aria-controls={panelId}
+            tabIndex={index === activeTab ? 0 : -1}
+            title={t.tabHint}
+            onClick={() => selectTab(index)}
+            onDoubleClick={() => startRename(index)}
+            onKeyDown={(event) => onTabKeyDown(event, index)}
+          >
+            {presetTabTitle(tab, index, t)}
+          </button>
+        ),
+      )}
+    </div>
+  );
+}
+
+/** 打开菜单时焦点落在哪一项：平时是第一项，按 Delete 叫出来时直接落到删除上。 */
+type MenuFocus = 'first' | 'remove';
+
+interface MenuProps {
+  /** null 表示收起；否则是打开后要聚焦的那一项。 */
+  focus: MenuFocus | null;
+  setFocus: (focus: MenuFocus | null) => void;
+  onPickFile: (mode: 'replace' | 'append') => void;
+  onExport: () => void;
+}
+
+/**
+ * 分组管理与导入导出。
+ *
+ * 这五项都是偶尔才用一次的（新建、删除分组，导入、追加、导出），常驻在头部的话
+ * 加上搜索框要吃掉两百多像素，而 470px 的右栏里分组标签条只剩两三个可见 ——
+ * 标签条才是天天在点的东西。收进菜单之后头部只留搜索框和一个「⋯」。
+ */
+function PresetMenu({ focus, setFocus, onPickFile, onExport }: MenuProps): React.JSX.Element {
+  const t = useMessages();
+  const menuId = useId();
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const removeRef = useRef<HTMLButtonElement>(null);
+
+  const tabs = usePresetStore((s) => s.tabs);
+  const presets = usePresetStore((s) => s.presets);
+  const activeTab = usePresetStore((s) => s.activeTab);
+  const addTab = usePresetStore((s) => s.addTab);
+  const removeTab = usePresetStore((s) => s.removeTab);
+  const { armed, confirm, reset } = useConfirm<string>();
+
+  const open = focus !== null;
   const activeTitle = tabs[activeTab] ? presetTabTitle(tabs[activeTab], activeTab, t) : '';
-  const deleteArmed = armed !== null && armed === tabs[activeTab]?.id;
+  const removeArmed = armed !== null && armed === tabs[activeTab]?.id;
+
+  // 收起菜单就等于放弃这次征询：再打开时又是一个干净的删除项
+  useEffect(() => {
+    if (!open) reset();
+  }, [open, reset]);
+
+  useEffect(() => {
+    if (focus === null) return;
+    if (focus === 'remove') removeRef.current?.focus();
+    else menuRef.current?.querySelector('button')?.focus();
+  }, [focus]);
+
+  const close = (): void => {
+    setFocus(null);
+    buttonRef.current?.focus();
+  };
+
+  /** 菜单内只有一个 Tab 停靠点，项间移动靠方向键（WAI-ARIA 的 menu 模式）。 */
+  const moveFocus = (delta: number): void => {
+    const items = [...(menuRef.current?.querySelectorAll('button:not(:disabled)') ?? [])];
+    if (items.length === 0) return;
+    const current = items.indexOf(document.activeElement as HTMLButtonElement);
+    const next = items[(current + delta + items.length) % items.length];
+    (next as HTMLButtonElement | undefined)?.focus();
+  };
+
+  /** 没动过的空分组直接删（多点了一下「新建」很常见），有内容的要按两下。 */
+  const onRemove = (): void => {
+    const tab = tabs[activeTab];
+    if (!tab || tabs.length <= 1) return;
+    if (isBlankTab(tab, tabPresets(presets, activeTab))) {
+      removeTab(tab.id);
+      close();
+      return;
+    }
+    confirm(tab.id, () => {
+      removeTab(tab.id);
+      close();
+    });
+  };
 
   return (
-    <>
-      <div className={styles.tabs} role="tablist" aria-label={t.presetTabs}>
-        {tabs.map((tab, index) =>
-          tab.id === renamingId ? (
-            <input
-              key={tab.id}
-              ref={inputRef}
-              className={styles.tabInput}
-              value={draft}
-              maxLength={PRESET_TAB_TITLE_MAX}
-              aria-label={t.renameTab}
-              onChange={(event) => setDraft(event.target.value)}
-              onBlur={() => finishRename(true)}
-              onKeyDown={(event) => {
-                if (event.key !== 'Enter' && event.key !== 'Escape') return;
-                event.preventDefault();
-                pendingFocus.current = index;
-                finishRename(event.key === 'Enter');
-              }}
-            />
-          ) : (
-            <button
-              key={tab.id}
-              ref={(element) => {
-                buttons.current[index] = element;
-              }}
-              type="button"
-              role="tab"
-              id={tabDomId(tab.id)}
-              className={styles.tab}
-              aria-selected={index === activeTab}
-              aria-controls={panelId}
-              tabIndex={index === activeTab ? 0 : -1}
-              title={t.tabHint}
-              onClick={() => selectTab(index)}
-              onDoubleClick={() => startRename(index)}
-              onKeyDown={(event) => onTabKeyDown(event, index)}
-            >
-              {presetTabTitle(tab, index, t)}
-            </button>
-          ),
-        )}
-      </div>
+    <div
+      className={styles.menuWrap}
+      onBlur={(event) => {
+        // 焦点还在菜单里（在项之间移动）就不收
+        if (event.currentTarget.contains(event.relatedTarget)) return;
+        setFocus(null);
+      }}
+    >
       <button
+        ref={buttonRef}
         type="button"
-        className={`btn ${styles.tabAction}`}
-        aria-label={t.newTab}
-        title={t.newTab}
-        onClick={addTab}
+        className={`btn ${styles.menuBtn}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls={open ? menuId : undefined}
+        aria-label={t.presetMenu}
+        title={t.presetMenu}
+        onClick={() => setFocus(open ? null : 'first')}
+        onKeyDown={(event) => {
+          if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+          event.preventDefault();
+          setFocus('first');
+        }}
       >
-        +
+        ⋯
       </button>
-      {tabs.length > 1 ? (
-        <button
-          type="button"
-          className={`btn btn--danger ${styles.tabAction}`}
-          aria-label={deleteArmed ? t.confirmDeleteTab : t.deleteTab(activeTitle)}
-          title={deleteArmed ? t.confirmDeleteTab : t.deleteTab(activeTitle)}
-          onClick={() => removeAt(activeTab)}
+
+      {open ? (
+        <div
+          ref={menuRef}
+          id={menuId}
+          role="menu"
+          aria-label={t.presetMenu}
+          className={styles.menu}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              close();
+              return;
+            }
+            const delta = event.key === 'ArrowDown' ? 1 : event.key === 'ArrowUp' ? -1 : 0;
+            if (delta === 0) return;
+            event.preventDefault();
+            moveFocus(delta);
+          }}
         >
-          {deleteArmed ? t.confirmDeleteTab : '−'}
-        </button>
+          <button
+            type="button"
+            role="menuitem"
+            tabIndex={-1}
+            className={styles.menuItem}
+            onClick={() => {
+              addTab();
+              close();
+            }}
+          >
+            {t.newTab}
+          </button>
+          <button
+            ref={removeRef}
+            type="button"
+            role="menuitem"
+            tabIndex={-1}
+            className={`${styles.menuItem} ${styles.menuDanger}`}
+            disabled={tabs.length <= 1}
+            onClick={onRemove}
+          >
+            {removeArmed ? t.confirmDeleteTab : t.deleteTab(activeTitle)}
+          </button>
+
+          <div role="separator" className={styles.menuSep} />
+
+          <button
+            type="button"
+            role="menuitem"
+            tabIndex={-1}
+            className={styles.menuItem}
+            title={t.importHint}
+            onClick={() => {
+              onPickFile('replace');
+              close();
+            }}
+          >
+            {t.import}
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            tabIndex={-1}
+            className={styles.menuItem}
+            title={t.appendHint}
+            onClick={() => {
+              onPickFile('append');
+              close();
+            }}
+          >
+            {t.append}
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            tabIndex={-1}
+            className={styles.menuItem}
+            onClick={() => {
+              onExport();
+              close();
+            }}
+          >
+            {t.export}
+          </button>
+        </div>
       ) : null}
-    </>
+    </div>
   );
 }
 

@@ -16,6 +16,11 @@ function tabs(): HTMLElement[] {
   return screen.getAllByRole('tab');
 }
 
+/** 分组管理与导入导出都收在这个菜单里。 */
+async function openMenu(): Promise<void> {
+  await userEvent.click(screen.getByRole('button', { name: '分组与文件' }));
+}
+
 describe('多条发送', () => {
   beforeEach(() => {
     __resetLogStoreForTests();
@@ -129,11 +134,37 @@ describe('多条发送', () => {
     expect(usePresetStore.getState().presets.filter((p) => p.inSequence)).toHaveLength(before - 1);
   });
 
-  it('默认三个分组，第一个选中，列表归属于选中的分组', () => {
+  it('默认五个分组，第一个选中，列表归属于选中的分组', () => {
     render(<PresetPane />);
-    expect(tabs().map((tab) => tab.textContent)).toEqual(['分组 1', '分组 2', '分组 3']);
+    expect(tabs().map((tab) => tab.textContent)).toEqual(
+      Array.from({ length: PRESET_DEFAULT_TABS }, (_, index) => `分组 ${index + 1}`),
+    );
     expect(tabs()[0]).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tabpanel')).toHaveAccessibleName('分组 1');
+  });
+
+  /** 这几项都是偶尔用一次的，常驻在头部只会把天天要点的标签条挤没。 */
+  it('头部平时只有搜索框和一个菜单按钮', () => {
+    render(<PresetPane />);
+    expect(screen.getByRole('searchbox', { name: '搜索预设' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '分组与文件' })).toBeInTheDocument();
+    for (const name of ['新建分组', '导入', '追加', '导出']) {
+      expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
+    }
+  });
+
+  it('菜单里方向键移动、Esc 收起并把焦点还回按钮', async () => {
+    render(<PresetPane />);
+    const button = screen.getByRole('button', { name: '分组与文件' });
+
+    await userEvent.click(button);
+    expect(screen.getByRole('menuitem', { name: '新建分组' })).toHaveFocus();
+    await userEvent.keyboard('{ArrowDown}');
+    expect(screen.getByRole('menuitem', { name: /^删除分组/ })).toHaveFocus();
+
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    expect(button).toHaveFocus();
   });
 
   it('点分组只换显示的 10 条，总数不变', async () => {
@@ -158,18 +189,22 @@ describe('多条发送', () => {
     expect(tabs()[1]).toHaveAttribute('aria-selected', 'true');
     expect(tabs()[1]).toHaveFocus();
 
+    // 从第二个往左两格：过了头就绕到最后一个
     await userEvent.keyboard('{ArrowLeft}{ArrowLeft}');
-    expect(tabs()[2]).toHaveAttribute('aria-selected', 'true');
+    expect(tabs().at(-1)).toHaveAttribute('aria-selected', 'true');
 
     await userEvent.keyboard('{Home}');
     expect(tabs()[0]).toHaveFocus();
     await userEvent.keyboard('{End}');
-    expect(tabs()[2]).toHaveFocus();
+    expect(tabs().at(-1)).toHaveFocus();
   });
 
   it('只有选中的分组在 Tab 键序列里', () => {
     render(<PresetPane />);
-    expect(tabs().map((tab) => tab.tabIndex)).toEqual([0, -1, -1]);
+    expect(tabs().map((tab) => tab.tabIndex)).toEqual([
+      0,
+      ...Array<number>(PRESET_DEFAULT_TABS - 1).fill(-1),
+    ]);
   });
 
   it('双击分组标题改名，回车提交后焦点回到标签上', async () => {
@@ -214,10 +249,11 @@ describe('多条发送', () => {
 
   it('新建分组排在最后并自动选中，里面是空行', async () => {
     render(<PresetPane />);
-    await userEvent.click(screen.getByRole('button', { name: '新建分组' }));
+    await openMenu();
+    await userEvent.click(screen.getByRole('menuitem', { name: '新建分组' }));
 
     expect(tabs()).toHaveLength(PRESET_DEFAULT_TABS + 1);
-    expect(tabs().at(-1)).toHaveTextContent('分组 4');
+    expect(tabs().at(-1)).toHaveTextContent(`分组 ${PRESET_DEFAULT_TABS + 1}`);
     expect(tabs().at(-1)).toHaveAttribute('aria-selected', 'true');
     expect(within(rows()[0]!).getByRole('button', { name: '#1' })).toBeInTheDocument();
   });
@@ -234,86 +270,103 @@ describe('多条发送', () => {
       useUiStore.setState({ language: 'en' });
     });
 
-    expect(tabs().map((tab) => tab.textContent)).toEqual(['电机', 'Group 2', 'Group 3']);
+    expect(tabs().map((tab) => tab.textContent)).toEqual([
+      '电机',
+      ...Array.from({ length: PRESET_DEFAULT_TABS - 1 }, (_, index) => `Group ${index + 2}`),
+    ]);
   });
 
-  it('没动过的空分组点「−」直接删，选中与焦点落到顶上来的那一组', async () => {
+  it('没动过的空分组从菜单里直接删，选中落到顶上来的那一组', async () => {
     render(<PresetPane />);
     await userEvent.click(tabs()[1]!);
-    await userEvent.click(screen.getByRole('button', { name: '删除分组「分组 2」' }));
+    await openMenu();
+    await userEvent.click(screen.getByRole('menuitem', { name: '删除分组「分组 2」' }));
 
-    // 没改过名的标题按位置编号，原来的第三组现在是「分组 2」
-    expect(tabs().map((tab) => tab.textContent)).toEqual(['分组 1', '分组 2']);
+    expect(tabs()).toHaveLength(PRESET_DEFAULT_TABS - 1);
     expect(tabs()[1]).toHaveAttribute('aria-selected', 'true');
-    expect(tabs()[1]).toHaveFocus();
   });
 
   it('有内容的分组要按两下才删，第一下只是征询', async () => {
     render(<PresetPane />);
-    await userEvent.click(screen.getByRole('button', { name: '删除分组「分组 1」' }));
+    await openMenu();
+    await userEvent.click(screen.getByRole('menuitem', { name: '删除分组「分组 1」' }));
     expect(tabs()).toHaveLength(PRESET_DEFAULT_TABS);
 
-    await userEvent.click(screen.getByRole('button', { name: '确认删除？' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: '确认删除？' }));
     expect(tabs()).toHaveLength(PRESET_DEFAULT_TABS - 1);
     expect(screen.queryByRole('button', { name: '查询版本' })).not.toBeInTheDocument();
   });
 
-  it('征询状态会自己超时复原，不会一直吊着一个危险按钮', async () => {
+  it('征询状态会自己超时复原，不会一直吊着一个危险菜单项', async () => {
     render(<PresetPane />);
-    await userEvent.click(screen.getByRole('button', { name: '删除分组「分组 1」' }));
-    expect(screen.getByRole('button', { name: '确认删除？' })).toBeInTheDocument();
+    await openMenu();
+    await userEvent.click(screen.getByRole('menuitem', { name: '删除分组「分组 1」' }));
+    expect(screen.getByRole('menuitem', { name: '确认删除？' })).toBeInTheDocument();
 
     // 3 秒的征询窗口是产品行为，如实等一次
     await waitFor(
-      () => expect(screen.getByRole('button', { name: '删除分组「分组 1」' })).toBeInTheDocument(),
+      () => expect(screen.getByRole('menuitem', { name: '删除分组「分组 1」' })).toBeInTheDocument(),
       { timeout: 5000 },
     );
     expect(tabs()).toHaveLength(PRESET_DEFAULT_TABS);
   });
 
-  it('换到别的分组，之前那次征询作废', async () => {
+  it('收起菜单，之前那次征询作废', async () => {
     render(<PresetPane />);
-    await userEvent.dblClick(tabs()[1]!);
-    const input = screen.getByRole('textbox', { name: '重命名分组' });
-    await userEvent.clear(input);
-    await userEvent.type(input, 'X{Enter}');
-    await userEvent.click(screen.getByRole('button', { name: /^删除分组/ }));
-    expect(screen.getByRole('button', { name: '确认删除？' })).toBeInTheDocument();
+    await openMenu();
+    await userEvent.click(screen.getByRole('menuitem', { name: /^删除分组/ }));
+    expect(screen.getByRole('menuitem', { name: '确认删除？' })).toBeInTheDocument();
 
-    // 切走再切回来：回来时不该还吊着上一次的征询，得重新按两下
-    await userEvent.click(tabs()[0]!);
-    await userEvent.click(tabs()[1]!);
-    expect(screen.queryByRole('button', { name: '确认删除？' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '删除分组「X」' })).toBeInTheDocument();
+    // 关掉再打开：不该还吊着上一次的征询，得重新按两下
+    await userEvent.keyboard('{Escape}');
+    await openMenu();
+
+    expect(screen.queryByRole('menuitem', { name: '确认删除？' })).not.toBeInTheDocument();
     expect(tabs()).toHaveLength(PRESET_DEFAULT_TABS);
   });
 
-  it('在选中的标签上按 Delete 与点「−」相同', async () => {
+  it('空分组在标签上按 Delete 直接删掉', async () => {
     render(<PresetPane />);
     act(() => {
       tabs()[0]!.focus();
     });
     await userEvent.keyboard('{End}{Delete}');
 
+    // 删的是最后一组，选中与焦点落到前一组
     expect(tabs()).toHaveLength(PRESET_DEFAULT_TABS - 1);
-    expect(tabs()[1]).toHaveAttribute('aria-selected', 'true');
-    expect(tabs()[1]).toHaveFocus();
+    expect(tabs().at(-1)).toHaveAttribute('aria-selected', 'true');
+    expect(tabs().at(-1)).toHaveFocus();
   });
 
-  it('只剩一组时没有删除按钮，Delete 也不起作用', async () => {
+  it('只剩一组时删除项是灰的，Delete 也不起作用', async () => {
     render(<PresetPane />);
     act(() => {
       const { tabs: current, removeTab } = usePresetStore.getState();
-      removeTab(current[2]!.id);
-      removeTab(current[1]!.id);
+      for (const tab of [...current].reverse()) removeTab(tab.id);
     });
 
-    expect(screen.queryByRole('button', { name: /^删除分组/ })).not.toBeInTheDocument();
+    await openMenu();
+    expect(screen.getByRole('menuitem', { name: /^删除分组/ })).toBeDisabled();
+
+    await userEvent.keyboard('{Escape}');
     act(() => {
       tabs()[0]!.focus();
     });
     await userEvent.keyboard('{Delete}');
     expect(tabs()).toHaveLength(1);
+  });
+
+  /** 删除入口在菜单里，键盘按 Delete 就得把菜单叫出来 —— 否则「确认删除？」没地方显示。 */
+  it('有内容的分组按 Delete 会打开菜单并落在删除项上', async () => {
+    render(<PresetPane />);
+    act(() => {
+      tabs()[0]!.focus();
+    });
+
+    await userEvent.keyboard('{Delete}');
+
+    expect(screen.getByRole('menuitem', { name: '删除分组「分组 1」' })).toHaveFocus();
+    expect(tabs()).toHaveLength(PRESET_DEFAULT_TABS);
   });
 
   /** 勾选的含义是「参与顺序循环」，与当前看的是哪一组无关。 */

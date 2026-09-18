@@ -50,7 +50,7 @@ export const PRESET_EXPORT_VERSION = 2;
  */
 export const PRESET_TAB_SIZE = 10;
 /** 新用户默认几组；旧版分页数据迁移过来时也至少保留这么多组。 */
-export const PRESET_DEFAULT_TABS = 3;
+export const PRESET_DEFAULT_TABS = 5;
 /** 标签页上放不下更长的标题。 */
 export const PRESET_TAB_TITLE_MAX = 16;
 
@@ -647,8 +647,7 @@ function validateTabs(rawTabs: readonly unknown[]): ImportResult {
 /**
  * 分组之前的格式：一整列预设，当时按每页 10 条分页显示。
  *
- * 按原来的页切成分组，末尾完全没用过的空页去掉（至少留 PRESET_DEFAULT_TABS 组）——
- * 旧版固定 5 页，原样照搬的话大多数人会凭空多出两个空分组。
+ * 按原来的页切成分组，末尾完全没用过的空页去掉（至少留 PRESET_DEFAULT_TABS 组）。
  */
 function validatePages(items: readonly unknown[]): ImportResult {
   if (items.length === 0) return { ok: false, reason: 'file contains no presets' };

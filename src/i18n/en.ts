@@ -88,6 +88,7 @@ export const en: Messages = {
   appendHint: 'Add the groups in the file after the existing ones',
   export: 'Export',
   searchPresets: 'Search presets',
+  presetMenu: 'Groups and files',
   noMatch: 'No preset matches',
   moveHint: 'Alt+Up/Down reorders, Alt+Shift+Up/Down moves across groups',
   tabFull: 'The adjacent group has no empty row left',

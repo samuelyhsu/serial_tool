@@ -85,6 +85,7 @@ export const zh: Messages = {
   appendHint: '把文件里的分组接在现有分组之后',
   export: '导出',
   searchPresets: '搜索预设',
+  presetMenu: '分组与文件',
   noMatch: '没有匹配的预设',
   moveHint: 'Alt+↑↓ 调整顺序，Alt+Shift+↑↓ 挪到相邻分组',
   tabFull: '相邻分组没有空行了',

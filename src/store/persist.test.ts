@@ -163,14 +163,17 @@ describe('预设持久化', () => {
     const store = app.preset.usePresetStore;
     store.getState().renameTab(store.getState().tabs[1]!.id, '电机');
     store.getState().addTab();
-    expect(store.getState().activeTab).toBe(3);
+    const tabCount = app.preset.PRESET_DEFAULT_TABS + 1;
+    expect(store.getState().activeTab).toBe(tabCount - 1);
     app.persist.flushPersist();
 
     app = await reload();
     const state = app.preset.usePresetStore.getState();
-    expect(state.tabs.map((tab) => tab.title)).toEqual([null, '电机', null, null]);
-    expect(state.presets).toHaveLength(4 * app.preset.PRESET_TAB_SIZE);
-    expect(state.activeTab).toBe(3);
+    expect(state.tabs.map((tab) => tab.title)).toEqual(
+      Array.from({ length: tabCount }, (_, index) => (index === 1 ? '电机' : null)),
+    );
+    expect(state.presets).toHaveLength(tabCount * app.preset.PRESET_TAB_SIZE);
+    expect(state.activeTab).toBe(tabCount - 1);
   });
 
   it('选中的分组按分层作用域存：两处都写，读时本页面优先', async () => {
