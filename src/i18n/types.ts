@@ -113,6 +113,10 @@ export interface Messages {
   readonly checksumAppendTip: string;
   /** 字节数读数的悬停说明：算的是最终写出去的那一串。 */
   readonly byteCountTip: string;
+  readonly copyPayload: string;
+  readonly copyPayloadTip: string;
+  readonly copied: string;
+  readonly copyFailed: string;
 
   // 预设区
   readonly multiSend: string;

@@ -81,6 +81,11 @@ export const en: Messages = {
   checksum: 'Checksum',
   checksumAppendTip: 'Computed live from the payload and appended automatically when sending',
   byteCountTip: 'Bytes actually written to the port: escapes resolved, checksum included',
+  copyPayload: 'Copy',
+  copyPayloadTip:
+    'Copy what will actually be sent: TXT as normalized escapes, HEX including the checksum',
+  copied: 'Payload copied to clipboard',
+  copyFailed: 'Copy failed: clipboard unavailable',
 
   multiSend: 'Multi send',
   import: 'Import',

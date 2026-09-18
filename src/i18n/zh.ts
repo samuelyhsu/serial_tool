@@ -78,6 +78,10 @@ export const zh: Messages = {
   checksum: '校验和',
   checksumAppendTip: '按当前载荷实时计算，发送时自动追加在数据末尾',
   byteCountTip: '真正写到串口上的字节数：转义已解析、校验和已计入',
+  copyPayload: '复制',
+  copyPayloadTip: '复制最终会发出去的报文：TXT 写成规范化的转义，HEX 含校验和',
+  copied: '报文已复制到剪贴板',
+  copyFailed: '复制失败：剪贴板不可用',
 
   multiSend: '多条发送',
   import: '导入',

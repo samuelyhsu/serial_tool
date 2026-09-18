@@ -1,7 +1,7 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { __resetLogStoreForTests } from '@/store/logStore';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { allEntries, __resetLogStoreForTests } from '@/store/logStore';
 import { useSendStore } from '@/store/sendStore';
 import { useUiStore } from '@/store/uiStore';
 import { SendPane } from '@/ui/SendPane/SendPane';
@@ -105,4 +105,87 @@ describe('SendPane', () => {
     render(<SendPane />);
     expect(screen.getByRole('button', { name: '发送' })).toBeDisabled();
   });
+
+describe('复制按钮', () => {
+  function stubClipboard(result: Promise<void> | undefined) {
+    const writeText = vi.fn(() => result);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: result === undefined ? undefined : { writeText },
+    });
+    return writeText;
+  }
+
+  afterEach(() => {
+    Reflect.deleteProperty(navigator, 'clipboard');
+  });
+
+  /**
+   * 复制的是最终会发出去的那一串，不是输入框里的原文。TXT 写成规范化的转义 ——
+   * 粘回来还是同样的字节，非 UTF-8 也不会在剪贴板里坏掉。
+   */
+  it('TXT 模式复制解析后的报文，不是输入框里的原文', async () => {
+    const writeText = stubClipboard(Promise.resolve());
+    // \x41 就是 A：复制出来的该是规范化之后的样子，照抄输入就看不出区别了
+    useSendStore.setState({ payload: String.raw`\x41T\r\n`, mode: 'text' });
+    render(<SendPane />);
+
+    await userEvent.click(screen.getByRole('button', { name: '复制' }));
+
+    expect(writeText).toHaveBeenCalledExactlyOnceWith(String.raw`AT\r\n`);
+  });
+
+  it('HEX 模式复制的是含校验和的字节', async () => {
+    const writeText = stubClipboard(Promise.resolve());
+    useSendStore.setState({
+      payload: '01 03 00 00 00 02',
+      mode: 'hex',
+      checksum: 'crc16-modbus',
+    });
+    render(<SendPane />);
+
+    await userEvent.click(screen.getByRole('button', { name: '复制' }));
+
+    expect(writeText).toHaveBeenCalledExactlyOnceWith('01 03 00 00 00 02 C4 0B');
+  });
+
+  it('复制成功后在日志里说一声', async () => {
+    stubClipboard(Promise.resolve());
+    render(<SendPane />);
+
+    await userEvent.click(screen.getByRole('button', { name: '复制' }));
+
+    await waitFor(() => {
+      expect(allEntries().at(-1)?.text).toBe('报文已复制到剪贴板');
+    });
+  });
+
+  /** VS Code 的 webview 里剪贴板未必给得了权限，不能静悄悄地什么都不发生。 */
+  it('剪贴板不可用时也要说一声', async () => {
+    stubClipboard(Promise.reject(new Error('denied')));
+    render(<SendPane />);
+
+    await userEvent.click(screen.getByRole('button', { name: '复制' }));
+
+    await waitFor(() => {
+      expect(allEntries().at(-1)?.text).toBe('复制失败：剪贴板不可用');
+    });
+  });
+
+  it('连剪贴板 API 都没有时同样给提示', async () => {
+    stubClipboard(undefined);
+    render(<SendPane />);
+
+    await userEvent.click(screen.getByRole('button', { name: '复制' }));
+
+    expect(allEntries().at(-1)?.text).toBe('复制失败：剪贴板不可用');
+  });
+
+  it('报文解析不通过时复制按钮禁用', () => {
+    useSendStore.setState({ payload: 'ZZ', mode: 'hex' });
+    render(<SendPane />);
+
+    expect(screen.getByRole('button', { name: '复制' })).toBeDisabled();
+  });
+});
 });

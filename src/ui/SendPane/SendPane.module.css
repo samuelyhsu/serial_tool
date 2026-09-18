@@ -93,6 +93,10 @@
   color: var(--red-text);
 }
 
+.copyBtn {
+  padding: 3px 10px;
+}
+
 /* 真正写出去的字节数。靠右站着，TXT 模式下这一行只剩格式按钮时也不至于空一大片 */
 .byteCount {
   margin-left: auto;
