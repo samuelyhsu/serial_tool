@@ -84,9 +84,36 @@ describe('多条发送', () => {
     expect(within(first).getByTitle('切换 TXT / HEX 模式')).toBeInTheDocument();
     expect(within(first).getByRole('textbox', { name: /数据/ })).toBeInTheDocument();
     expect(within(first).getByRole('button', { name: '查询版本' })).toBeInTheDocument();
-    expect(within(first).getByRole('button', { name: /重命名发送按钮/ })).toBeInTheDocument();
     expect(within(first).getByRole('spinbutton', { name: /周期/ })).toBeInTheDocument();
     expect(within(first).getByRole('button', { name: /循环/ })).toBeInTheDocument();
+  });
+
+  /** 从数据框按 F2 进入改名 —— 点发送按钮会真的把报文发出去。 */
+  async function renameFirst(): Promise<void> {
+    const data = within(rows()[0]!).getByRole('textbox', { name: /数据/ });
+    data.focus();
+    await userEvent.keyboard('{F2}');
+  }
+
+  // 那个 ✎ 按钮没了，改名只剩 F2，所以提示必须说得出这件事
+  it('发送按钮悬停说得出这一行能按什么', () => {
+    render(<PresetPane />);
+    const send = within(rows()[0]!).getByRole('button', { name: '查询版本' });
+    expect(send.getAttribute('title')).toMatch(/F2/);
+    expect(send.getAttribute('title')).toMatch(/Alt\+↑↓/);
+  });
+
+  it('行内不再有单独的改名按钮', () => {
+    render(<PresetPane />);
+    expect(screen.queryByRole('button', { name: /重命名发送按钮/ })).not.toBeInTheDocument();
+  });
+
+  // 功能已经移除，提示不该还挂在按钮上
+  it('发送按钮上没有 Alt+数字 的过时提示', () => {
+    render(<PresetPane />);
+    // 行内别的控件（循环按钮、勾选框）的可访问名也带着预设名，这里要的是发送按钮那一个
+    const send = within(rows()[0]!).getByRole('button', { name: '查询版本' });
+    expect(send.title).not.toMatch(/Alt\+\d/);
   });
 
   it('发送按钮上显示的就是预设名称', () => {
@@ -95,9 +122,13 @@ describe('多条发送', () => {
     expect(screen.getByRole('button', { name: '读取状态' })).toBeInTheDocument();
   });
 
-  it('点 ✎ 切换成输入框改名，回车提交', async () => {
+  /**
+   * F2 挂在整行而不是发送按钮上：用鼠标聚焦发送按钮的唯一办法是点它，
+   * 而点一下就把报文发出去了 —— 重命名不该带一次误发。
+   */
+  it('行内按 F2 切换成输入框改名，回车提交', async () => {
     render(<PresetPane />);
-    await userEvent.click(screen.getByRole('button', { name: '重命名发送按钮: 查询版本' }));
+    await renameFirst();
 
     const input = screen.getByRole('textbox', { name: '重命名发送按钮' });
     expect(input).toHaveFocus();
@@ -113,7 +144,7 @@ describe('多条发送', () => {
 
   it('按 Esc 放弃改名', async () => {
     render(<PresetPane />);
-    await userEvent.click(screen.getByRole('button', { name: '重命名发送按钮: 查询版本' }));
+    await renameFirst();
     await userEvent.type(screen.getByRole('textbox', { name: '重命名发送按钮' }), '别存{Escape}');
 
     await waitFor(() => {
@@ -123,7 +154,7 @@ describe('多条发送', () => {
 
   it('名称留空时保持原名，不会出现没有文字的按钮', async () => {
     render(<PresetPane />);
-    await userEvent.click(screen.getByRole('button', { name: '重命名发送按钮: 查询版本' }));
+    await renameFirst();
 
     const input = screen.getByRole('textbox', { name: '重命名发送按钮' });
     await userEvent.clear(input);

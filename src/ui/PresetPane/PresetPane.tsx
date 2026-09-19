@@ -6,7 +6,6 @@ import { useLogStore } from '@/store/logStore';
 import {
   isBlankTab,
   parseImportedPresets,
-  PRESET_TAB_SIZE,
   PRESET_TAB_TITLE_MAX,
   presetLabel,
   presetTabTitle,
@@ -28,7 +27,7 @@ import styles from './PresetPane.module.css';
  * 改一个键就得改三处，漏掉哪处都没人看得见。
  */
 function keyboardHints(t: Messages): string {
-  return [t.moveHint, t.tabHint].join(' · ');
+  return [t.rowKeyHint, t.tabHint].join(' · ');
 }
 
 export function PresetPane(): React.JSX.Element {
@@ -152,6 +151,18 @@ export function PresetPane(): React.JSX.Element {
             aria-label={t.searchPresets}
             onChange={(event) => setQuery(event.target.value)}
           />
+          {/*
+            Alt+↑↓ 调顺序、F2 重命名都**没有鼠标入口**，不说的话没人找得到。
+            放在头部而不是列头里：这一排是常驻的动作区，眼睛本来就会扫到。
+          */}
+          <span
+            className={styles.kbdHint}
+            role="note"
+            aria-label={keyboardHints(t)}
+            title={keyboardHints(t)}
+          >
+            ?
+          </span>
           <PresetMenu
             focus={menuFocus}
             setFocus={setMenuFocus}
@@ -173,19 +184,6 @@ export function PresetPane(): React.JSX.Element {
         <span>{t.colFormat}</span>
         <span>{t.colData}</span>
         <span>{t.colSend}</span>
-        {/*
-          第 5 列本来是空的（对着每行的重命名按钮）。放一个 ? 在这儿，
-          是因为 Alt+↑↓ 调顺序**没有鼠标入口**，不说的话没人找得到它。
-          列头常驻可见，比挂在某个输入框的 title 上更容易被碰到。
-        */}
-        <span
-          className={styles.kbdHint}
-          role="note"
-          aria-label={keyboardHints(t)}
-          title={keyboardHints(t)}
-        >
-          ?
-        </span>
         <span>{t.colPeriod}</span>
         <span className={styles.columnLoop}>{t.colLoop}</span>
       </div>
@@ -197,11 +195,10 @@ export function PresetPane(): React.JSX.Element {
         aria-labelledby={tabs[activeTab] ? tabDomId(tabs[activeTab].id) : undefined}
       >
         {found === null ? (
-          visiblePresets.map((preset, index) => (
+          visiblePresets.map((preset) => (
             <PresetRow
               key={preset.id}
               preset={preset}
-              slot={index}
               movable
               invalid={issues[preset.id] !== undefined}
               looping={isTaskRunning(running, presetTask(preset.id))}
@@ -219,7 +216,6 @@ export function PresetPane(): React.JSX.Element {
                 <PresetRow
                   key={preset.id}
                   preset={preset}
-                  slot={null}
                   movable={false}
                   invalid={issues[preset.id] !== undefined}
                   looping={isTaskRunning(running, presetTask(preset.id))}
@@ -650,7 +646,6 @@ function PresetMenu({ focus, setFocus, onPickFile, onExport }: MenuProps): React
 interface RowProps {
   preset: Preset;
   /** 组内序号，用来标出 Alt+N 快捷键；搜索结果里的行不属于任何位置，传 null。 */
-  slot: number | null;
   /** 搜索结果里顺序没有意义，那时不接移动快捷键。 */
   movable: boolean;
   invalid: boolean;
@@ -668,14 +663,7 @@ interface RowProps {
  * 调顺序同理走快捷键而不是箭头按钮：一行已经排了七个控件，再塞两个 18px 的箭头，
  * 数据框就只剩六十来像素，什么都看不清了。
  */
-function PresetRow({
-  preset,
-  slot,
-  movable,
-  invalid,
-  looping,
-  canSend,
-}: RowProps): React.JSX.Element {
+function PresetRow({ preset, movable, invalid, looping, canSend }: RowProps): React.JSX.Element {
   const t = useMessages();
   const nameRef = useRef<HTMLInputElement>(null);
   const [renaming, setRenaming] = useState(false);
@@ -695,9 +683,6 @@ function PresetRow({
 
   const label = presetLabel(preset, t);
   const empty = preset.data.trim() === '';
-  // Alt+0 是第 10 条：十个槽位、十个数字键，0 排在 9 后面
-  const shortcut = slot === null ? null : `Alt+${slot === PRESET_TAB_SIZE - 1 ? 0 : slot + 1}`;
-
   // select() 按规范不移动焦点，必须先 focus()
   useEffect(() => {
     if (!renaming) return;
@@ -711,8 +696,17 @@ function PresetRow({
     setRenaming(false);
   }, [rename, preset.id, draft]);
 
-  const onMoveKey = (event: React.KeyboardEvent): void => {
-    if (!event.altKey || event.ctrlKey || event.metaKey) return;
+  const onRowKey = (event: React.KeyboardEvent): void => {
+    // F2 挂在整行而不是发送按钮上：用鼠标聚焦发送按钮的唯一办法是点它，
+    // 而点一下就把报文发出去了 —— 重命名不该带一次误发。
+    // 点数据框（或 Tab 到行内任意控件）再按 F2 才是安全的路径。
+    if (event.key === 'F2') {
+      event.preventDefault();
+      setDraft(label);
+      setRenaming(true);
+      return;
+    }
+    if (!movable || !event.altKey || event.ctrlKey || event.metaKey) return;
     const delta = event.key === 'ArrowUp' ? -1 : event.key === 'ArrowDown' ? 1 : 0;
     if (delta === 0) return;
     event.preventDefault();
@@ -729,11 +723,7 @@ function PresetRow({
 
   return (
     <>
-      <div
-        className={styles.row}
-        data-looping={looping}
-        onKeyDown={movable ? onMoveKey : undefined}
-      >
+      <div className={styles.row} data-looping={looping} onKeyDown={onRowKey}>
         <input
           type="checkbox"
           className={styles.seq}
@@ -749,7 +739,7 @@ function PresetRow({
           value={preset.data}
           spellCheck={false}
           placeholder={t.dataPlaceholder}
-          title={movable ? t.moveHint : undefined}
+          title={t.rowKeyHint}
           aria-label={`${label} ${t.colData}`}
           aria-invalid={invalid}
           onChange={(event) => setData(preset.id, event.target.value)}
@@ -779,25 +769,12 @@ function PresetRow({
             type="button"
             className={styles.sendBtn}
             disabled={!canSend || invalid || empty}
-            title={shortcut === null ? label : `${label} (${shortcut})`}
+            title={`${label} · ${t.rowKeyHint}`}
             onClick={() => void sendOnce(preset.id)}
           >
             {label}
           </button>
         )}
-
-        <button
-          type="button"
-          className={styles.renameBtn}
-          title={t.renamePreset}
-          aria-label={`${t.renamePreset}: ${label}`}
-          onClick={() => {
-            setDraft(label);
-            setRenaming(true);
-          }}
-        >
-          ✎
-        </button>
 
         <input
           type="number"

@@ -102,7 +102,9 @@ describe('App', () => {
   /** 缺陷 D16 的回归测试。 */
   it('用户改过名的预设不再被语言切换覆盖', async () => {
     render(<App />);
-    await userEvent.click(screen.getByRole('button', { name: '重命名发送按钮: 查询版本' }));
+    // 改名从行内按 F2 进入：点发送按钮会真的把报文发出去
+    screen.getAllByRole('textbox', { name: /数据/ })[0]!.focus();
+    await userEvent.keyboard('{F2}');
 
     const nameInput = screen.getByRole('textbox', { name: '重命名发送按钮' });
     await userEvent.clear(nameInput);

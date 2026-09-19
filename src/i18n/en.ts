@@ -142,7 +142,7 @@ export const en: Messages = {
   searchPresets: 'Search presets',
   presetMenu: 'Groups and files',
   noMatch: 'No preset matches',
-  moveHint: 'Alt+Up/Down reorders, Alt+Shift+Up/Down moves across groups',
+  rowKeyHint: 'F2 renames, Alt+Up/Down reorders, Alt+Shift+Up/Down moves across groups',
   tabFull: 'The adjacent group has no empty row left',
   colSequence: 'Seq',
   colFormat: 'Fmt',
@@ -167,7 +167,8 @@ export const en: Messages = {
   presetTabTitle: (index) => `Group ${index}`,
   newTab: 'New group',
   renameTab: 'Rename group',
-  tabHint: 'Group tabs: double-click or press F2 to rename, Delete to remove',
+  tabHint:
+    'Group tabs: Left / Right switches (Home / End jumps to the ends), double-click or F2 renames, Delete removes',
   deleteTab: (title) => `Delete group "${title}"`,
   confirmDeleteTab: 'Confirm delete?',
   toggleHexMode: 'Toggle TXT / HEX mode',

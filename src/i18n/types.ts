@@ -162,7 +162,8 @@ export interface Messages {
   readonly presetMenu: string;
   readonly noMatch: string;
   /** 数据框的悬停提示：怎么调顺序、怎么挪到别的分组。 */
-  readonly moveHint: string;
+  /** 预设行上能按的键。发送按钮、数据框的提示与列头那个 `?` 共用它。 */
+  readonly rowKeyHint: string;
   readonly tabFull: string;
   readonly colSequence: string;
   readonly colFormat: string;
