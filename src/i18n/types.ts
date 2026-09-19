@@ -79,6 +79,11 @@ export interface Messages {
   // 接收区
   readonly receive: string;
   readonly timestamp: string;
+  readonly timestampNone: string;
+  readonly timestampTime: string;
+  readonly timestampDateTime: string;
+  readonly timestampDelta: string;
+  readonly timestampHint: Readonly<Record<'none' | 'time' | 'datetime' | 'delta', string>>;
   readonly autoScroll: string;
   readonly showTx: string;
   readonly filterPlaceholder: string;

@@ -47,7 +47,17 @@ export const en: Messages = {
   payloadLabel: 'Payload',
 
   receive: 'Receive',
-  timestamp: 'Timestamp',
+  timestamp: 'Time',
+  timestampNone: 'Off',
+  timestampTime: 'Time',
+  timestampDateTime: 'Date + time',
+  timestampDelta: 'Delta',
+  timestampHint: {
+    none: 'No time column in front of each row',
+    time: 'hh:mm:ss.mmm',
+    datetime: 'yyyy-mm-dd hh:mm:ss.mmm, for captures that run past midnight',
+    delta: 'Gap since the previous entry in the buffer; hiding TX rows does not widen it',
+  },
   autoScroll: 'Auto-scroll',
   showTx: 'Show TX',
   filterPlaceholder: 'Filter / highlight…',

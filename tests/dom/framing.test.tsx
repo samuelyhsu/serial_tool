@@ -31,7 +31,7 @@ describe('接收区分帧控件', () => {
       filter: '',
       onlyMatch: false,
       showTx: true,
-      showTimestamp: true,
+      timestampMode: 'time',
       autoScroll: true,
       frameMode: 'idle',
       idleFrameMs: 10,

@@ -40,6 +40,11 @@
   width: 104px;
 }
 
+.stampSelect {
+  /* 同上，按最长的一项（"Date + time"）定宽 */
+  width: 96px;
+}
+
 .idleInput {
   width: 62px;
 }

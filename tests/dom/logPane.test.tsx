@@ -5,6 +5,7 @@ import {
   __resetLogStoreForTests,
   DEFAULT_LOG_CAPACITY,
   LOG_CAPACITY_MIN,
+  flushPendingEntries,
   useLogStore,
 } from '@/store/logStore';
 import { useUiStore } from '@/store/uiStore';
@@ -43,7 +44,7 @@ describe('LogPane', () => {
       filter: '',
       onlyMatch: false,
       showTx: true,
-      showTimestamp: false,
+      timestampMode: 'none',
       autoScroll: true,
     });
   });
@@ -169,6 +170,65 @@ describe('LogPane', () => {
   });
 });
 
+describe('时间列的下拉框', () => {
+  beforeEach(() => {
+    __resetLogStoreForTests();
+    setSelectorMessages(messagesFor('zh'));
+    useUiStore.setState({
+      language: 'zh',
+      view: 'text',
+      filter: '',
+      onlyMatch: false,
+      showTx: true,
+      timestampMode: 'time',
+      autoScroll: true,
+    });
+  });
+
+  afterEach(cleanup);
+
+  function stamp(): HTMLElement {
+    return screen.getByRole('combobox', { name: '时间' });
+  }
+
+  it('四种模式互斥，只有一个控件在管它', () => {
+    render(<LogPane />);
+    expect(stamp()).toHaveValue('time');
+    expect(
+      [...stamp().querySelectorAll('option')].map((option) => option.getAttribute('value')),
+    ).toEqual(['none', 'time', 'datetime', 'delta']);
+  });
+
+  it('换成日期时间后那一列带上日期', async () => {
+    render(<LogPane />);
+    useLogStore.getState().appendFrame('rx', encoder.encode('hi'), new Date(2026, 8, 19).getTime());
+    flushPendingEntries();
+
+    await userEvent.selectOptions(stamp(), 'datetime');
+    expect(await screen.findByText(/^2026-09-19 /)).toBeInTheDocument();
+  });
+
+  it('换成间隔后显示的是与上一条的差', async () => {
+    render(<LogPane />);
+    const { appendFrame } = useLogStore.getState();
+    appendFrame('rx', encoder.encode('a'), 1_000_000);
+    appendFrame('rx', encoder.encode('b'), 1_000_030);
+    flushPendingEntries();
+
+    await userEvent.selectOptions(stamp(), 'delta');
+    expect(await screen.findByText('+30ms')).toBeInTheDocument();
+  });
+
+  it('关掉之后那一列整个消失', async () => {
+    render(<LogPane />);
+    useLogStore.getState().appendFrame('rx', encoder.encode('hi'));
+    flushPendingEntries();
+
+    await userEvent.selectOptions(stamp(), 'none');
+    expect(screen.queryByText(/^\d{2}:\d{2}:\d{2}\./)).not.toBeInTheDocument();
+  });
+});
+
 describe('LogPane 的缓冲容量与「更早的未显示」提示', () => {
   beforeEach(() => {
     __resetLogStoreForTests();
@@ -179,7 +239,7 @@ describe('LogPane 的缓冲容量与「更早的未显示」提示', () => {
       filter: '',
       onlyMatch: false,
       showTx: true,
-      showTimestamp: false,
+      timestampMode: 'none',
       autoScroll: true,
     });
   });

@@ -11,6 +11,22 @@ import type { Direction } from '../session/serialSession';
  * 宿主进程碰不到 store，只能依赖这里。
  */
 
+/**
+ * 每行前面那一列显示什么。
+ *
+ * 四者互斥，所以是一个枚举而不是几个并列的开关 —— 界面上就只有一个下拉框在管它，
+ * 关闭状态下它本身写着当前模式，不必去比对哪个控件在起作用（与分帧那个控件同一条思路）。
+ *
+ *  - `none`     不显示
+ *  - `time`     `12:34:56.789`
+ *  - `datetime` `2026-09-19 12:34:56.789`，跨夜抓的日志要它
+ *  - `delta`    `+12ms`，与**缓冲里的上一条**的间隔，调协议时序最常看的一列
+ */
+export type TimestampMode = 'none' | 'time' | 'datetime' | 'delta';
+
+/** 下拉框里的顺序：从不显示，到显示得最多，再到换一种维度。 */
+export const TIMESTAMP_MODES: readonly TimestampMode[] = ['none', 'time', 'datetime', 'delta'];
+
 /** 字节在日志里的两种显示方式。 */
 export type LogView = 'text' | 'hex';
 /** 日志条目的三类来源：收、发、本工具自己的系统消息。 */
@@ -49,6 +65,25 @@ export function formatDateTime(date: Date): string {
 export function formatDelta(deltaMs: number): string {
   const ms = Math.max(0, Math.round(deltaMs));
   return ms < 1000 ? `+${ms}ms` : `+${(ms / 1000).toFixed(3)}s`;
+}
+
+/**
+ * 按模式渲染时间那一列。
+ *
+ * `previous` 是缓冲里物理上的前一条（不是过滤后的前一条）：用户要的是两帧之间
+ * 真实的间隔，隐藏 TX 行不该让剩下两条之间的间隔变大。没有前一条时交回空串。
+ */
+export function formatStamp(mode: TimestampMode, at: Date, previous: Date | null): string {
+  switch (mode) {
+    case 'none':
+      return '';
+    case 'time':
+      return formatClock(at);
+    case 'datetime':
+      return formatDateTime(at);
+    case 'delta':
+      return previous === null ? '' : formatDelta(at.getTime() - previous.getTime());
+  }
 }
 
 /** 一行日志的前缀标记，导出与录制共用。 */

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { DEFAULT_IDLE_FRAME_MS, type FrameMode } from '@/core/framing/frameAssembler';
+import { TIMESTAMP_MODES, type TimestampMode } from '@/core/log/logLine';
 import { detectLanguage, LANGUAGES, type Language } from '@/i18n';
 import { isRecord, pickBoolean, pickEnum, pickInt, saveSoon } from '@/lib/persist';
 import { readLayeredJson, readStored, readStoredEnum, writeStored } from '@/lib/storage';
@@ -65,7 +66,7 @@ function loadRightPaneWidth(): number | null {
 
 interface ViewPrefs {
   view: LogView;
-  showTimestamp: boolean;
+  timestampMode: TimestampMode;
   autoScroll: boolean;
   showTx: boolean;
   onlyMatch: boolean;
@@ -77,7 +78,7 @@ interface ViewPrefs {
 
 const DEFAULT_VIEW_PREFS: ViewPrefs = {
   view: 'text',
-  showTimestamp: true,
+  timestampMode: 'time',
   autoScroll: true,
   showTx: true,
   onlyMatch: false,
@@ -95,13 +96,26 @@ function loadViewPrefs(): ViewPrefs {
   );
   return {
     view: pickEnum(raw, 'view', VIEWS, DEFAULT_VIEW_PREFS.view),
-    showTimestamp: pickBoolean(raw, 'showTimestamp', DEFAULT_VIEW_PREFS.showTimestamp),
+    timestampMode: loadTimestampMode(raw),
     autoScroll: pickBoolean(raw, 'autoScroll', DEFAULT_VIEW_PREFS.autoScroll),
     showTx: pickBoolean(raw, 'showTx', DEFAULT_VIEW_PREFS.showTx),
     onlyMatch: pickBoolean(raw, 'onlyMatch', DEFAULT_VIEW_PREFS.onlyMatch),
     frameMode: loadFrameMode(raw, idleFrameMs),
     idleFrameMs,
   };
+}
+
+/**
+ * 读取时间戳模式。
+ *
+ * 它最初只是一个「显示时间戳」的布尔开关，加上日期与帧间隔之后三者互斥，
+ * 才变成一个枚举。这里认存量里的旧字段，免得升级后大家的设置被悄悄重置。
+ */
+function loadTimestampMode(raw: unknown): TimestampMode {
+  if (isRecord(raw) && raw.timestampMode === undefined && typeof raw.showTimestamp === 'boolean') {
+    return raw.showTimestamp ? 'time' : 'none';
+  }
+  return pickEnum(raw, 'timestampMode', TIMESTAMP_MODES, DEFAULT_VIEW_PREFS.timestampMode);
 }
 
 /**
@@ -123,7 +137,7 @@ interface UiState {
   language: Language;
   theme: Theme;
   view: LogView;
-  showTimestamp: boolean;
+  timestampMode: TimestampMode;
   autoScroll: boolean;
   showTx: boolean;
   filter: string;
@@ -136,7 +150,7 @@ interface UiState {
   toggleLanguage: () => void;
   toggleTheme: () => void;
   setView: (view: LogView) => void;
-  setShowTimestamp: (value: boolean) => void;
+  setTimestampMode: (mode: TimestampMode) => void;
   setAutoScroll: (value: boolean) => void;
   setShowTx: (value: boolean) => void;
   setFilter: (value: string) => void;
@@ -175,7 +189,7 @@ export const useUiStore = create<UiState>()((set) => ({
     }),
 
   setView: (view) => set({ view }),
-  setShowTimestamp: (showTimestamp) => set({ showTimestamp }),
+  setTimestampMode: (timestampMode) => set({ timestampMode }),
   setAutoScroll: (autoScroll) => set({ autoScroll }),
   setShowTx: (showTx) => set({ showTx }),
   setFilter: (filter) => set({ filter }),
@@ -201,12 +215,12 @@ useUiStore.subscribe(({ rightPaneWidth }) => {
 });
 
 useUiStore.subscribe(
-  ({ view, showTimestamp, autoScroll, showTx, onlyMatch, frameMode, idleFrameMs }) => {
+  ({ view, timestampMode, autoScroll, showTx, onlyMatch, frameMode, idleFrameMs }) => {
     saveSoon(
       VIEW_PREFS_KEY,
       {
         view,
-        showTimestamp,
+        timestampMode,
         autoScroll,
         showTx,
         onlyMatch,

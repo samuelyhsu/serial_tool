@@ -43,7 +43,17 @@ export const zh: Messages = {
   payloadLabel: '发送内容',
 
   receive: '接收区',
-  timestamp: '时间戳',
+  timestamp: '时间',
+  timestampNone: '不显示',
+  timestampTime: '时间',
+  timestampDateTime: '日期 + 时间',
+  timestampDelta: '间隔',
+  timestampHint: {
+    none: '每行前面不显示时间那一列',
+    time: '时:分:秒.毫秒',
+    datetime: '年-月-日 时:分:秒.毫秒。跨夜抓的日志要它',
+    delta: '与上一条的间隔。注意它算的是缓冲里物理上的上一条，隐藏 TX 行不会让间隔变大',
+  },
   autoScroll: '自动滚屏',
   showTx: '显示发送',
   filterPlaceholder: '过滤 / 高亮关键字…',

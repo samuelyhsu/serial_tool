@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { resolveFraming, type FrameMode } from '@/core/framing/frameAssembler';
-import { logFileName } from '@/core/log/logLine';
+import { logFileName, type TimestampMode } from '@/core/log/logLine';
 import { downloadText } from '@/lib/download';
 import { logText, LOG_CAPACITY_MIN, selectRows, useLogStore, type LogRow } from '@/store/logStore';
 import { useConnectionStore } from '@/store/connectionStore';
@@ -33,6 +33,7 @@ export function LogPane(): React.JSX.Element {
   const modeId = useId();
   const idleId = useId();
   const capacityId = useId();
+  const stampId = useId();
   const listRef = useRef<HTMLDivElement>(null);
 
   const version = useLogStore((s) => s.version);
@@ -40,7 +41,7 @@ export function LogPane(): React.JSX.Element {
 
   const language = useUiStore((s) => s.language);
   const view = useUiStore((s) => s.view);
-  const showTimestamp = useUiStore((s) => s.showTimestamp);
+  const timestampMode = useUiStore((s) => s.timestampMode);
   const autoScroll = useUiStore((s) => s.autoScroll);
   const showTx = useUiStore((s) => s.showTx);
   const filter = useUiStore((s) => s.filter);
@@ -49,7 +50,7 @@ export function LogPane(): React.JSX.Element {
   const frameMode = useUiStore((s) => s.frameMode);
   // 逐个订阅 action：selector 返回新对象会让 zustand 每次快照都不相等，触发无谓重渲染
   const setView = useUiStore((s) => s.setView);
-  const setShowTimestamp = useUiStore((s) => s.setShowTimestamp);
+  const setTimestampMode = useUiStore((s) => s.setTimestampMode);
   const setAutoScroll = useUiStore((s) => s.setAutoScroll);
   const setShowTx = useUiStore((s) => s.setShowTx);
   const setFilter = useUiStore((s) => s.setFilter);
@@ -80,7 +81,7 @@ export function LogPane(): React.JSX.Element {
     filter,
     onlyMatch,
     showTx,
-    showTimestamp,
+    timestampMode,
     limit: RENDER_LIMIT,
   });
 
@@ -151,14 +152,26 @@ export function LogPane(): React.JSX.Element {
       <div className={styles.toolbar}>
         <FormatToggle value={view} onChange={setView} />
 
-        <label className="check">
-          <input
-            type="checkbox"
-            checked={showTimestamp}
-            onChange={(event) => setShowTimestamp(event.target.checked)}
-          />
+        {/*
+          时间 / 日期时间 / 间隔三者互斥，所以和分帧一样只给一个下拉框：
+          关闭状态下它本身就写着当前显示的是哪一种，而且那一列的宽度不会
+          因为多勾一个选项就跟着变。
+        */}
+        <label className="label" htmlFor={stampId}>
           {t.timestamp}
         </label>
+        <select
+          id={stampId}
+          className={`field field--sm ${styles.stampSelect}`}
+          value={timestampMode}
+          title={t.timestampHint[timestampMode]}
+          onChange={(event) => setTimestampMode(event.target.value as TimestampMode)}
+        >
+          <option value="none">{t.timestampNone}</option>
+          <option value="time">{t.timestampTime}</option>
+          <option value="datetime">{t.timestampDateTime}</option>
+          <option value="delta">{t.timestampDelta}</option>
+        </select>
         <label className="check">
           <input
             type="checkbox"

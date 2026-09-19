@@ -238,7 +238,7 @@ describe('selectRows 的 hiddenEarlier', () => {
     filter: '',
     onlyMatch: false,
     showTx: true,
-    showTimestamp: false,
+    timestampMode: 'none' as const,
     limit: 10,
   };
 
@@ -277,5 +277,67 @@ describe('selectRows 的 hiddenEarlier', () => {
     const { rows, hiddenEarlier } = selectRows({ ...query, version: 1 });
     // 提示文案承诺「它们仍在缓冲里，导出可取」，这里就是那个承诺
     expect(allEntries().filter((e) => e.kind !== 'sys')).toHaveLength(rows.length + hiddenEarlier);
+  });
+});
+
+describe('时间列', () => {
+  beforeEach(() => {
+    __resetLogStoreForTests();
+    setSelectorMessages(zh);
+  });
+
+  const base = {
+    version: 0,
+    language: 'zh' as const,
+    view: 'text' as const,
+    filter: '',
+    onlyMatch: false,
+    showTx: true,
+    limit: 10,
+  };
+
+  function feedAt(times: number[]): void {
+    const { appendFrame } = useLogStore.getState();
+    for (const [index, at] of times.entries()) appendFrame('rx', encodeUtf8(`f${index}`), at);
+    flushPendingEntries();
+  }
+
+  it('间隔算的是与缓冲里上一条的差', () => {
+    feedAt([1_000_000, 1_000_012, 1_001_512]);
+    const { rows } = selectRows({ ...base, timestampMode: 'delta' });
+
+    expect(rows.map((row) => row.timestamp)).toEqual(['', '+12ms', '+1.500s']);
+  });
+
+  /**
+   * 隐藏 TX 行不该让剩下两条之间的间隔凭空变大：用户要的是链路上真实的时序，
+   * 而不是「我现在恰好看得见的那几行之间的时序」。
+   */
+  it('隐藏 TX 行不会把间隔算大', () => {
+    const { appendFrame } = useLogStore.getState();
+    appendFrame('rx', encodeUtf8('a'), 1_000_000);
+    appendFrame('tx', encodeUtf8('b'), 1_000_010);
+    appendFrame('rx', encodeUtf8('c'), 1_000_020);
+    flushPendingEntries();
+
+    const { rows } = selectRows({ ...base, showTx: false, timestampMode: 'delta' });
+    expect(rows.map((row) => row.timestamp)).toEqual(['', '+10ms']);
+  });
+
+  it('日期时间带日期，关闭时那一列是空的', () => {
+    feedAt([new Date(2026, 8, 19, 12, 0, 0, 5).getTime()]);
+
+    expect(selectRows({ ...base, timestampMode: 'datetime' }).rows[0]?.timestamp).toBe(
+      '2026-09-19 12:00:00.005',
+    );
+    expect(selectRows({ ...base, timestampMode: 'none' }).rows[0]?.timestamp).toBe('');
+  });
+
+  // 模式是缓存键的一部分，否则切换模式后界面仍显示上一种
+  it('换一种模式会重算，不吃上一次的缓存', () => {
+    feedAt([1_000_000, 1_000_050]);
+
+    expect(selectRows({ ...base, timestampMode: 'delta' }).rows[1]?.timestamp).toBe('+50ms');
+    expect(selectRows({ ...base, timestampMode: 'none' }).rows[1]?.timestamp).toBe('');
   });
 });

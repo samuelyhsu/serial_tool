@@ -9,8 +9,8 @@ import {
 } from '@/core/buffer/logCapacity';
 import { RingBuffer } from '@/core/buffer/ringBuffer';
 import { formatHex } from '@/core/codec/hex';
-import { directionTag, formatClock, formatDateTime, FrameFormatter } from '@/core/log/logLine';
-import type { LogKind, LogView } from '@/core/log/logLine';
+import { directionTag, formatDateTime, formatStamp, FrameFormatter } from '@/core/log/logLine';
+import type { LogKind, LogView, TimestampMode } from '@/core/log/logLine';
 import type { SessionNotice } from '@/core/session/notices';
 import type { Direction } from '@/core/session/serialSession';
 import type { Language, Messages } from '@/i18n';
@@ -26,7 +26,7 @@ export {
   LOG_CAPACITY_MIN,
 };
 
-export type { LogKind, LogView };
+export type { LogKind, LogView, TimestampMode };
 
 export interface LogEntry {
   readonly id: number;
@@ -317,7 +317,7 @@ export interface RowQuery {
   filter: string;
   onlyMatch: boolean;
   showTx: boolean;
-  showTimestamp: boolean;
+  timestampMode: TimestampMode;
   limit: number;
 }
 
@@ -340,7 +340,7 @@ export function selectRows(query: RowQuery): LogSelection {
     query.filter,
     query.onlyMatch ? 1 : 0,
     query.showTx ? 1 : 0,
-    query.showTimestamp ? 1 : 0,
+    query.timestampMode,
     query.limit,
   ].join('|');
   if (key === cacheKey) return cacheSelection;
@@ -360,7 +360,9 @@ export function selectRows(query: RowQuery): LogSelection {
     rows.push({
       id: entry.id,
       kind: entry.kind,
-      timestamp: query.showTimestamp ? formatClock(entry.time) : '',
+      // 间隔要的是**缓冲里**的前一条，不是过滤后的前一条：隐藏 TX 行
+      // 不该让剩下两条之间的间隔凭空变大
+      timestamp: formatStamp(query.timestampMode, entry.time, ring.at(scanned - 1)?.time ?? null),
       segments: highlight(body, needle, query.filter.trim().length),
     });
   }

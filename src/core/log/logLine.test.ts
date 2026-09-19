@@ -6,6 +6,7 @@ import {
   formatDateTime,
   formatDay,
   formatDelta,
+  formatStamp,
   FrameFormatter,
   logFileName,
 } from './logLine';
@@ -92,5 +93,27 @@ describe('FrameFormatter', () => {
     expect(directionTag('rx')).toBe('[RX]');
     expect(directionTag('tx')).toBe('[TX]');
     expect(directionTag('sys')).toBe('[--]');
+  });
+});
+
+describe('时间列的四种模式', () => {
+  const previous = new Date(AT.getTime() - 12);
+
+  it('关闭时是空串', () => {
+    expect(formatStamp('none', AT, previous)).toBe('');
+  });
+
+  it('时间与日期时间', () => {
+    expect(formatStamp('time', AT, previous)).toBe('12:34:56.007');
+    expect(formatStamp('datetime', AT, previous)).toBe('2026-09-19 12:34:56.007');
+  });
+
+  it('间隔算的是与上一条的差', () => {
+    expect(formatStamp('delta', AT, previous)).toBe('+12ms');
+  });
+
+  // 第一条前面没有别的条目，显示一个 +0ms 会让人以为它跟谁挨着
+  it('没有上一条时间隔为空', () => {
+    expect(formatStamp('delta', AT, null)).toBe('');
   });
 });

@@ -73,11 +73,11 @@ describe('App', () => {
 
   it('语言切换后界面文案整体换成英文', async () => {
     render(<App />);
-    expect(screen.getByText('时间戳')).toBeInTheDocument();
+    expect(screen.getByText('自动滚屏')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: /切换语言|Switch language/ }));
-    expect(screen.getByText('Timestamp')).toBeInTheDocument();
-    expect(screen.queryByText('时间戳')).not.toBeInTheDocument();
+    expect(screen.getByText('Auto-scroll')).toBeInTheDocument();
+    expect(screen.queryByText('自动滚屏')).not.toBeInTheDocument();
   });
 
   it('语言按钮显示要切过去的那种：中文界面是 EN，英文界面是 CN', async () => {

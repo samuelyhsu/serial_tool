@@ -247,7 +247,7 @@ describe('接收区显示偏好持久化', () => {
   it('HEX 视图、时间戳、自动滚屏、显示 TX 刷新后都在', async () => {
     let app = await reload();
     app.ui.useUiStore.getState().setView('hex');
-    app.ui.useUiStore.getState().setShowTimestamp(false);
+    app.ui.useUiStore.getState().setTimestampMode('datetime');
     app.ui.useUiStore.getState().setAutoScroll(false);
     app.ui.useUiStore.getState().setShowTx(false);
     app.ui.useUiStore.getState().setOnlyMatch(true);
@@ -256,7 +256,7 @@ describe('接收区显示偏好持久化', () => {
     app = await reload();
     const ui = app.ui.useUiStore.getState();
     expect(ui.view).toBe('hex');
-    expect(ui.showTimestamp).toBe(false);
+    expect(ui.timestampMode).toBe('datetime');
     expect(ui.autoScroll).toBe(false);
     expect(ui.showTx).toBe(false);
     expect(ui.onlyMatch).toBe(true);
@@ -294,6 +294,34 @@ describe('接收区显示偏好持久化', () => {
     localStorage.setItem('wst.viewPrefs', JSON.stringify({ idleFrameMs: 0, lineFraming: false }));
     const app = await reload();
     expect(app.ui.useUiStore.getState().frameMode).toBe('raw');
+  });
+
+  /** 时间列最初是个布尔开关，加上日期与帧间隔之后才变成枚举。 */
+  it('认得旧格式：showTimestamp=true 迁移成 time 模式', async () => {
+    localStorage.setItem('wst.viewPrefs', JSON.stringify({ showTimestamp: true }));
+    const app = await reload();
+    expect(app.ui.useUiStore.getState().timestampMode).toBe('time');
+  });
+
+  it('认得旧格式：showTimestamp=false 迁移成 none 模式', async () => {
+    localStorage.setItem('wst.viewPrefs', JSON.stringify({ showTimestamp: false }));
+    const app = await reload();
+    expect(app.ui.useUiStore.getState().timestampMode).toBe('none');
+  });
+
+  it('新字段在场时不理会旧的那个', async () => {
+    localStorage.setItem(
+      'wst.viewPrefs',
+      JSON.stringify({ showTimestamp: false, timestampMode: 'delta' }),
+    );
+    const app = await reload();
+    expect(app.ui.useUiStore.getState().timestampMode).toBe('delta');
+  });
+
+  it('存量里非法的时间列模式退回默认', async () => {
+    localStorage.setItem('wst.viewPrefs', JSON.stringify({ timestampMode: 'nope' }));
+    const app = await reload();
+    expect(app.ui.useUiStore.getState().timestampMode).toBe('time');
   });
 
   it('存量里越界的空闲分帧退回默认 10ms', async () => {
