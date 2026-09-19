@@ -3,7 +3,7 @@
   "displayName": "%displayName%",
   "description": "%description%",
   "license": "MIT",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "publisher": "uplume",
   "engines": {

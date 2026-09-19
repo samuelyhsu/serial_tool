@@ -6,7 +6,7 @@ through USB-serial adapters, dev boards and RS-232 / RS-485 converters.
 
 中文说明见[下方](#中文说明)。
 
-![Two panels connected to COM1 and COM2](media/screenshot.jpg)
+![A serial panel: port settings and control lines on top, log in the middle, send pane and presets on the right, readouts and log settings along the bottom](media/screenshot.png)
 
 ## Getting started
 
@@ -18,11 +18,17 @@ To open the same port in another panel, use the `+` at the end of its row. Other
 `🔌 Serial` in the status bar, the `+` in a serial panel's title bar, and **New Serial Panel** /
 **Serial Panels…** in the Command Palette.
 
+Split the editor to watch two boards at once — each panel keeps its own session, log and presets:
+
+![COM1 and COM2 side by side in a split editor, each panel with its own log and send pane](media/screenshot1.png)
+
 ## Features
 
 - **The connection lives in the extension host**: hiding the panel or switching back to your code
   doesn't drop the port, and periodic sends keep running
 - HEX and text views, timestamps, auto-scroll, filter & highlight, log export
+- A status bar along the bottom: byte and frame counts with separate RX / TX throughput, uptime,
+  write-queue backlog, plus the timestamp, framing and log-buffer settings
 - Receive framing by idle timeout, by line or raw; UTF-8 text is decoded correctly across chunks
 - Single send, periodic send, command presets in tabbed groups (3 by default; add, rename and delete your own) with a sequence loop, JSON import / export
 - 17 checksums appended automatically in HEX mode: CRC-8 / CRC-16 / CRC-32 (incl. CRC-16/MODBUS),
@@ -84,6 +90,8 @@ VS Code 里的串口调试助手，给单片机与嵌入式开发用：USB 转�
 
 - **串口连接活在扩展宿主进程里**：面板被隐藏、切去看代码都不会断，周期发送照跑
 - HEX / 文本双视图，时间戳、自动滚动、过滤高亮、日志导出
+- 底部状态栏：收发字节数与帧数、**收发各自的实时速率**、运行时长、写队列积压，
+  以及时间列、分帧、日志缓冲容量这几项设置
 - 按空闲超时 / 换行 / 原始分块分帧，UTF-8 跨块解码，被切开的汉字不乱码
 - 单条发送、周期发送，指令预设按分组标签页管理（默认 3 组，可新建、改名、删除）与顺序循环，预设可 JSON 导入导出
 - HEX 模式自动追加 17 种校验和：CRC-8 / CRC-16 / CRC-32（含 CRC-16/MODBUS）、SUM8、SUM16、XOR8

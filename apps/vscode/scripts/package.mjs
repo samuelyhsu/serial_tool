@@ -139,7 +139,7 @@ try {
   /*
    * README 里的相对图片路径 vsce 会改写成绝对 URL（Marketplace 不认相对路径），
    * 而它是按「扩展就在仓库根」猜这个 base 的 —— 本扩展在 apps/vscode 下，
-   * 猜出来的 <repo>/raw/HEAD/media/screenshot.jpg 是 404，图在商店页上就是个裂图。
+   * 猜出来的 <repo>/raw/HEAD/media/screenshot.png 是 404，图在商店页上就是个裂图。
    * 只覆盖图片这一个 base：内容链接（README 末尾的 LICENSE）指向仓库根恰好是对的。
    */
   const repository = readManifest(root).repository.url.replace(/[.]git$/, '');
