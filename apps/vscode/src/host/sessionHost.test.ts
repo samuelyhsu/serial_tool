@@ -27,6 +27,9 @@ interface Panel {
   transports: FakeTransport[];
   transport: () => FakeTransport;
   typed: <T extends HostEvent['type']>(type: T) => Extract<HostEvent, { type: T }>[];
+  /** 录制落到这里，一个元素一行。null 表示用户在文件对话框里取消了。 */
+  recorded: string[];
+  recordFile: { path: string | null; failWrite?: Error };
 }
 
 let leases: PortLeases;
@@ -36,6 +39,8 @@ const panels: Panel[] = [];
 function makePanel(id: string, prefs: Record<string, unknown> = {}): Panel {
   const events: HostEvent[] = [];
   const transports: FakeTransport[] = [];
+  const recorded: string[] = [];
+  const recordFile: Panel['recordFile'] = { path: 'capture.log' };
 
   const host = new SessionHost({
     id,
@@ -48,6 +53,17 @@ function makePanel(id: string, prefs: Record<string, unknown> = {}): Panel {
     },
     post: (event) => events.push(event),
     pickPort: () => Promise.resolve(undefined),
+    pickRecordFile: () => Promise.resolve(recordFile.path ?? undefined),
+    createRecordSink: (_path, onError) => ({
+      write: (line) => {
+        if (recordFile.failWrite) {
+          onError(recordFile.failWrite.message);
+          return;
+        }
+        recorded.push(line);
+      },
+      close: () => Promise.resolve(),
+    }),
     readPrefs: () => prefs,
     writePref: (key, value) => {
       prefs[key] = value;
@@ -64,6 +80,8 @@ function makePanel(id: string, prefs: Record<string, unknown> = {}): Panel {
     transport: () => transports[transports.length - 1]!,
     typed: (type) =>
       events.filter((event) => event.type === type) as Extract<HostEvent, { type: typeof type }>[],
+    recorded,
+    recordFile,
   };
   panels.push(panel);
   return panel;
@@ -143,6 +161,8 @@ describe('SessionHost（一个面板一条会话）', () => {
       createTransport: () => failing,
       post: () => undefined,
       pickPort: () => Promise.resolve(undefined),
+      pickRecordFile: () => Promise.resolve(undefined),
+      createRecordSink: () => ({ write: () => undefined, close: () => Promise.resolve() }),
       readPrefs: () => ({}),
       writePref: () => undefined,
       language: 'zh',
@@ -596,5 +616,103 @@ describe('SessionHost 的日志容量', () => {
     const second = makePanel('panel-2', prefs);
     await feed(second, 3000);
     expect(bufferedFrames(second)).toBe(2500);
+  });
+});
+
+describe('录制到文件（宿主侧）', () => {
+  async function openAndRecord(panel: Panel): Promise<void> {
+    await panel.host.handle({ method: 'session.open', portKey: 'COM3', options: OPTIONS });
+    await panel.host.handle({ method: 'record.start', view: 'text' });
+  }
+
+  it('录制归宿主所有：帧一到就落盘，界面不参与', async () => {
+    const panel = makePanel('panel-1');
+    await openAndRecord(panel);
+
+    panel.transport().emitData([0x41, 0x42]);
+    await vi.advanceTimersByTimeAsync(20);
+
+    // 第一行是文件头，之后每帧一行
+    expect(panel.recorded).toHaveLength(2);
+    expect(panel.recorded[1]).toMatch(/\[RX\] AB$/);
+  });
+
+  it('发出去的帧也记，方向标记分得开', async () => {
+    const panel = makePanel('panel-1');
+    await openAndRecord(panel);
+
+    await panel.host.handle({ method: 'session.send', bytes: new Uint8Array([0x43]) });
+    await vi.advanceTimersByTimeAsync(20);
+
+    expect(panel.recorded[1]).toMatch(/\[TX\] C$/);
+  });
+
+  it('用户在文件对话框里取消不算失败，也不该在日志里留下东西', async () => {
+    const panel = makePanel('panel-1');
+    panel.recordFile.path = null;
+    await panel.host.handle({ method: 'session.open', portKey: 'COM3', options: OPTIONS });
+
+    await expect(panel.host.handle({ method: 'record.start', view: 'text' })).resolves.toBe(false);
+    expect(panel.typed('notice').map((event) => event.notice.code)).not.toContain('record-started');
+    expect(panel.typed('recording')).toHaveLength(0);
+  });
+
+  it('开始与结束都回执到日志，结束时报行数', async () => {
+    const panel = makePanel('panel-1');
+    await openAndRecord(panel);
+    panel.transport().emitData([0x41]);
+    await vi.advanceTimersByTimeAsync(20);
+    await panel.host.handle({ method: 'record.stop' });
+
+    const codes = panel.typed('notice').map((event) => event.notice);
+    expect(codes).toContainEqual({ code: 'record-started', target: 'capture.log' });
+    expect(codes).toContainEqual({ code: 'record-stopped', target: 'capture.log', lines: 1 });
+  });
+
+  it('状态广播给界面，面板重建后靠快照接回来', async () => {
+    const panel = makePanel('panel-1');
+    await openAndRecord(panel);
+
+    expect(panel.typed('recording').at(-1)?.status.active).toBe(true);
+    const snapshot = panel.host.snapshot();
+    expect(snapshot.type === 'snapshot' && snapshot.recording.active).toBe(true);
+
+    await panel.host.handle({ method: 'record.stop' });
+    expect(panel.typed('recording').at(-1)?.status.active).toBe(false);
+  });
+
+  it('写入失败变成一条可见的通知', async () => {
+    const panel = makePanel('panel-1');
+    await openAndRecord(panel);
+    panel.recordFile.failWrite = new Error('ENOSPC');
+
+    panel.transport().emitData([0x41]);
+    await vi.advanceTimersByTimeAsync(20);
+
+    expect(panel.typed('notice').map((event) => event.notice)).toContainEqual({
+      code: 'record-error',
+      message: 'ENOSPC',
+    });
+  });
+
+  // 宿主是长驻进程：面板关掉却不收尾，等于漏一个文件句柄，攒着没落盘的行也跟着没
+  it('面板销毁时把录制收尾', async () => {
+    const panel = makePanel('panel-1');
+    await openAndRecord(panel);
+
+    panel.host.dispose();
+    await vi.advanceTimersByTimeAsync(20);
+
+    expect(panel.typed('notice').map((event) => event.notice.code)).toContain('record-stopped');
+  });
+
+  it('重复停止不会再报一次', async () => {
+    const panel = makePanel('panel-1');
+    await openAndRecord(panel);
+    await panel.host.handle({ method: 'record.stop' });
+    await panel.host.handle({ method: 'record.stop' });
+
+    const stopped = panel.typed('notice').filter((event) => event.notice.code === 'record-stopped');
+    expect(stopped).toHaveLength(1);
   });
 });

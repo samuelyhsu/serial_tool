@@ -1,4 +1,6 @@
 import type { FramingConfig } from '@/core/framing/frameAssembler';
+import type { LogView } from '@/core/log/logLine';
+import type { RecordingStatus } from '@/core/log/recorder';
 import type { TaskFrame } from '@/core/scheduler/framePlan';
 import type { SessionNotice } from '@/core/session/notices';
 import type { Direction, SessionState } from '@/core/session/serialSession';
@@ -50,6 +52,15 @@ export type RequestBody =
    * 两侧的历史必须一起丢。
    */
   | { method: 'log.clear' }
+  /**
+   * 录制到文件。
+   *
+   * 和周期发送同样必须由宿主执行：帧产生在那边，webview 一被隐藏就销毁，
+   * 录制挂在界面上的话切个标签页文件就断了 —— 而「挂一夜等偶发问题」正是它的全部理由。
+   * 文件选择器也在宿主：webview 是沙箱 iframe，没有 File System Access。
+   */
+  | { method: 'record.start'; view: LogView }
+  | { method: 'record.stop' }
   /**
    * 周期发送。它必须由宿主执行而不是 webview：面板一旦被隐藏就会被销毁，
    * 定时器随之消失 —— 而「挂个心跳跑一下午」正是这类工具最常见的用法。
@@ -123,6 +134,8 @@ export type HostEvent =
       pendingBytes: number;
       frames: FramePayload[];
       runningTasks: string[];
+      /** 录制归宿主所有，面板重建后按钮状态只能从这里恢复。 */
+      recording: RecordingStatus;
       prefs: Record<string, unknown>;
       language: string;
     }
@@ -137,6 +150,7 @@ export type HostEvent =
   | { kind: 'event'; type: 'throughput'; direction: Direction; byteCount: number }
   | { kind: 'event'; type: 'notice'; notice: SessionNotice }
   | { kind: 'event'; type: 'tasks'; running: string[] }
+  | { kind: 'event'; type: 'recording'; status: RecordingStatus }
   /**
    * 宿主要求界面选中并打开某个端口。
    *

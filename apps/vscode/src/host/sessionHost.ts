@@ -4,9 +4,12 @@ import {
   LOG_CAPACITY_PREF_KEY,
   parseLogCapacity,
 } from '@/core/buffer/logCapacity';
+import type { LogView } from '@/core/log/logLine';
+import { logFileName } from '@/core/log/logLine';
+import { FrameRecorder, type RecordSink } from '@/core/log/recorder';
 import { FramePlan, type TaskFrame } from '@/core/scheduler/framePlan';
 import { TaskScheduler } from '@/core/scheduler/taskScheduler';
-import type { SendFailure } from '@/core/session/notices';
+import type { SendFailure, SessionNotice } from '@/core/session/notices';
 import { SerialSession, type SessionState } from '@/core/session/serialSession';
 import { TransportError } from '@/core/transport/errors';
 import type { PortDescriptor } from '@/core/transport/portDescriptor';
@@ -51,6 +54,15 @@ export interface SessionHostDeps {
   post: (message: HostEvent) => void;
   /** 打开浏览器/编辑器的端口选择器，返回用户选中的端口。 */
   pickPort: () => Promise<PortDescriptor | undefined>;
+  /**
+   * 让用户挑一个录制文件，返回路径；取消返回 undefined。
+   *
+   * 与 createRecordSink 分成两件事，是因为只有前者要弹对话框：测试里换掉它就能
+   * 在没有 UI 的环境下把整条录制链路跑完。
+   */
+  pickRecordFile: (suggestedName: string) => Promise<string | undefined>;
+  /** 按路径建一个落盘出口。写入失败通过 onError 回来，会变成一条日志里的通知。 */
+  createRecordSink: (path: string, onError: (message: string) => void) => RecordSink;
   readPrefs: () => Record<string, unknown>;
   writePref: (key: string, value: unknown) => void;
   language: string;
@@ -62,6 +74,14 @@ export class SessionHost {
   readonly #session: SerialSession<string>;
   readonly #ring: RingBuffer<FramePayload>;
   readonly #scheduler = new TaskScheduler();
+  /**
+   * 录制归宿主所有。
+   *
+   * 和周期发送同一个理由：帧产生在这一侧，webview 一被隐藏就连同它的一切销毁。
+   * 录制若挂在界面上，用户切去看一眼代码回来，文件就在那一刻断了 ——
+   * 而录制存在的全部意义就是「挂一夜等一次偶发问题」。
+   */
+  readonly #recorder = new FrameRecorder();
   /** 攒批中的帧。1 Mbps 下每帧一条 postMessage 会把消息通道打满。 */
   #pending: FramePayload[] = [];
   /**
@@ -105,10 +125,7 @@ export class SessionHost {
       onFrame: (direction, bytes) => this.#pushFrame(direction, bytes),
       onThroughput: (direction, byteCount) =>
         deps.post({ kind: 'event', type: 'throughput', direction, byteCount }),
-      onNotice: (notice) => {
-        this.#flush(); // 通知是对操作的反馈，不该排在攒批的帧后面
-        deps.post({ kind: 'event', type: 'notice', notice });
-      },
+      onNotice: (notice) => this.#notify(notice),
       onStateChange: (state) => this.#onStateChange(state),
     });
 
@@ -147,6 +164,7 @@ export class SessionHost {
       pendingBytes: this.pendingBytes,
       frames: this.#ring.toArray(),
       runningTasks: this.#scheduler.runningIds(),
+      recording: this.#recorder.status,
       prefs: this.deps.readPrefs(),
       language: this.deps.language,
     };
@@ -251,6 +269,13 @@ export class SessionHost {
         this.#pending = [];
         return undefined;
 
+      case 'record.start':
+        return this.#startRecording(body.view);
+
+      case 'record.stop':
+        await this.#stopRecording();
+        return undefined;
+
       case 'tasks.start':
         this.#startTask(body.taskId, body.frames, body.intervalMs, body.repeat);
         return undefined;
@@ -272,6 +297,9 @@ export class SessionHost {
   dispose(): void {
     this.#scheduler.stopAll();
     this.#taskPlans.clear();
+    // 面板关掉就该收尾：这是个长驻进程，留着一个没人管的写入流等于漏一个文件句柄，
+    // 攒在缓冲里还没落盘的那几行也会跟着一起没
+    void this.#stopRecording();
     this.#unwatch?.();
     this.#unlease?.();
     this.#unwatch = null;
@@ -421,6 +449,7 @@ export class SessionHost {
 
   #pushFrame(direction: FramePayload['direction'], bytes: Uint8Array): void {
     const frame: FramePayload = { direction, at: this.#now(), bytes };
+    this.#recorder.record(direction, bytes, frame.at);
     this.#ring.push(frame);
     this.#pending.push(frame);
     this.#flushTimer ??= setTimeout(() => this.#flush(), FRAME_BATCH_MS);
@@ -440,6 +469,43 @@ export class SessionHost {
       items,
       pendingBytes: this.pendingBytes,
     });
+  }
+
+  /**
+   * 开始录制，返回是否真的开起来了。
+   *
+   * 用户在文件对话框里取消不算失败，也不该在日志里留下任何东西 —— 那是一次
+   * 明确的「算了」，不是出错。
+   */
+  async #startRecording(view: LogView): Promise<boolean> {
+    const path = await this.deps.pickRecordFile(logFileName());
+    if (path === undefined) return false;
+    const sink = this.deps.createRecordSink(path, (message) =>
+      this.#notify({ code: 'record-error', message }),
+    );
+    this.#recorder.start(sink, path, view, this.#now());
+    this.#notify({ code: 'record-started', target: path });
+    this.#postRecording();
+    return true;
+  }
+
+  async #stopRecording(): Promise<void> {
+    if (!this.#recorder.active) return;
+    const finished = await this.#recorder.stop();
+    if (finished.target !== null) {
+      this.#notify({ code: 'record-stopped', target: finished.target, lines: finished.lines });
+    }
+    this.#postRecording();
+  }
+
+  #postRecording(): void {
+    this.deps.post({ kind: 'event', type: 'recording', status: this.#recorder.status });
+  }
+
+  /** 通知的唯一出口：会话自己发的和录制发的都走它。 */
+  #notify(notice: SessionNotice): void {
+    this.#flush(); // 通知是对操作的反馈，不该排在攒批的帧后面
+    this.deps.post({ kind: 'event', type: 'notice', notice });
   }
 
   /** 容量偏好落到本地这份 ring 上。非法值忽略，缓冲维持现状。 */

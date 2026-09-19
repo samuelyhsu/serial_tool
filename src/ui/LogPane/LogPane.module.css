@@ -176,3 +176,21 @@
   cursor: pointer;
   box-shadow: 0 2px 10px rgb(0 0 0 / 35%);
 }
+
+/*
+ * 录制中的按钮。
+ *
+ * 用红色而不是主题色：它是「正在往磁盘写东西」的状态，和「某个开关开着」不是一回事，
+ * 扫一眼工具栏就该认出来 —— 忘了停的代价是一个悄悄涨到几百 MB 的文件。
+ */
+.recordOn {
+  background: var(--red);
+  color: var(--inv);
+  border-color: var(--red);
+}
+
+.recordOn:hover:not(:disabled) {
+  background: var(--red);
+  color: var(--inv);
+  filter: brightness(1.06);
+}

@@ -56,6 +56,14 @@ export const en: Messages = {
     line: 'A newline ends a frame',
   },
   saveLog: 'Save log',
+  record: 'Record',
+  recordTip:
+    'Stream received and sent data straight to a file, free of the buffer limit — ' +
+    'this is what you want for an overnight capture. The format is fixed at TXT/HEX ' +
+    'when you start; only RX/TX frames are written, not system messages',
+  stopRecord: 'Stop recording',
+  recording: (lines) => `Recording · ${lines} lines`,
+  recordUnsupported: 'This environment cannot write files',
   clear: 'Clear',
   confirmClear: 'Confirm clear?',
   noData: 'No data',
@@ -174,6 +182,12 @@ export const en: Messages = {
         return 'Port is closed — send ignored';
       case 'port-busy':
         return 'This port is already open in another page of this tool. Close it there first.';
+      case 'record-started':
+        return `Recording to ${notice.target}`;
+      case 'record-stopped':
+        return `Recording stopped, ${notice.lines} lines written to ${notice.target}`;
+      case 'record-error':
+        return `Recording failed: ${notice.message}`;
     }
   },
 

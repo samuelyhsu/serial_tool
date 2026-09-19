@@ -1,8 +1,9 @@
+import { IDLE_RECORDING, type RecordingStatus } from '@/core/log/recorder';
 import { TaskScheduler } from '@/core/scheduler/taskScheduler';
 import type { SessionEvents } from '@/core/session/serialSession';
 import type { PortDescriptor } from '@/core/transport/portDescriptor';
 import type { LeaseHolders } from '@/lib/portLease';
-import type { Platform, SessionLike, TasksLike } from '@/store/platform';
+import type { Platform, RecorderLike, SessionLike, TasksLike } from '@/store/platform';
 import type { HostMessage, HostRequest } from '../shared/protocol';
 import { SessionClient } from './sessionClient';
 
@@ -53,6 +54,17 @@ export function createVsCodePlatform(deps: VsCodePlatformDeps): VsCodePlatform {
   const leaseListeners = new Set<(holders: LeaseHolders) => void>();
 
   /**
+   * 录制状态的镜子。真相源是宿主那一侧的 FrameRecorder —— 录制跑在那边，
+   * 面板隐藏期间它照写不误，界面重建后靠 snapshot 把按钮状态接回来。
+   */
+  let recording: RecordingStatus = IDLE_RECORDING;
+  const recordListeners = new Set<(status: RecordingStatus) => void>();
+  const emitRecording = (next: RecordingStatus): void => {
+    recording = next;
+    for (const listener of recordListeners) listener(next);
+  };
+
+  /**
    * 兜底用的本地调度器：万一有任务没带 frames（说明调用点漏了），
    * 它至少还能在面板可见时跑起来，而不是静默什么都不发生。
    * 正常路径上所有任务都带 frames，由宿主执行。
@@ -79,6 +91,7 @@ export function createVsCodePlatform(deps: VsCodePlatformDeps): VsCodePlatform {
       pendingBytes = event.pendingBytes;
       emitPorts();
       emitTasks(event.runningTasks);
+      emitRecording(event.recording);
       deps.onSnapshot(event);
     },
     onPorts: (event) => {
@@ -98,6 +111,7 @@ export function createVsCodePlatform(deps: VsCodePlatformDeps): VsCodePlatform {
     },
     onSelected: (event) => deps.onSelected(event),
     onTasks: (event) => emitTasks(event.running),
+    onRecording: (event) => emitRecording(event.status),
     onOpenPort: (event) => deps.onOpenPort(event.portKey),
   });
 
@@ -157,6 +171,18 @@ export function createVsCodePlatform(deps: VsCodePlatformDeps): VsCodePlatform {
     },
   };
 
+  const recorder: RecorderLike = {
+    // 宿主进程是 Node，写文件永远可用；webview 自己反而没有 File System Access
+    supported: true,
+    status: () => recording,
+    start: (view) => client.startRecording(view).catch(() => false),
+    stop: () => client.stopRecording().catch(() => undefined),
+    subscribe: (listener) => {
+      recordListeners.add(listener);
+      return () => recordListeners.delete(listener);
+    },
+  };
+
   // 报到。必须在这里而不是等界面挂载：面板隐藏后重建时，用户可能一眼就看到
   // 一个空界面，越早把快照要回来越好
   void client.ready().catch(() => undefined);
@@ -168,6 +194,7 @@ export function createVsCodePlatform(deps: VsCodePlatformDeps): VsCodePlatform {
     supported: true,
     session,
     tasks,
+    recorder,
 
     leases: {
       holders: () => holders,

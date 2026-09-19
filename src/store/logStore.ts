@@ -8,9 +8,9 @@ import {
   parseLogCapacity,
 } from '@/core/buffer/logCapacity';
 import { RingBuffer } from '@/core/buffer/ringBuffer';
-import { escapeControlChars } from '@/core/codec/display';
 import { formatHex } from '@/core/codec/hex';
-import { StreamingUtf8Decoder } from '@/core/codec/text';
+import { directionTag, formatClock, formatDateTime, FrameFormatter } from '@/core/log/logLine';
+import type { LogKind, LogView } from '@/core/log/logLine';
 import type { SessionNotice } from '@/core/session/notices';
 import type { Direction } from '@/core/session/serialSession';
 import type { Language, Messages } from '@/i18n';
@@ -26,8 +26,7 @@ export {
   LOG_CAPACITY_MIN,
 };
 
-export type LogKind = Direction | 'sys';
-export type LogView = 'text' | 'hex';
+export type { LogKind, LogView };
 
 export interface LogEntry {
   readonly id: number;
@@ -52,10 +51,8 @@ function loadCapacity(): number {
 const FLUSH_INTERVAL_MS = 60;
 
 const ring = new RingBuffer<LogEntry>(loadCapacity());
-const decoders: Record<Direction, StreamingUtf8Decoder> = {
-  rx: new StreamingUtf8Decoder(),
-  tx: new StreamingUtf8Decoder(),
-};
+/** 入库时算好的文本视图，跨帧保持解码状态（HEX 仍是惰性的，见 LogEntry.hexCache）。 */
+const textFormatter = new FrameFormatter('text');
 
 let nextId = 1;
 let pending: LogEntry[] = [];
@@ -134,7 +131,7 @@ export const useLogStore = create<LogState>()((set, get) => ({
       // 视图已经独占整块 buffer 时不复制，常见情况下没有额外开销。
       bytes: bytes.byteLength === bytes.buffer.byteLength ? bytes : bytes.slice(),
       // 流式解码放在入库时做：解码器状态跨帧连续，被切开的多字节字符才能正确还原
-      text: escapeControlChars(decoders[direction].decode(bytes)),
+      text: textFormatter.body(direction, bytes),
       notice: null,
       hexCache: null,
     });
@@ -193,8 +190,7 @@ export const useLogStore = create<LogState>()((set, get) => ({
   clear: () => {
     ring.clear();
     pending = [];
-    decoders.rx.reset();
-    decoders.tx.reset();
+    textFormatter.reset();
     throughputWindow = 0;
     set((state) => ({
       version: state.version + 1,
@@ -269,6 +265,24 @@ export function consumeThroughputWindow(): number {
 /** 导出用：按时间顺序取全部条目。调用前先 flushPendingEntries()。 */
 export function allEntries(): LogEntry[] {
   return ring.toArray();
+}
+
+/**
+ * 把缓冲里的全部条目渲染成一份可保存的文本，返回文本与行数。
+ *
+ * 时间戳带日期，与录制文件同一种写法：导出的日志常常跨夜，只有时分秒的话
+ * 拿到手连是哪天的都说不清。
+ */
+export function logText(view: LogView, messages: Messages): { text: string; lines: number } {
+  flushPendingEntries(); // 否则最近 60ms 内收到的帧会漏出导出文件
+  const entries = allEntries();
+  const text = entries
+    .map(
+      (entry) =>
+        `${formatDateTime(entry.time)} ${directionTag(entry.kind)} ${entryBody(entry, view, messages)}`,
+    )
+    .join('\n');
+  return { text, lines: entries.length };
 }
 
 /* ---------------- 渲染选择器 ---------------- */
@@ -346,7 +360,7 @@ export function selectRows(query: RowQuery): LogSelection {
     rows.push({
       id: entry.id,
       kind: entry.kind,
-      timestamp: query.showTimestamp ? formatTime(entry.time) : '',
+      timestamp: query.showTimestamp ? formatClock(entry.time) : '',
       segments: highlight(body, needle, query.filter.trim().length),
     });
   }
@@ -387,14 +401,6 @@ function highlight(body: string, needle: string, needleLength: number): RowSegme
   return segments.length > 0 ? segments : [{ text: body, hit: false }];
 }
 
-export function formatTime(date: Date): string {
-  const pad = (value: number, width = 2): string => String(value).padStart(width, '0');
-  return (
-    `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}` +
-    `.${pad(date.getMilliseconds(), 3)}`
-  );
-}
-
 /** 仅供测试：重置模块级状态。 */
 export function __resetLogStoreForTests(): void {
   ring.clear();
@@ -407,8 +413,7 @@ export function __resetLogStoreForTests(): void {
   throughputWindow = 0;
   cacheKey = '';
   cacheSelection = { rows: [], hiddenEarlier: 0 };
-  decoders.rx.reset();
-  decoders.tx.reset();
+  textFormatter.reset();
   ring.resize(DEFAULT_LOG_CAPACITY);
   useLogStore.setState({
     version: 0,

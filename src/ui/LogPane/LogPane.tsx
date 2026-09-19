@@ -1,17 +1,10 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { resolveFraming, type FrameMode } from '@/core/framing/frameAssembler';
-import { downloadText, fileStamp } from '@/lib/download';
-import {
-  allEntries,
-  entryBody,
-  flushPendingEntries,
-  formatTime,
-  LOG_CAPACITY_MIN,
-  selectRows,
-  useLogStore,
-  type LogRow,
-} from '@/store/logStore';
+import { logFileName } from '@/core/log/logLine';
+import { downloadText } from '@/lib/download';
+import { logText, LOG_CAPACITY_MIN, selectRows, useLogStore, type LogRow } from '@/store/logStore';
 import { useConnectionStore } from '@/store/connectionStore';
+import { useRecordStore } from '@/store/recordStore';
 import { useUiStore } from '@/store/uiStore';
 import { FormatToggle } from '../FormatToggle';
 import { useConfirm } from '../useConfirm';
@@ -73,6 +66,9 @@ export function LogPane(): React.JSX.Element {
   }).mode;
 
   const sessionState = useConnectionStore((s) => s.sessionState);
+  const recording = useRecordStore((s) => s.status);
+  const recordSupported = useRecordStore((s) => s.supported);
+  const toggleRecord = useRecordStore((s) => s.toggle);
   const capacity = useLogStore((s) => s.capacity);
   const setCapacity = useLogStore((s) => s.setCapacity);
 
@@ -120,16 +116,9 @@ export function LogPane(): React.JSX.Element {
   }, [autoScroll, scrollToBottom]);
 
   const saveLog = useCallback(() => {
-    flushPendingEntries(); // 否则最近 60ms 内收到的帧会漏出导出文件
-    const entries = allEntries();
-    const text = entries
-      .map((entry) => {
-        const tag = entry.kind === 'rx' ? '[RX]' : entry.kind === 'tx' ? '[TX]' : '[--]';
-        return `${formatTime(entry.time)} ${tag} ${entryBody(entry, view, t)}`;
-      })
-      .join('\n');
-    downloadText(`serial-${fileStamp()}.log`, text);
-    useLogStore.getState().appendMessage(t.exportedLog(entries.length));
+    const { text, lines } = logText(view, t);
+    downloadText(logFileName(), text);
+    useLogStore.getState().appendMessage(t.exportedLog(lines));
   }, [view, t]);
 
   // 清空要按两下：缓冲里的全部采集数据连同统计一起丢、不可撤销，而按钮就紧挨着「保存日志」
@@ -259,6 +248,17 @@ export function LogPane(): React.JSX.Element {
             onCommit={onCapacityCommit}
           />
           <span className="label">{t.logCapacityUnit}</span>
+
+          <button
+            type="button"
+            className={`btn ${recording.active ? styles.recordOn : ''}`}
+            title={recordSupported ? t.recordTip : t.recordUnsupported}
+            disabled={!recordSupported}
+            aria-pressed={recording.active}
+            onClick={() => void toggleRecord()}
+          >
+            {recording.active ? `■ ${t.recording(recording.lines)}` : `● ${t.record}`}
+          </button>
 
           <button type="button" className="btn" onClick={saveLog}>
             {t.saveLog}

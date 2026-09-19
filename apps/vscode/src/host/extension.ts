@@ -1,5 +1,7 @@
 import { randomBytes } from 'node:crypto';
+import { createWriteStream } from 'node:fs';
 import * as vscode from 'vscode';
+import { BufferedSink } from '@/core/log/bufferedSink';
 import type { SessionState } from '@/core/session/serialSession';
 import type { NodePortInfo } from '@/core/transport/nodePortRegistry';
 import type { PortDescriptor } from '@/core/transport/portDescriptor';
@@ -277,6 +279,34 @@ export function activate(context: vscode.ExtensionContext): SerialToolApi {
         }
       },
       pickPort: () => pickPort(current),
+      pickRecordFile: async (suggestedName) => {
+        const target = await vscode.window.showSaveDialog({
+          // 默认落在工作区里：录制多半是为了贴进 issue 或跟代码一起看，
+          // 丢进用户主目录反而要再找一遍
+          defaultUri: vscode.Uri.joinPath(
+            vscode.workspace.workspaceFolders?.[0]?.uri ?? vscode.Uri.file(''),
+            suggestedName,
+          ),
+          filters: { Log: ['log', 'txt'] },
+        });
+        return target?.fsPath;
+      },
+      createRecordSink: (path, onError) => {
+        // 用 Node 的写入流而不是逐行 appendFile：后者每行一次 open/write/close，
+        // 高波特率下光系统调用就够呛
+        const stream = createWriteStream(path, { flags: 'w' });
+        stream.on('error', (error: Error) => onError(error.message));
+        return new BufferedSink(
+          {
+            write: (chunk) =>
+              new Promise((resolve, reject) => {
+                stream.write(chunk, (error) => (error ? reject(error) : resolve()));
+              }),
+            close: () => new Promise((resolve) => stream.end(resolve)),
+          },
+          onError,
+        );
+      },
       readPrefs,
       writePref: (key, value) => {
         void context.globalState.update(PREFS_KEY, { ...readPrefs(), [key]: value });

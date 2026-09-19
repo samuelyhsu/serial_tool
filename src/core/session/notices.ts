@@ -22,7 +22,16 @@ export type SessionNotice =
   | { code: 'write-dropped-backpressure'; pendingBytes: number }
   | { code: 'not-open' }
   /** 该端口已被本工具的另一个页面占用。多页面各连一口时才会出现。 */
-  | { code: 'port-busy' };
+  | { code: 'port-busy' }
+  /**
+   * 录制到文件的三种回执。
+   *
+   * 走通知而不是界面自己拼字符串：录制活在会话那一侧（VS Code 里就是扩展宿主进程），
+   * 而翻译只发生在渲染时 —— 宿主手里没有文案目录，能交出来的只有结构化事件。
+   */
+  | { code: 'record-started'; target: string }
+  | { code: 'record-stopped'; target: string; lines: number }
+  | { code: 'record-error'; message: string };
 
 export type SessionNoticeCode = SessionNotice['code'];
 

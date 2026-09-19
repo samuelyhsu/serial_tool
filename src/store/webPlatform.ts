@@ -1,12 +1,17 @@
+import type { BufferedSink } from '@/core/log/bufferedSink';
+import { logFileName } from '@/core/log/logLine';
+import { FrameRecorder } from '@/core/log/recorder';
 import { TaskScheduler } from '@/core/scheduler/taskScheduler';
-import { SerialSession } from '@/core/session/serialSession';
+import type { SessionNotice } from '@/core/session/notices';
+import { SerialSession, type SessionEvents } from '@/core/session/serialSession';
 import { TransportError } from '@/core/transport/errors';
 import type { PortDescriptor } from '@/core/transport/portDescriptor';
 import { describePorts, portKey } from '@/core/transport/portRegistry';
 import type { ConnectionOptions } from '@/core/transport/types';
 import { isWebSerialSupported, WebSerialTransport } from '@/core/transport/webSerialTransport';
+import { isFileRecordingSupported, openFileSink } from '@/lib/fileSink';
 import { createPortLeases } from '@/lib/portLease';
-import type { Platform, SessionLike, TasksLike } from './platform';
+import type { Platform, RecorderLike, SessionLike, TasksLike } from './platform';
 
 /**
  * 浏览器运行环境。
@@ -16,8 +21,20 @@ import type { Platform, SessionLike, TasksLike } from './platform';
  * 同一套界面才能既跑在网页里、又跑在 VS Code 的 webview 里。
  */
 
-function createSession(): SessionLike {
+/**
+ * 会话，外加一条「往日志里说句话」的出口。
+ *
+ * 录制的回执要走通知（i18n 在渲染时才发生），而通知的接收方是 store 通过
+ * setHandlers 交进来的 —— 这里把它捞出来给录制器用。
+ */
+interface WebSession {
+  session: SessionLike;
+  notify: (notice: SessionNotice) => void;
+}
+
+function createSession(recorder: FrameRecorder): WebSession {
   let describe: (options: ConnectionOptions) => string = () => '';
+  let handlers: Partial<SessionEvents> = {};
 
   const session = new SerialSession<SerialPort>({
     createTransport: (port) => new WebSerialTransport(port),
@@ -30,8 +47,19 @@ function createSession(): SessionLike {
     describeConfig: (options) => describe(options),
   });
 
-  return {
-    setHandlers: (handlers) => session.setHandlers(handlers),
+  const wrapped: SessionLike = {
+    setHandlers: (next) => {
+      handlers = next;
+      session.setHandlers({
+        ...next,
+        // 录制挂在帧产生的这一侧，store 因此完全不必知道有录制这回事 ——
+        // 与 VS Code 里「录制在宿主」的接法是同一个位置
+        onFrame: (direction, bytes) => {
+          recorder.record(direction, bytes, Date.now());
+          next.onFrame?.(direction, bytes);
+        },
+      });
+    },
     setConfigDescriber: (next) => {
       describe = next;
     },
@@ -57,6 +85,52 @@ function createSession(): SessionLike {
       void session.dispose();
     },
   };
+
+  return { session: wrapped, notify: (notice) => handlers.onNotice?.(notice) };
+}
+
+/**
+ * 浏览器侧的录制器。
+ *
+ * 落盘走 File System Access：用户选一次文件，此后一直往里追加。
+ * 页面被关掉时来不及 close()，所以 pagehide 至少把攒着的那一批推进写入队列。
+ */
+function createRecorder(
+  recorder: FrameRecorder,
+  notify: (notice: SessionNotice) => void,
+): {
+  api: RecorderLike;
+  flush: () => void;
+} {
+  let sink: BufferedSink | null = null;
+
+  const api: RecorderLike = {
+    supported: isFileRecordingSupported(),
+    status: () => recorder.status,
+
+    start: async (view) => {
+      const opened = await openFileSink(logFileName(), (message) =>
+        notify({ code: 'record-error', message }),
+      );
+      if (!opened) return false;
+      sink = opened.sink;
+      recorder.start(opened.sink, opened.name, view, Date.now());
+      notify({ code: 'record-started', target: opened.name });
+      return true;
+    },
+
+    stop: async () => {
+      const finished = await recorder.stop();
+      sink = null;
+      if (finished.target !== null) {
+        notify({ code: 'record-stopped', target: finished.target, lines: finished.lines });
+      }
+    },
+
+    subscribe: (listener) => recorder.subscribe(listener),
+  };
+
+  return { api, flush: () => sink?.flush() };
 }
 
 function createTasks(): TasksLike {
@@ -94,13 +168,22 @@ function createTasks(): TasksLike {
 
 export function createWebPlatform(): Platform {
   const supported = isWebSerialSupported();
+  const frameRecorder = new FrameRecorder();
+  const { session, notify } = createSession(frameRecorder);
+  const recorder = createRecorder(frameRecorder, notify);
+
+  // 页面被关掉时 close() 已经来不及了（异步的一律作废），冲一次缓冲是能做到的极限
+  if (typeof window !== 'undefined') {
+    window.addEventListener('pagehide', () => recorder.flush());
+  }
 
   return {
     kind: 'web',
     supported,
-    session: createSession(),
+    session,
     tasks: createTasks(),
     leases: createPortLeases(),
+    recorder: recorder.api,
 
     listPorts: async () => {
       if (!supported) return [];

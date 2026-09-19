@@ -11,6 +11,7 @@ import { SessionHost } from '../host/sessionHost';
 import type * as connectionModule from '@/store/connectionStore';
 import type * as logModule from '@/store/logStore';
 import type * as presetModule from '@/store/presetStore';
+import type * as recordModule from '@/store/recordStore';
 import type * as sendModule from '@/store/sendStore';
 import type * as tasksModule from '@/store/tasksStore';
 import type { HostEvent, HostRequest } from '../shared/protocol';
@@ -45,6 +46,7 @@ type SendModule = typeof sendModule;
 type PresetModule = typeof presetModule;
 type TasksModule = typeof tasksModule;
 type LogModule = typeof logModule;
+type RecordModule = typeof recordModule;
 
 interface Loopback {
   transports: FakeTransport[];
@@ -55,6 +57,8 @@ interface Loopback {
   watcher: PortWatcher;
   /** 宿主收到的偏好写入，按到达顺序。扩展里它们会落进 globalState，并转给活动栏的端口视图。 */
   prefWrites: [key: string, value: unknown][];
+  /** 录制真正写进「文件」的行。录制跑在宿主，所以面板隐藏期间它也该继续涨。 */
+  recorded: string[];
   connection: ConnectionModule;
   send: SendModule;
   preset: PresetModule;
@@ -75,7 +79,7 @@ interface Loopback {
    * HTML，即宿主没来得及把新偏好烙进去时的情形（见 host/panelHtml.ts）—— 回放不该依赖那一步。
    * 新界面同样不连着宿主，只用来看回放出来的结果。
    */
-  rebuildPanel: () => Promise<{ log: LogModule }>;
+  rebuildPanel: () => Promise<{ log: LogModule; record: RecordModule }>;
 }
 
 let disposeHost: (() => void) | null = null;
@@ -95,6 +99,7 @@ async function loopback(options: { prefs?: Record<string, unknown> } = {}): Prom
   // 一个测试之外的未处理错误（CI 机器慢一点时真的出现过：window is not defined）
   let closed = false;
   const prefWrites: [string, unknown][] = [];
+  const recorded: string[] = [];
   const prefs: Record<string, unknown> = { ...options.prefs };
   // 与 extension.ts 的 renderHtml 一样，只在建面板时烙一次
   document.body.innerHTML = '<div id="root"></div>';
@@ -117,6 +122,11 @@ async function loopback(options: { prefs?: Record<string, unknown> } = {}): Prom
     },
     post,
     pickPort: () => Promise.resolve(undefined),
+    pickRecordFile: () => Promise.resolve('capture.log'),
+    createRecordSink: () => ({
+      write: (line) => recorded.push(line),
+      close: () => Promise.resolve(),
+    }),
     readPrefs: () => prefs,
     writePref: (key, value) => {
       prefs[key] = value;
@@ -170,6 +180,7 @@ async function loopback(options: { prefs?: Record<string, unknown> } = {}): Prom
 
   return {
     transports,
+    recorded,
     host: activeHost,
     transport: () => transports[transports.length - 1]!,
     leases,
@@ -187,14 +198,18 @@ async function loopback(options: { prefs?: Record<string, unknown> } = {}): Prom
     rebuildPanel: async () => {
       hidden = true;
       vi.resetModules();
-      await import('./bootstrap');
+      const bootstrap = await import('./bootstrap');
       const log = await import('@/store/logStore');
+      const record = await import('@/store/recordStore');
       const view = await import('./applySnapshot');
+      bootstrap.attachView(view);
       const snapshot = activeHost.snapshot();
       if (snapshot.type !== 'snapshot') throw new Error('unreachable');
-      view.applySnapshot(snapshot);
+      // 走真实路径把快照送进去，而不是直接调 applySnapshot：运行环境自己也存着
+      // 一份状态（录制就在那儿），绕过客户端的那条路只能恢复 store 里的那一半
+      window.dispatchEvent(new MessageEvent('message', { data: snapshot }));
       log.flushPendingEntries();
-      return { log };
+      return { log, record };
     },
   };
 }
@@ -358,6 +373,55 @@ describe('webview ⇄ 扩展宿主 回环', () => {
 
     // 宿主那一侧的调度器不受影响，串口上照旧有东西出去
     expect(app.transport().written.length).toBeGreaterThan(before + 2);
+  });
+
+  /**
+   * 与上一条同一个道理，换成录制。
+   *
+   * 录制若挂在 webview 上，面板一隐藏文件就断了 —— 而「挂一夜等一次偶发异常」
+   * 正是录制存在的全部理由，断掉的那一版在同进程的回环里照样是绿的。
+   * 所以这里也必须先把面板隐藏掉，再看文件有没有继续长。
+   */
+  it('面板被隐藏后录制仍在写 —— 这是它必须跑在宿主的全部理由', async () => {
+    const app = await loopback();
+    app.connection.useConnectionStore.getState().selectPort('COM3');
+    await app.connection.useConnectionStore.getState().toggleConnection();
+    await app.settle();
+
+    const record = await import('@/store/recordStore');
+    await record.useRecordStore.getState().toggle();
+    await app.settle();
+    expect(record.useRecordStore.getState().status.active).toBe(true);
+
+    // 默认是空闲分帧，得等静默超时帧才成形
+    app.transport().emitData([0x41]);
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    await app.settle();
+
+    // 用户切到别的标签页：webview 连同它的一切一起没了
+    app.hidePanel();
+    const before = app.recorded.length;
+    app.transport().emitData([0x42]);
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    await app.settle();
+
+    expect(app.recorded.length).toBeGreaterThan(before);
+    expect(app.recorded.at(-1)).toMatch(/\[RX\] B$/);
+  });
+
+  it('面板重建后录制按钮仍显示在录 —— 状态靠快照接回来', async () => {
+    const app = await loopback();
+    app.connection.useConnectionStore.getState().selectPort('COM3');
+    await app.connection.useConnectionStore.getState().toggleConnection();
+    await app.settle();
+
+    const record = await import('@/store/recordStore');
+    await record.useRecordStore.getState().toggle();
+    await app.settle();
+
+    const rebuilt = await app.rebuildPanel();
+    expect(rebuilt.record.useRecordStore.getState().status.active).toBe(true);
+    expect(rebuilt.record.useRecordStore.getState().status.target).toBe('capture.log');
   });
 
   it('循环期间改报文，宿主随即发的是新内容', async () => {

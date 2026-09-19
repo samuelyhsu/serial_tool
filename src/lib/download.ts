@@ -21,12 +21,3 @@ export function downloadBlob(filename: string, blob: Blob): void {
 export function downloadText(filename: string, text: string, mime = 'text/plain'): void {
   downloadBlob(filename, new Blob([text], { type: `${mime};charset=utf-8` }));
 }
-
-/** 时间戳文件名后缀：20260822-081530 */
-export function fileStamp(date = new Date()): string {
-  const pad = (n: number, width = 2): string => String(n).padStart(width, '0');
-  return (
-    `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}` +
-    `-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`
-  );
-}

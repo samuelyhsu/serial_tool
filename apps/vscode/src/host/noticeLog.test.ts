@@ -16,6 +16,9 @@ const samples: { [K in SessionNoticeCode]: Extract<SessionNotice, { code: K }> }
   'write-dropped-backpressure': { code: 'write-dropped-backpressure', pendingBytes: 4096 },
   'not-open': { code: 'not-open' },
   'port-busy': { code: 'port-busy' },
+  'record-started': { code: 'record-started', target: 'a.log' },
+  'record-stopped': { code: 'record-stopped', target: 'a.log', lines: 12 },
+  'record-error': { code: 'record-error', message: 'ENOSPC' },
 };
 
 describe('noticeLogEntry', () => {

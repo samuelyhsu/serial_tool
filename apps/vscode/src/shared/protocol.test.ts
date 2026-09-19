@@ -49,6 +49,8 @@ const REQUESTS: Record<RequestMethod, RequestBody> = {
   'session.setReconnect': { method: 'session.setReconnect', enabled: false },
   'prefs.write': { method: 'prefs.write', key: 'wst.theme', value: 'dark' },
   'log.clear': { method: 'log.clear' },
+  'record.start': { method: 'record.start', view: 'text' },
+  'record.stop': { method: 'record.stop' },
   'tasks.start': {
     method: 'tasks.start',
     taskId: 't1',
@@ -78,6 +80,7 @@ const EVENTS: Record<HostEvent['type'], HostEvent> = {
     pendingBytes: 0,
     frames: [{ direction: 'rx', at: 1_700_000_000_001, bytes: new Uint8Array([0x41]) }],
     runningTasks: ['t1'],
+    recording: { active: true, target: 'a.log', lines: 3, startedAt: 1_700_000_000_000 },
     prefs: { 'wst.theme': 'dark' },
     language: 'zh-cn',
   },
@@ -99,6 +102,11 @@ const EVENTS: Record<HostEvent['type'], HostEvent> = {
     autoReconnect: false,
   },
   tasks: { kind: 'event', type: 'tasks', running: ['t1'] },
+  recording: {
+    kind: 'event',
+    type: 'recording',
+    status: { active: true, target: 'a.log', lines: 3, startedAt: 1_700_000_000_000 },
+  },
   openPort: { kind: 'event', type: 'openPort', portKey: 'COM3' },
 };
 

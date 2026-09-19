@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { IDLE_RECORDING } from '@/core/log/recorder';
 import type { TaskFrame } from '@/core/scheduler/framePlan';
 import type { Platform, TaskPatch, TaskSpec } from './platform';
 
@@ -64,6 +65,13 @@ function fakePlatform(recorded: Recorded): Platform {
       refresh: () => undefined,
       subscribe: () => () => undefined,
       dispose: () => undefined,
+    },
+    recorder: {
+      supported: false,
+      status: () => IDLE_RECORDING,
+      start: () => Promise.resolve(false),
+      stop: () => Promise.resolve(),
+      subscribe: () => () => undefined,
     },
     listPorts: () => Promise.resolve([]),
     requestPort: () => Promise.reject(new Error('not used')),

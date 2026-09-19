@@ -54,6 +54,13 @@ export const zh: Messages = {
     line: '遇到换行符即成一帧',
   },
   saveLog: '保存日志',
+  record: '录制',
+  recordTip:
+    '把收发数据边收边写进文件，不受缓冲条数限制 —— 挂一夜等偶发问题用它。' +
+    '格式按点下时的 TXT / HEX 定死，只记收发帧，不记系统消息',
+  stopRecord: '停止录制',
+  recording: (lines) => `录制中 · ${lines} 行`,
+  recordUnsupported: '当前环境不支持写入文件',
   clear: '清空',
   confirmClear: '确认清空？',
   noData: '无数据',
@@ -169,6 +176,12 @@ export const zh: Messages = {
         return '串口未打开，发送已忽略';
       case 'port-busy':
         return '该端口已被本工具的另一个页面打开，请先在那个页面关闭它';
+      case 'record-started':
+        return `开始录制到 ${notice.target}`;
+      case 'record-stopped':
+        return `录制结束，共 ${notice.lines} 行写入 ${notice.target}`;
+      case 'record-error':
+        return `录制写入失败：${notice.message}`;
     }
   },
 

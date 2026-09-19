@@ -88,6 +88,12 @@ export interface Messages {
   readonly idleFrameUnit: string;
   readonly framingHint: Readonly<Record<'raw' | 'idle' | 'line', string>>;
   readonly saveLog: string;
+  /** 录制按钮：把收发数据实时写进文件，不受日志缓冲容量限制。 */
+  readonly record: string;
+  readonly recordTip: string;
+  readonly stopRecord: string;
+  readonly recording: (lines: number) => string;
+  readonly recordUnsupported: string;
   readonly clear: string;
   /** 清空按钮按下一次后的二次确认文案。 */
   readonly confirmClear: string;

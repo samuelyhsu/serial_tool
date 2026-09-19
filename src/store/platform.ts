@@ -1,4 +1,6 @@
 import type { FramingConfig } from '@/core/framing/frameAssembler';
+import type { LogView } from '@/core/log/logLine';
+import type { RecordingStatus } from '@/core/log/recorder';
 import type { TaskFrame } from '@/core/scheduler/framePlan';
 import type { PeriodicTaskSpec } from '@/core/scheduler/taskScheduler';
 import type { SessionEvents } from '@/core/session/serialSession';
@@ -77,6 +79,26 @@ export interface TasksLike {
   subscribe: (listener: (running: string[]) => void) => () => void;
 }
 
+/**
+ * 录制到文件。
+ *
+ * **归会话那一侧所有**，与周期发送同理：VS Code 里帧产生在扩展宿主进程，
+ * webview 一被隐藏就销毁，录制若挂在界面上，用户切个标签页文件就断了 ——
+ * 而「挂一夜等一次偶发异常」正是录制存在的全部理由。
+ */
+export interface RecorderLike {
+  /** 这个环境能不能落盘。老浏览器没有 File System Access，按钮要据此禁用。 */
+  readonly supported: boolean;
+  status: () => RecordingStatus;
+  /**
+   * 让用户挑一个文件并开始录制，取消或失败返回 false。
+   * **必须由用户手势直接调用**，否则浏览器会拒绝弹出文件选择器。
+   */
+  start: (view: LogView) => Promise<boolean>;
+  stop: () => Promise<void>;
+  subscribe: (listener: (status: RecordingStatus) => void) => () => void;
+}
+
 /** 端口占用登记。浏览器里是尽力而为的广播，VS Code 里由宿主在窗口内权威仲裁。 */
 export interface LeasesLike {
   holders: () => LeaseHolders;
@@ -94,6 +116,7 @@ export interface Platform {
   readonly session: SessionLike;
   readonly tasks: TasksLike;
   readonly leases: LeasesLike;
+  readonly recorder: RecorderLike;
   listPorts: () => Promise<PortDescriptor[]>;
   /**
    * 让用户挑一个端口。取消时抛出 name 为 `NotFoundError` 的错误 ——

@@ -1,4 +1,5 @@
 import type { FramingConfig } from '@/core/framing/frameAssembler';
+import type { LogView } from '@/core/log/logLine';
 import type { TaskFrame } from '@/core/scheduler/framePlan';
 import type { ConnectionOptions } from '@/core/transport/types';
 import type { HostEvent, HostMessage, HostRequest, RequestBody } from '../shared/protocol';
@@ -23,6 +24,7 @@ export interface SessionClientHandlers {
   onState: (event: Extract<HostEvent, { type: 'state' }>) => void;
   onSelected: (event: Extract<HostEvent, { type: 'selected' }>) => void;
   onTasks: (event: Extract<HostEvent, { type: 'tasks' }>) => void;
+  onRecording: (event: Extract<HostEvent, { type: 'recording' }>) => void;
   onOpenPort: (event: Extract<HostEvent, { type: 'openPort' }>) => void;
 }
 
@@ -92,6 +94,9 @@ export class SessionClient {
       case 'tasks':
         this.#handlers.onTasks?.(message);
         break;
+      case 'recording':
+        this.#handlers.onRecording?.(message);
+        break;
       case 'openPort':
         this.#handlers.onOpenPort?.(message);
         break;
@@ -145,6 +150,17 @@ export class SessionClient {
   /** 让宿主也丢掉它那份日志历史，否则面板重建时 snapshot 会把它灌回来。 */
   clearLog(): Promise<void> {
     return this.#call({ method: 'log.clear' }).then(() => undefined);
+  }
+
+  /* ---------------- 录制（在宿主进程里写文件） ---------------- */
+
+  /** 宿主弹文件对话框。用户取消返回 false。 */
+  startRecording(view: LogView): Promise<boolean> {
+    return this.#call({ method: 'record.start', view }).then((result) => result === true);
+  }
+
+  stopRecording(): Promise<void> {
+    return this.#call({ method: 'record.stop' }).then(() => undefined);
   }
 
   /* ---------------- 周期发送（在宿主进程里跑） ---------------- */

@@ -47,6 +47,12 @@ export function noticeLogEntry(notice: SessionNotice): NoticeLogEntry | null {
       };
     case 'port-busy':
       return { level: 'warn', message: 'port is held by another panel' };
+    case 'record-started':
+      return { level: 'info', message: `recording to ${notice.target}` };
+    case 'record-stopped':
+      return { level: 'info', message: `recording stopped (${notice.lines} lines)` };
+    case 'record-error':
+      return { level: 'error', message: `recording failed: ${notice.message}` };
     case 'not-open':
       return null;
   }
