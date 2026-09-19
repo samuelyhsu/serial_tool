@@ -157,7 +157,7 @@ export const zh: Messages = {
   presetTabTitle: (index) => `分组 ${index}`,
   newTab: '新建分组',
   renameTab: '重命名分组',
-  tabHint: '双击或按 F2 重命名，按 Delete 删除',
+  tabHint: '分组标签：双击或按 F2 重命名，按 Delete 删除',
   deleteTab: (title) => `删除分组「${title}」`,
   confirmDeleteTab: '确认删除？',
   toggleHexMode: '切换 TXT / HEX 模式',

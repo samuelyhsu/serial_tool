@@ -1,7 +1,6 @@
 import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useConnectionStore } from '@/store/connectionStore';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { __resetLogStoreForTests } from '@/store/logStore';
 import { PRESET_DEFAULT_TABS, PRESET_TAB_SIZE, usePresetStore } from '@/store/presetStore';
 import { useTasksStore } from '@/store/tasksStore';
@@ -65,7 +64,8 @@ describe('多条发送', () => {
   it('列顺序为：序列 · 格式 · 数据 · 发送 · 周期 · 循环', () => {
     render(<PresetPane />);
     const headers = screen.getByText('序列').parentElement!.querySelectorAll('span');
-    expect([...headers].map((h) => h.textContent).filter(Boolean)).toEqual([
+    const names = [...headers].map((h) => h.textContent).filter((text) => text && text !== '?');
+    expect(names).toEqual([
       '序列',
       '格式',
       '数据',
@@ -512,29 +512,4 @@ describe('多条发送', () => {
     expect(usePresetStore.getState().presets.map((preset) => preset.id)).toEqual(before);
   });
 
-  it('Alt+2 发当前分组的第二条，Alt+0 发第十条', async () => {
-    const sendOnce = vi.fn(() => Promise.resolve());
-    usePresetStore.setState({ sendOnce });
-    useConnectionStore.setState({ sessionState: 'open' });
-    render(<PresetPane />);
-    const presets = usePresetStore.getState().presets;
-
-    await userEvent.keyboard('{Alt>}2{/Alt}');
-    expect(sendOnce).toHaveBeenLastCalledWith(presets[1]!.id);
-
-    await userEvent.keyboard('{Alt>}0{/Alt}');
-    expect(sendOnce).toHaveBeenLastCalledWith(presets[PRESET_TAB_SIZE - 1]!.id);
-  });
-
-  it('空行没有快捷键可按', async () => {
-    const sendOnce = vi.fn(() => Promise.resolve());
-    usePresetStore.setState({ sendOnce });
-    useConnectionStore.setState({ sessionState: 'open' });
-    render(<PresetPane />);
-    await userEvent.click(tabs()[1]!);
-
-    await userEvent.keyboard('{Alt>}1{/Alt}');
-
-    expect(sendOnce).not.toHaveBeenCalled();
-  });
 });

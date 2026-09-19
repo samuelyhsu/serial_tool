@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import type { Messages } from '@/i18n';
 import { downloadText } from '@/lib/download';
 import { useConnectionStore } from '@/store/connectionStore';
 import { useLogStore } from '@/store/logStore';
@@ -19,6 +20,16 @@ import { FormatToggle } from '../FormatToggle';
 import { useConfirm } from '../useConfirm';
 import { useMessages } from '../useMessages';
 import styles from './PresetPane.module.css';
+
+/**
+ * 这一区全部的键盘操作，说给列头那个 `?` 听。
+ *
+ * 由两条就近提示拼出来，而不是另写一条完整的 —— 三份说同一批键位的文案，
+ * 改一个键就得改三处，漏掉哪处都没人看得见。
+ */
+function keyboardHints(t: Messages): string {
+  return [t.moveHint, t.tabHint].join(' · ');
+}
 
 export function PresetPane(): React.JSX.Element {
   const t = useMessages();
@@ -76,32 +87,6 @@ export function PresetPane(): React.JSX.Element {
       }))
       .filter((group) => group.hits.length > 0);
   }, [query, tabs, presets, t]);
-
-  /**
-   * Alt+1..9 / Alt+0 发当前分组的第 1..10 条。
-   *
-   * 认 `code` 而不是 `key`：按住 Alt 时 key 在部分键盘布局下已经不是数字了。
-   * 搜索结果里「当前分组的第 N 条」没有意义，那时整条快捷键歇着。
-   */
-  useEffect(() => {
-    if (found !== null) return;
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
-      const digit = /^Digit(\d)$/.exec(event.code)?.[1];
-      if (digit === undefined) return;
-
-      const store = usePresetStore.getState();
-      const slot = digit === '0' ? PRESET_TAB_SIZE - 1 : Number(digit) - 1;
-      const preset = tabPresets(store.presets, store.activeTab)[slot];
-      if (!preset || preset.data.trim() === '') return;
-      event.preventDefault();
-      if (!useConnectionStore.getState().isOpen()) return;
-      void store.sendOnce(preset.id);
-    };
-
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [found]);
 
   const onExport = useCallback(() => {
     downloadText('serial-presets.json', exportPayload(), 'application/json');
@@ -188,7 +173,19 @@ export function PresetPane(): React.JSX.Element {
         <span>{t.colFormat}</span>
         <span>{t.colData}</span>
         <span>{t.colSend}</span>
-        <span />
+        {/*
+          第 5 列本来是空的（对着每行的重命名按钮）。放一个 ? 在这儿，
+          是因为 Alt+↑↓ 调顺序**没有鼠标入口**，不说的话没人找得到它。
+          列头常驻可见，比挂在某个输入框的 title 上更容易被碰到。
+        */}
+        <span
+          className={styles.kbdHint}
+          role="note"
+          aria-label={keyboardHints(t)}
+          title={keyboardHints(t)}
+        >
+          ?
+        </span>
         <span>{t.colPeriod}</span>
         <span className={styles.columnLoop}>{t.colLoop}</span>
       </div>

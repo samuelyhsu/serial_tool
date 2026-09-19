@@ -394,3 +394,18 @@
 .seqBtn {
   min-width: 54px;
 }
+
+/*
+ * 列头里那个「这里有键盘操作」的记号。
+ * 做成 help 光标而不是按钮：它没有动作，点下去什么都不会发生。
+ */
+.kbdHint {
+  justify-self: center;
+  cursor: help;
+  font-weight: 700;
+  opacity: 0.7;
+}
+
+.kbdHint:hover {
+  opacity: 1;
+}

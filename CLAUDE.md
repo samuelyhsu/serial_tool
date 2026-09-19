@@ -230,27 +230,30 @@ webview 入口靠 `import './bootstrap'` 排在第一行来保证「先装环境
 - Web Serial 需要用户手势和真实硬件，CI 覆盖不到。README「测试」一节末尾有 8 条人工验收
   清单，改动端口选择 / 重连 / 高速收发相关逻辑后应对照走一遍。
 
-## 快捷键
+## 键盘操作
 
-**只有多条发送有快捷键**，注册在 PresetPane 内部（它要看当前分组）。完整表在 README。
-2026-09-19 曾加过一批全局快捷键（Ctrl+O 连断、Ctrl+F 跳过滤框、Alt+P 暂停…），当天就被
-移除了 —— 用户不要那些。**再想加之前先读完下面这几条。**
+**这个工具没有全局快捷键，这是明确的产品决定，不是还没做。** 2026-09-19 加过一批
+（Ctrl+O 连断、Ctrl+F 跳过滤框、Alt+P 暂停…）与更早的 `Alt+1..9`（发第 N 条预设），
+当天全部移除。**再想加之前先读完下面这几条。**
 
+- **VS Code 的 webview 拦不住编辑器的绑定**。`Alt+1..9` 绑的是
+  `workbench.action.openEditorAtIndex1..9`、`Ctrl+1..9` 绑的是聚焦第 N 个编辑器组，
+  **两者都没有 `when` 限制** —— 串口面板聚焦时照样切走标签页，页面里的 `preventDefault`
+  在事件到达 webview 之前就已经晚了。`Alt+1..9` 那条在扩展里从来没生效过，
+  却在 README 里挂了几个月。**别照着「应该没人用」去猜，要在真实 VS Code 里按一遍。**
+- 真要做，唯一干净的办法是**扩展在 package.json 里声明 `keybindings`**，
+  `when` 用 `activeWebviewPanelId == serialTool.panel`，命令经 RPC 转发进 webview：
+  扩展的绑定注册在默认绑定之后，同样匹配时默认的出局。
+- **浏览器也保留了一批**：`Ctrl+L`/`K`/`E`/`N`/`T`/`W`，以及 `Alt+F`、`Alt+E` 的菜单。
 - **认 `event.code` 不认 `event.key`**：按住 Alt 时 key 在部分键盘布局下已经不是那个
   字母/数字了（macOS 上 Option+S 直接变成 ß）。
-- **VS Code 会截胡，而且比想象中狠**。`Alt+1..9` 绑的是 `workbench.action.openEditorAtIndex1..9`，
-  **没有 `when` 限制**，串口面板聚焦时照样切走标签页 —— 既有的「发第 N 条预设」在扩展里
-  因此一直是废的。`Ctrl+1..9`（聚焦第 N 个编辑器组）同样没有 when。
-  挑组合前先在真实 VS Code 里按一遍，别照着「应该没人用」去猜。
-- **浏览器也保留了一批**：`Ctrl+L`/`K`/`E`/`N`/`T`/`W`，以及 `Alt+F`、`Alt+E` 的菜单。
-  页面 `preventDefault` 对它们无效。
 - **破坏性动作不给快捷键**。「清空」已经要按两下确认，配上快捷键只会把误触变便宜。
-- 快捷键写在控件的 `title` 里，**不写进 placeholder** —— 占位文本是给「这里填什么」用的。
 
-要让 VS Code 里的快捷键真正可用，唯一干净的办法是**由扩展在 package.json 里声明
-`keybindings`，`when` 用 `activeWebviewPanelId == serialTool.panel`**，再把命令经 RPC
-转发进 webview：扩展的绑定注册在默认绑定之后，同样匹配时后者出局。光在 webview 里
-监听 keydown 是拦不住的。
+**留下来的那几个是「焦点内的键盘操作」，不是快捷键**（`Alt+↑↓` 调预设顺序、
+`F2` 重命名、`Ctrl+Enter` 发送…）：它们绑在焦点所在的元素上，VS Code 不会截胡，
+而且其中 `Alt+↑↓` 是调顺序**唯一**的入口 —— 没有上移/下移按钮也没有拖拽。
+多条发送列头里那个 `?` 就是为它们准备的：悬停列出全部，文案由 `moveHint` 与
+`tabHint` 拼出来，不另写第三份。
 
 ## 其他约定
 

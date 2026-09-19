@@ -167,7 +167,7 @@ export const en: Messages = {
   presetTabTitle: (index) => `Group ${index}`,
   newTab: 'New group',
   renameTab: 'Rename group',
-  tabHint: 'Double-click or press F2 to rename, Delete to remove',
+  tabHint: 'Group tabs: double-click or press F2 to rename, Delete to remove',
   deleteTab: (title) => `Delete group "${title}"`,
   confirmDeleteTab: 'Confirm delete?',
   toggleHexMode: 'Toggle TXT / HEX mode',
