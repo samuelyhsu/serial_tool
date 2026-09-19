@@ -18,7 +18,6 @@ import { StatusBar } from './StatusBar/StatusBar';
 import { Toolbar } from './Toolbar/Toolbar';
 import { UnsupportedBanner } from './UnsupportedBanner';
 import { useMessages } from './useMessages';
-import { useShortcuts } from './useShortcuts';
 
 export function App(): React.JSX.Element {
   const t = useMessages();
@@ -30,8 +29,6 @@ export function App(): React.JSX.Element {
   const refreshPorts = useConnectionStore((state) => state.refreshPorts);
   const sessionState = useConnectionStore((state) => state.sessionState);
   const portLabel = useSelectedPortLabel();
-
-  useShortcuts(t);
 
   // 日志选择器不是组件，拿不到 context，语言变化时把目录推给它
   useEffect(() => {

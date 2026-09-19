@@ -47,7 +47,6 @@ describe('LogPane', () => {
       showTx: true,
       timestampMode: 'none',
       autoScroll: true,
-      paused: null,
     });
   });
 
@@ -185,7 +184,6 @@ describe('正则过滤', () => {
       showTx: true,
       timestampMode: 'none',
       autoScroll: true,
-      paused: null,
     });
   });
 
@@ -255,7 +253,6 @@ describe('暂停刷新', () => {
       showTx: true,
       timestampMode: 'none',
       autoScroll: true,
-      paused: null,
     });
   });
 
@@ -360,7 +357,6 @@ describe('时间列的下拉框', () => {
       showTx: true,
       timestampMode: 'time',
       autoScroll: true,
-      paused: null,
     });
   });
 
@@ -420,7 +416,6 @@ describe('LogPane 的缓冲容量与「更早的未显示」提示', () => {
       showTx: true,
       timestampMode: 'none',
       autoScroll: true,
-      paused: null,
     });
   });
 

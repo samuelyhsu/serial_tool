@@ -105,7 +105,6 @@ export interface Messages {
   readonly idleFrameUnit: string;
   readonly framingHint: Readonly<Record<'raw' | 'idle' | 'line', string>>;
   readonly saveLog: string;
-  readonly saveLogTip: string;
   /** 录制按钮：把收发数据实时写进文件，不受日志缓冲容量限制。 */
   readonly record: string;
   readonly recordTip: string;
@@ -197,8 +196,6 @@ export interface Messages {
   readonly deleteTab: (title: string) => string;
   readonly confirmDeleteTab: string;
   readonly toggleHexMode: string;
-  /** 接收区那个 TXT/HEX 按钮的提示。发送区与预设行上的同名按钮不带它 —— 快捷键只管接收区。 */
-  readonly toggleViewTip: string;
   readonly formatToggleLabel: (current: string, next: string) => string;
 
   // 状态栏

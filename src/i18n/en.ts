@@ -45,8 +45,7 @@ export const en: Messages = {
   resizePanes: 'Drag to resize the panes (arrow keys nudge, Home / End jump to the limits)',
   switchTheme: 'Switch dark / light theme',
   payloadLabel: 'Payload',
-  payloadTip:
-    'Ctrl+Enter sends, Alt+S jumps here from anywhere, Ctrl+Up / Ctrl+Down walks the history',
+  payloadTip: 'Ctrl+Enter sends, Ctrl+Up / Ctrl+Down walks the history',
 
   receive: 'Receive',
   timestamp: 'Time',
@@ -63,8 +62,7 @@ export const en: Messages = {
   autoScroll: 'Auto-scroll',
   showTx: 'Show TX',
   filterPlaceholder: 'Filter / highlight…',
-  filterTip:
-    'Filter and highlight the log (Ctrl+F jumps here). Tick "Matches only" to drop the rest',
+  filterTip: 'Filter and highlight the log. Tick "Matches only" to drop the rest',
   filterRegex: 'Regular expression',
   filterRegexTip:
     'Treat the filter as a regular expression (case-insensitive). A half-typed pattern is ' +
@@ -86,7 +84,6 @@ export const en: Messages = {
     line: 'A newline ends a frame',
   },
   saveLog: 'Save log',
-  saveLogTip: 'Write the whole buffer to a file (Ctrl+S)',
   record: 'Record',
   recordTip:
     'Stream received and sent data straight to a file, free of the buffer limit — ' +
@@ -103,7 +100,7 @@ export const en: Messages = {
   pause: 'Pause',
   resume: 'Resume',
   pauseTip:
-    'Freeze the view to read it (Alt+P). Data keeps arriving and is still buffered, it just ' +
+    'Freeze the view to read it. Data keeps arriving and is still buffered, it just ' +
     'stops scrolling by. Scrolling up pauses automatically and scrolling back to the bottom ' +
     'resumes; this button stays paused until you press it again',
   pausedBacklog: (count) => (count > 0 ? `Paused · ${count} new since` : 'Paused'),
@@ -174,7 +171,6 @@ export const en: Messages = {
   deleteTab: (title) => `Delete group "${title}"`,
   confirmDeleteTab: 'Confirm delete?',
   toggleHexMode: 'Toggle TXT / HEX mode',
-  toggleViewTip: 'Show the receive pane as TXT or HEX (Alt+H)',
   formatToggleLabel: (current, next) => `Data format: ${current}, click to switch to ${next}`,
 
   frames: 'fr',

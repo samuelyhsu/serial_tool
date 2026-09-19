@@ -232,18 +232,25 @@ webview 入口靠 `import './bootstrap'` 排在第一行来保证「先装环境
 
 ## 快捷键
 
-全部在 `src/ui/useShortcuts.ts` 一处注册（既有的 `Alt+数字` 发预设在 PresetPane 内，
-因为它要看当前分组）。完整表在 README。三条硬约束：
+**只有多条发送有快捷键**，注册在 PresetPane 内部（它要看当前分组）。完整表在 README。
+2026-09-19 曾加过一批全局快捷键（Ctrl+O 连断、Ctrl+F 跳过滤框、Alt+P 暂停…），当天就被
+移除了 —— 用户不要那些。**再想加之前先读完下面这几条。**
 
 - **认 `event.code` 不认 `event.key`**：按住 Alt 时 key 在部分键盘布局下已经不是那个
-  字母了（macOS 上 Option+S 直接变成 ß）。
-- **选键受两头夹击**：浏览器保留了一批（`Ctrl+L`/`K`/`E`/`N`/`T`/`W`、`Alt+F` 与 `Alt+E`
-  的菜单），页面 `preventDefault` 对它们无效；VS Code 的 webview 里 `Ctrl+F`/`S`/`O`
-  可能被编辑器抢走（**尚未在真机验证**）。核心动作因此落在 `Alt + 字母` 上。
+  字母/数字了（macOS 上 Option+S 直接变成 ß）。
+- **VS Code 会截胡，而且比想象中狠**。`Alt+1..9` 绑的是 `workbench.action.openEditorAtIndex1..9`，
+  **没有 `when` 限制**，串口面板聚焦时照样切走标签页 —— 既有的「发第 N 条预设」在扩展里
+  因此一直是废的。`Ctrl+1..9`（聚焦第 N 个编辑器组）同样没有 when。
+  挑组合前先在真实 VS Code 里按一遍，别照着「应该没人用」去猜。
+- **浏览器也保留了一批**：`Ctrl+L`/`K`/`E`/`N`/`T`/`W`，以及 `Alt+F`、`Alt+E` 的菜单。
+  页面 `preventDefault` 对它们无效。
 - **破坏性动作不给快捷键**。「清空」已经要按两下确认，配上快捷键只会把误触变便宜。
+- 快捷键写在控件的 `title` 里，**不写进 placeholder** —— 占位文本是给「这里填什么」用的。
 
-快捷键写在各控件的 `title` 里，**不写进 placeholder** —— 占位文本是给「这里填什么」用的，
-而「Alt+S 跳到这里」这种提示，看得到它时已经不需要它了。
+要让 VS Code 里的快捷键真正可用，唯一干净的办法是**由扩展在 package.json 里声明
+`keybindings`，`when` 用 `activeWebviewPanelId == serialTool.panel`**，再把命令经 RPC
+转发进 webview：扩展的绑定注册在默认绑定之后，同样匹配时后者出局。光在 webview 里
+监听 keydown 是拦不住的。
 
 ## 其他约定
 

@@ -41,24 +41,6 @@ export const RIGHT_PANE_MAX = 1200;
 /** 拖到最宽时也要给接收区留下的宽度。 */
 export const LEFT_PANE_MIN = 320;
 
-/**
- * 暂停刷新的状态。
- *
- * **来源必须区分开**：往上滚是「我要看看刚才那段」，滚回底部就该自己恢复；
- * 点按钮（或按 Alt+P）是「我要它停在这」，那就得一直停到再触发一次为止 ——
- * 滚回底部把它悄悄恢复了，正是用户按那个按钮想避免的事。
- *
- * `upTo` 是冻结那一刻最后一条日志的编号：暂停期间只渲染它及更早的条目，
- * 新数据照收照存，只是不往画面上刷。编号由调用方给（`latestEntryId()`），
- * 这一层因此不必反过来依赖 logStore。
- */
-export type PauseSource = 'manual' | 'scroll';
-
-export interface PausedState {
-  source: PauseSource;
-  upTo: number;
-}
-
 export function clampRightPaneWidth(value: number): number {
   return Math.min(RIGHT_PANE_MAX, Math.max(RIGHT_PANE_MIN, Math.round(value) || RIGHT_PANE_MIN));
 }
@@ -176,14 +158,6 @@ interface UiState {
   idleFrameMs: number;
   /** 用户拖出来的右栏宽度；null 表示没拖过，用样式表里的默认值。 */
   rightPaneWidth: number | null;
-  /**
-   * 暂停刷新；null 表示正常刷新。
-   *
-   * 有意**不持久化**：刷新页面后日志本身就是空的，恢复一个针对空日志的暂停
-   * 只会制造「怎么不动了」的困惑（与 filter 同理）。
-   */
-  paused: PausedState | null;
-
   toggleLanguage: () => void;
   toggleTheme: () => void;
   setView: (view: LogView) => void;
@@ -194,12 +168,6 @@ interface UiState {
   setOnlyMatch: (value: boolean) => void;
   setFilterKind: (kind: MatcherKind) => void;
   setFrameMode: (mode: FrameMode) => void;
-  /** 暂停。已经停着就保持原来那次 —— 滚动不该把手动按下的那次降级。 */
-  pause: (source: PauseSource, upTo: number) => void;
-  /** 恢复。传 'scroll' 表示「因为滚回了底部」，那只解除滚动引起的那一次。 */
-  resume: (only?: PauseSource) => void;
-  /** 按钮与快捷键共用：停着就恢复，没停就按手动停下。 */
-  togglePause: (upTo: number) => void;
   setIdleFrameMs: (value: number) => void;
   setRightPaneWidth: (value: number) => void;
 }
@@ -214,7 +182,6 @@ export const useUiStore = create<UiState>()((set) => ({
   theme: readStored('theme') === null ? systemTheme() : readStoredEnum('theme', THEMES, 'dark'),
   ...loadViewPrefs(),
   rightPaneWidth: loadRightPaneWidth(),
-  paused: null,
   // filter 有意不持久化：日志本身是内存态、刷新后为空，
   // 恢复一个针对空日志的过滤词只会制造「怎么什么都没有」的困惑
   filter: '',
@@ -242,13 +209,6 @@ export const useUiStore = create<UiState>()((set) => ({
   setFilterKind: (filterKind) => set({ filterKind }),
 
   setFrameMode: (frameMode) => set({ frameMode }),
-
-  pause: (source, upTo) => set((state) => (state.paused ? {} : { paused: { source, upTo } })),
-
-  resume: (only) => set((state) => (only && state.paused?.source !== only ? {} : { paused: null })),
-
-  togglePause: (upTo) =>
-    set((state) => (state.paused ? { paused: null } : { paused: { source: 'manual', upTo } })),
 
   setIdleFrameMs: (value) => {
     const idleFrameMs = isValidIdleFrameMs(value)
