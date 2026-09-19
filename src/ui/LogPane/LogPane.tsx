@@ -2,7 +2,14 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from
 import { resolveFraming, type FrameMode } from '@/core/framing/frameAssembler';
 import { logFileName, type TimestampMode } from '@/core/log/logLine';
 import { downloadText } from '@/lib/download';
-import { logText, LOG_CAPACITY_MIN, selectRows, useLogStore, type LogRow } from '@/store/logStore';
+import {
+  latestEntryId,
+  logText,
+  LOG_CAPACITY_MIN,
+  selectRows,
+  useLogStore,
+  type LogRow,
+} from '@/store/logStore';
 import { useConnectionStore } from '@/store/connectionStore';
 import { useRecordStore } from '@/store/recordStore';
 import { useUiStore } from '@/store/uiStore';
@@ -26,6 +33,21 @@ const RENDER_LIMIT = 1000;
 const BOTTOM_THRESHOLD = 24;
 
 const ARROWS: Record<LogRow['kind'], string> = { rx: '◀', tx: '▶', sys: '·' };
+
+/**
+ * 暂停刷新的状态。
+ *
+ * **来源必须区分开**：往上滚是「我要看看刚才那段」，滚回底部就该自己恢复；
+ * 点按钮是「我要它停在这」，那就得一直停到再点一次为止 —— 滚回底部把它悄悄恢复了，
+ * 正是用户按那个按钮想避免的事。
+ *
+ * `upTo` 是冻结那一刻最后一条日志的编号：暂停期间只渲染它及更早的条目，
+ * 新数据照收照存，只是不往画面上刷。
+ */
+interface Paused {
+  source: 'manual' | 'scroll';
+  upTo: number;
+}
 
 export function LogPane(): React.JSX.Element {
   const t = useMessages();
@@ -73,6 +95,8 @@ export function LogPane(): React.JSX.Element {
   const capacity = useLogStore((s) => s.capacity);
   const setCapacity = useLogStore((s) => s.setCapacity);
 
+  const [paused, setPaused] = useState<Paused | null>(null);
+
   // 缺陷 D7：记忆化的选择器，重渲染不重算；输入过滤词时也只算一次
   const { rows, hiddenEarlier } = selectRows({
     version,
@@ -82,34 +106,62 @@ export function LogPane(): React.JSX.Element {
     onlyMatch,
     showTx,
     timestampMode,
+    upTo: paused?.upTo ?? null,
     limit: RENDER_LIMIT,
   });
 
   /**
    * 缺陷 D15：原型在每次更新后无条件把滚动条拉到底，用户往上翻查历史时会被强行拽回。
-   * 这里跟踪用户是否还贴着底部，离开底部就暂停自动滚屏，并给一个回底按钮。
+   * 这里跟踪用户是否还贴着底部。
    */
   const [atBottom, setAtBottom] = useState(true);
+
+  /**
+   * 贴底状态变了，暂停跟着走。
+   *
+   * 内容变长本身**不会**触发 scroll 事件（scrollTop 没变），所以走到这里的都是
+   * 真正的滚动 —— 用户滚的，或者「回到底部」按钮滚的。自动滚屏把视口钉在底部时
+   * atBottom 一直是 true，不会误判成用户往上翻。
+   */
+  const updateAtBottom = useCallback((next: boolean) => {
+    setAtBottom(next);
+    setPaused((current) => {
+      // 回到底部：只解除滚动引起的那一次；手动按下的要一直停到再按一次
+      if (next) return current?.source === 'scroll' ? null : current;
+      return current ?? { source: 'scroll', upTo: latestEntryId() };
+    });
+  }, []);
 
   const handleScroll = useCallback(() => {
     const element = listRef.current;
     if (!element) return;
     const distance = element.scrollHeight - element.scrollTop - element.clientHeight;
-    setAtBottom(distance <= BOTTOM_THRESHOLD);
-  }, []);
+    updateAtBottom(distance <= BOTTOM_THRESHOLD);
+  }, [updateAtBottom]);
 
   const scrollToBottom = useCallback(() => {
     const element = listRef.current;
     if (!element) return;
     element.scrollTop = element.scrollHeight;
-    setAtBottom(true);
-  }, []);
+    updateAtBottom(true);
+  }, [updateAtBottom]);
+
+  /** 按钮：停在这儿 / 接着刷。恢复时顺带回到底部，否则画面还停在半空中。 */
+  const togglePause = useCallback(() => {
+    if (paused === null) {
+      setPaused({ source: 'manual', upTo: latestEntryId() });
+      return;
+    }
+    setPaused(null);
+    // 下一帧再滚：这一帧渲染的还是冻结的那批行，现在滚过去的是旧的底部
+    requestAnimationFrame(scrollToBottom);
+  }, [paused, scrollToBottom]);
 
   useLayoutEffect(() => {
-    if (!autoScroll || !atBottom) return;
+    if (!autoScroll || !atBottom || paused !== null) return;
     const element = listRef.current;
     if (element) element.scrollTop = element.scrollHeight;
-  }, [rows, autoScroll, atBottom]);
+  }, [rows, autoScroll, atBottom, paused]);
 
   // 重新勾选「自动滚屏」时立即回到底部，符合直觉
   useEffect(() => {
@@ -226,7 +278,22 @@ export function LogPane(): React.JSX.Element {
 
         <span className={styles.frameHint}>{t.framingHint[effectiveMode]}</span>
 
-        {autoScroll && !atBottom ? <span className="label">{t.scrollPaused}</span> : null}
+        <button
+          type="button"
+          className={`btn ${paused !== null ? 'btn--on' : ''}`}
+          aria-pressed={paused !== null}
+          title={t.pauseTip}
+          onClick={togglePause}
+        >
+          {paused !== null ? `▶ ${t.resume}` : `⏸ ${t.pause}`}
+        </button>
+
+        {/* 暂停期间必须说清「数据还在收」，否则和「设备不发了」看起来一模一样 */}
+        {paused !== null ? (
+          <span className={styles.pausedNote} role="status">
+            {t.pausedBacklog(Math.max(0, latestEntryId() - paused.upTo))}
+          </span>
+        ) : null}
 
         <div className={styles.toolbarRight}>
           <label className="visuallyHidden" htmlFor={filterId}>

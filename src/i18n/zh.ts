@@ -83,7 +83,12 @@ export const zh: Messages = {
   noData: '无数据',
   noDataHint: '点「选择端口」授权设备，再打开串口开始接收',
   jumpToBottom: '↓ 回到底部',
-  scrollPaused: '已暂停自动滚屏',
+  pause: '暂停',
+  resume: '继续',
+  pauseTip:
+    '定住画面看一眼，数据照收照存，只是不往上刷。往上滚也会自动暂停、滚回底部自动恢复；' +
+    '手动按下的这个要再按一次才恢复',
+  pausedBacklog: (count) => (count > 0 ? `已暂停 · 期间新到 ${count} 条` : '已暂停'),
   logCapacity: '缓冲',
   logCapacityUnit: '条',
   logCapacityHint: (min) =>

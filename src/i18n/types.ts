@@ -110,7 +110,11 @@ export interface Messages {
   readonly noData: string;
   readonly noDataHint: string;
   readonly jumpToBottom: string;
-  readonly scrollPaused: string;
+  /** 暂停刷新：手动按下的那个按钮，以及暂停期间的积压提示。 */
+  readonly pause: string;
+  readonly resume: string;
+  readonly pauseTip: string;
+  readonly pausedBacklog: (count: number) => string;
   readonly logCapacity: string;
   readonly logCapacityUnit: string;
   readonly logCapacityHint: (min: number) => string;

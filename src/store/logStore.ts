@@ -262,6 +262,16 @@ export function consumeThroughputWindow(): number {
   return bytes;
 }
 
+/**
+ * 到目前为止最后一条日志的编号（含攒批中那些）。
+ *
+ * 编号是全局自增的，不随环形缓冲淘汰而回退，所以两个读数相减就是这期间新增了多少条 ——
+ * 暂停期间界面用它告诉用户「数据还在收，只是没往上刷」。
+ */
+export function latestEntryId(): number {
+  return nextId - 1;
+}
+
 /** 导出用：按时间顺序取全部条目。调用前先 flushPendingEntries()。 */
 export function allEntries(): LogEntry[] {
   return ring.toArray();
@@ -312,6 +322,13 @@ export interface LogSelection {
 
 export interface RowQuery {
   version: number;
+  /**
+   * 只渲染 id 不大于这个数的条目；null 表示不设上界。
+   *
+   * 「暂停刷新」就靠它：光冻住 version 是不够的 —— 用户在暂停期间改一下过滤词，
+   * 缓存键跟着变，重扫一遍就把暂停之后到的行也带出来了，冻住的画面会突然往下跳。
+   */
+  upTo: number | null;
   language: Language;
   view: LogView;
   filter: string;
@@ -341,6 +358,7 @@ export function selectRows(query: RowQuery): LogSelection {
     query.onlyMatch ? 1 : 0,
     query.showTx ? 1 : 0,
     query.timestampMode,
+    query.upTo ?? -1,
     query.limit,
   ].join('|');
   if (key === cacheKey) return cacheSelection;
@@ -350,6 +368,9 @@ export function selectRows(query: RowQuery): LogSelection {
   const rows: LogRow[] = [];
 
   let scanned = ring.size - 1;
+  // 暂停期间先把上界之后的条目跳过去。它们仍在缓冲里，只是这一刻不该出现在画面上
+  while (scanned >= 0 && query.upTo !== null && ring.at(scanned)!.id > query.upTo) scanned -= 1;
+
   for (; scanned >= 0 && rows.length < query.limit; scanned -= 1) {
     const entry = ring.at(scanned)!;
     if (entry.kind === 'tx' && !query.showTx) continue;

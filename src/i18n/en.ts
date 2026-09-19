@@ -88,7 +88,13 @@ export const en: Messages = {
   noData: 'No data',
   noDataHint: 'Choose a port to grant access, then open it to start receiving',
   jumpToBottom: '↓ Back to bottom',
-  scrollPaused: 'Auto-scroll paused',
+  pause: 'Pause',
+  resume: 'Resume',
+  pauseTip:
+    'Freeze the view to read it. Data keeps arriving and is still buffered, it just stops ' +
+    'scrolling by. Scrolling up pauses automatically and scrolling back to the bottom resumes; ' +
+    'this button stays paused until you press it again',
+  pausedBacklog: (count) => (count > 0 ? `Paused · ${count} new since` : 'Paused'),
   logCapacity: 'Buffer',
   logCapacityUnit: 'entries',
   logCapacityHint: (min) =>

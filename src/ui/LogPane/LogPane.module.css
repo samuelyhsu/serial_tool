@@ -199,3 +199,11 @@
   color: var(--inv);
   filter: brightness(1.06);
 }
+
+/* 暂停期间的积压提示。琥珀色而不是红色：这是用户自己按下的状态，不是故障 */
+.pausedNote {
+  color: var(--amber);
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}

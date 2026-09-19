@@ -1,10 +1,11 @@
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   __resetLogStoreForTests,
   DEFAULT_LOG_CAPACITY,
   LOG_CAPACITY_MIN,
+  allEntries,
   flushPendingEntries,
   useLogStore,
 } from '@/store/logStore';
@@ -167,6 +168,110 @@ describe('LogPane', () => {
     await waitFor(() => {
       expect(currentRows()).toEqual([expect.stringContaining('Port closed')]);
     });
+  });
+});
+
+describe('暂停刷新', () => {
+  beforeEach(() => {
+    __resetLogStoreForTests();
+    setSelectorMessages(messagesFor('zh'));
+    useUiStore.setState({
+      language: 'zh',
+      view: 'text',
+      filter: '',
+      onlyMatch: false,
+      showTx: true,
+      timestampMode: 'none',
+      autoScroll: true,
+    });
+  });
+
+  afterEach(cleanup);
+
+  function pauseButton(): HTMLElement {
+    return screen.getByRole('button', { name: /暂停|继续/ });
+  }
+
+  /** 让列表看起来可滚，并把滚动位置摆到指定处。jsdom 不做布局，只能自己填。 */
+  function scrollTo(top: number): void {
+    const list = screen.getByRole('log');
+    Object.defineProperty(list, 'scrollHeight', { value: 1000, configurable: true });
+    Object.defineProperty(list, 'clientHeight', { value: 200, configurable: true });
+    list.scrollTop = top;
+    fireEvent.scroll(list);
+  }
+
+  it('按下之后新数据不再出现在画面上，但仍在缓冲里', async () => {
+    render(<LogPane />);
+    feed('first');
+    await rowTexts(1);
+
+    await userEvent.click(pauseButton());
+    feed('second');
+    flushPendingEntries();
+
+    await waitFor(() => expect(screen.getByText(/期间新到/)).toBeInTheDocument());
+    expect(currentRows().join()).not.toContain('second');
+    expect(allEntries()).toHaveLength(2);
+  });
+
+  it('再按一次就接着刷，积压的一起出来', async () => {
+    render(<LogPane />);
+    await userEvent.click(pauseButton());
+    feed('during');
+    flushPendingEntries();
+
+    await userEvent.click(pauseButton());
+    expect((await rowTexts()).join()).toContain('during');
+  });
+
+  it('往上滚会自动暂停', async () => {
+    render(<LogPane />);
+    feed('a');
+    await rowTexts(1);
+
+    act(() => scrollTo(0));
+    expect(pauseButton()).toHaveTextContent('继续');
+  });
+
+  it('滚回底部自动恢复', async () => {
+    render(<LogPane />);
+    feed('a');
+    await rowTexts(1);
+
+    act(() => scrollTo(0));
+    act(() => scrollTo(800));
+    expect(pauseButton()).toHaveTextContent('暂停');
+  });
+
+  /**
+   * 这一条是整件事的要害：手动按下的暂停是「我要它停在这」，
+   * 滚回底部把它悄悄恢复了，正是用户按那个按钮想避免的事。
+   */
+  it('手动按下的暂停，滚回底部也不会自己恢复', async () => {
+    render(<LogPane />);
+    feed('a');
+    await rowTexts(1);
+
+    await userEvent.click(pauseButton());
+    act(() => scrollTo(0));
+    act(() => scrollTo(800));
+
+    expect(pauseButton()).toHaveTextContent('继续');
+  });
+
+  it('滚动暂停期间再按一次按钮，就变成手动暂停，滚回底部也不恢复', async () => {
+    render(<LogPane />);
+    feed('a');
+    await rowTexts(1);
+
+    act(() => scrollTo(0));
+    // 此时已是滚动暂停，按一下是「恢复」；再按一下才是手动暂停
+    await userEvent.click(pauseButton());
+    await userEvent.click(pauseButton());
+    act(() => scrollTo(800));
+
+    expect(pauseButton()).toHaveTextContent('继续');
   });
 });
 

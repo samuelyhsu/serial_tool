@@ -10,6 +10,7 @@ import {
   DEFAULT_LOG_CAPACITY,
   entryBody,
   flushPendingEntries,
+  latestEntryId,
   LOG_CAPACITY_CEILING,
   LOG_CAPACITY_MIN,
   selectRows,
@@ -239,6 +240,7 @@ describe('selectRows 的 hiddenEarlier', () => {
     onlyMatch: false,
     showTx: true,
     timestampMode: 'none' as const,
+    upTo: null,
     limit: 10,
   };
 
@@ -293,6 +295,7 @@ describe('时间列', () => {
     filter: '',
     onlyMatch: false,
     showTx: true,
+    upTo: null,
     limit: 10,
   };
 
@@ -339,5 +342,76 @@ describe('时间列', () => {
 
     expect(selectRows({ ...base, timestampMode: 'delta' }).rows[1]?.timestamp).toBe('+50ms');
     expect(selectRows({ ...base, timestampMode: 'none' }).rows[1]?.timestamp).toBe('');
+  });
+});
+
+describe('渲染上界（暂停刷新靠它）', () => {
+  beforeEach(() => {
+    __resetLogStoreForTests();
+    setSelectorMessages(zh);
+  });
+
+  const base = {
+    version: 0,
+    language: 'zh' as const,
+    view: 'text' as const,
+    filter: '',
+    onlyMatch: false,
+    showTx: true,
+    timestampMode: 'none' as const,
+    limit: 100,
+  };
+
+  function feed(count: number, prefix = 'f'): void {
+    const { appendFrame } = useLogStore.getState();
+    for (let i = 0; i < count; i += 1) appendFrame('rx', encodeUtf8(`${prefix}${i}`));
+    flushPendingEntries();
+  }
+
+  it('上界之后的条目不渲染，但仍在缓冲里', () => {
+    feed(3);
+    const upTo = latestEntryId();
+    feed(2, 'later');
+
+    const { rows } = selectRows({ ...base, upTo });
+    expect(rows).toHaveLength(3);
+    expect(allEntries()).toHaveLength(5);
+  });
+
+  /**
+   * 光冻住 version 是不够的：暂停期间改一下过滤词，缓存键跟着变、重扫一遍，
+   * 暂停之后到的行就冒出来了 —— 冻住的画面会突然往下跳。
+   */
+  it('暂停期间改过滤词，也只在冻结的那一段里找', () => {
+    feed(2, 'old');
+    const upTo = latestEntryId();
+    feed(2, 'new');
+
+    const { rows } = selectRows({ ...base, upTo, filter: 'new', onlyMatch: true });
+    expect(rows).toHaveLength(0);
+  });
+
+  it('不设上界时一切照旧', () => {
+    feed(3);
+    expect(selectRows({ ...base, upTo: null }).rows).toHaveLength(3);
+  });
+
+  it('上界是缓存键的一部分，恢复刷新后立刻看到新数据', () => {
+    feed(1);
+    const upTo = latestEntryId();
+    expect(selectRows({ ...base, upTo }).rows).toHaveLength(1);
+
+    feed(1);
+    expect(selectRows({ ...base, upTo }).rows).toHaveLength(1);
+    expect(selectRows({ ...base, upTo: null }).rows).toHaveLength(2);
+  });
+
+  it('编号不随缓冲淘汰回退，两个读数相减就是新增条数', () => {
+    feed(2);
+    const before = latestEntryId();
+    useLogStore.getState().setCapacity(1000);
+    feed(5);
+
+    expect(latestEntryId() - before).toBe(5);
   });
 });
