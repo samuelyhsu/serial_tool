@@ -45,15 +45,24 @@
   border-color: var(--red);
 }
 
+/*
+ * 发送 · 历史 · 周期循环排成一行。
+ *
+ * 曾经是两列的 grid，于是周期那一组被挤到了第二行 —— 它和「发送」是同一类动作
+ * （把这段报文送出去，一次还是每隔 N 毫秒一次），隔一行反而像两件事。
+ * 放不下时才换行：右栏可以被拖到 380px，那个宽度下三组确实挤不开。
+ */
 .side {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   align-items: center;
 }
 
 .sendBtn {
-  padding: 7px 0;
+  /* 吃掉这一行的富余：它是主操作，宽一点才好点。96px 是「发送 / Send」摆得开的下限 */
+  flex: 1 1 96px;
+  padding: 7px 14px;
   border: none;
   border-radius: var(--radius-md);
   background: var(--blue);
@@ -68,8 +77,10 @@
   cursor: not-allowed;
 }
 
+/* 按内容定宽，富余留给发送按钮；换行时才会独占一行 */
 .loopBox {
   display: flex;
+  flex: 0 1 auto;
   align-items: center;
   gap: 6px;
   padding: 4px 7px;
@@ -83,7 +94,6 @@
 }
 
 .loopBtn {
-  margin-left: auto;
   padding: 3px 12px;
 }
 
