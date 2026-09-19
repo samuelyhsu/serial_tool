@@ -68,6 +68,7 @@ export function LogPane(): React.JSX.Element {
   const showTx = useUiStore((s) => s.showTx);
   const filter = useUiStore((s) => s.filter);
   const onlyMatch = useUiStore((s) => s.onlyMatch);
+  const filterKind = useUiStore((s) => s.filterKind);
   const idleFrameMs = useUiStore((s) => s.idleFrameMs);
   const frameMode = useUiStore((s) => s.frameMode);
   // 逐个订阅 action：selector 返回新对象会让 zustand 每次快照都不相等，触发无谓重渲染
@@ -77,6 +78,7 @@ export function LogPane(): React.JSX.Element {
   const setShowTx = useUiStore((s) => s.setShowTx);
   const setFilter = useUiStore((s) => s.setFilter);
   const setOnlyMatch = useUiStore((s) => s.setOnlyMatch);
+  const setFilterKind = useUiStore((s) => s.setFilterKind);
   const setIdleFrameMs = useUiStore((s) => s.setIdleFrameMs);
   const setFrameMode = useUiStore((s) => s.setFrameMode);
 
@@ -98,11 +100,12 @@ export function LogPane(): React.JSX.Element {
   const [paused, setPaused] = useState<Paused | null>(null);
 
   // 缺陷 D7：记忆化的选择器，重渲染不重算；输入过滤词时也只算一次
-  const { rows, hiddenEarlier } = selectRows({
+  const { rows, hiddenEarlier, filterError } = selectRows({
     version,
     language,
     view,
     filter,
+    filterKind,
     onlyMatch,
     showTx,
     timestampMode,
@@ -303,9 +306,22 @@ export function LogPane(): React.JSX.Element {
             id={filterId}
             className={`field ${styles.filterInput}`}
             value={filter}
-            placeholder={t.filterPlaceholder}
+            placeholder={filterKind === 'regex' ? t.filterRegexPlaceholder : t.filterPlaceholder}
+            aria-invalid={filterError !== null}
+            // 正则写错时把那句话原样挂在框上：说「无效正则」等于什么都没说
+            title={filterError !== null ? t.filterRegexError(filterError) : undefined}
             onChange={(event) => setFilter(event.target.value)}
           />
+          <button
+            type="button"
+            className={`btn ${styles.regexToggle} ${filterKind === 'regex' ? 'btn--on' : ''}`}
+            aria-pressed={filterKind === 'regex'}
+            aria-label={t.filterRegex}
+            title={t.filterRegexTip}
+            onClick={() => setFilterKind(filterKind === 'regex' ? 'text' : 'regex')}
+          >
+            .*
+          </button>
           <label className="check check--amber">
             <input
               type="checkbox"

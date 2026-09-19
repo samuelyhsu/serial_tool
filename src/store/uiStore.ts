@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { DEFAULT_IDLE_FRAME_MS, type FrameMode } from '@/core/framing/frameAssembler';
 import { TIMESTAMP_MODES, type TimestampMode } from '@/core/log/logLine';
+import type { MatcherKind } from '@/core/log/matcher';
 import { detectLanguage, LANGUAGES, type Language } from '@/i18n';
 import { isRecord, pickBoolean, pickEnum, pickInt, saveSoon } from '@/lib/persist';
 import { readLayeredJson, readStored, readStoredEnum, writeStored } from '@/lib/storage';
@@ -9,6 +10,7 @@ import type { LogView } from './logStore';
 export type Theme = 'dark' | 'light';
 const THEMES: readonly Theme[] = ['dark', 'light'];
 const VIEWS: readonly LogView[] = ['text', 'hex'];
+const FILTER_KINDS: readonly MatcherKind[] = ['text', 'regex'];
 /** 下拉框里的顺序：从「完全不处理」到「处理得最多」。 */
 export const FRAME_MODES: readonly FrameMode[] = ['raw', 'idle', 'line'];
 
@@ -70,6 +72,13 @@ interface ViewPrefs {
   autoScroll: boolean;
   showTx: boolean;
   onlyMatch: boolean;
+  /**
+   * 过滤词按子串还是正则解释。
+   *
+   * 过滤词本身有意不持久化（日志刷新后就是空的），但「用哪种方式匹配」是一项偏好，
+   * 跟着其他显示设置一起存。
+   */
+  filterKind: MatcherKind;
   /** 当前分帧方式。三者互斥，用一个枚举表达，界面上就只有一个控件在管它。 */
   frameMode: FrameMode;
   /** 空闲分帧的静默时长，仅 frameMode 为 idle 时有意义。 */
@@ -82,6 +91,7 @@ const DEFAULT_VIEW_PREFS: ViewPrefs = {
   autoScroll: true,
   showTx: true,
   onlyMatch: false,
+  filterKind: 'text',
   frameMode: 'idle',
   idleFrameMs: DEFAULT_IDLE_FRAME_MS,
 };
@@ -100,6 +110,7 @@ function loadViewPrefs(): ViewPrefs {
     autoScroll: pickBoolean(raw, 'autoScroll', DEFAULT_VIEW_PREFS.autoScroll),
     showTx: pickBoolean(raw, 'showTx', DEFAULT_VIEW_PREFS.showTx),
     onlyMatch: pickBoolean(raw, 'onlyMatch', DEFAULT_VIEW_PREFS.onlyMatch),
+    filterKind: pickEnum(raw, 'filterKind', FILTER_KINDS, DEFAULT_VIEW_PREFS.filterKind),
     frameMode: loadFrameMode(raw, idleFrameMs),
     idleFrameMs,
   };
@@ -142,6 +153,7 @@ interface UiState {
   showTx: boolean;
   filter: string;
   onlyMatch: boolean;
+  filterKind: MatcherKind;
   frameMode: FrameMode;
   idleFrameMs: number;
   /** 用户拖出来的右栏宽度；null 表示没拖过，用样式表里的默认值。 */
@@ -155,6 +167,7 @@ interface UiState {
   setShowTx: (value: boolean) => void;
   setFilter: (value: string) => void;
   setOnlyMatch: (value: boolean) => void;
+  setFilterKind: (kind: MatcherKind) => void;
   setFrameMode: (mode: FrameMode) => void;
   setIdleFrameMs: (value: number) => void;
   setRightPaneWidth: (value: number) => void;
@@ -194,6 +207,7 @@ export const useUiStore = create<UiState>()((set) => ({
   setShowTx: (showTx) => set({ showTx }),
   setFilter: (filter) => set({ filter }),
   setOnlyMatch: (onlyMatch) => set({ onlyMatch }),
+  setFilterKind: (filterKind) => set({ filterKind }),
 
   setFrameMode: (frameMode) => set({ frameMode }),
 
@@ -215,7 +229,7 @@ useUiStore.subscribe(({ rightPaneWidth }) => {
 });
 
 useUiStore.subscribe(
-  ({ view, timestampMode, autoScroll, showTx, onlyMatch, frameMode, idleFrameMs }) => {
+  ({ view, timestampMode, autoScroll, showTx, onlyMatch, filterKind, frameMode, idleFrameMs }) => {
     saveSoon(
       VIEW_PREFS_KEY,
       {
@@ -224,6 +238,7 @@ useUiStore.subscribe(
         autoScroll,
         showTx,
         onlyMatch,
+        filterKind,
         frameMode,
         idleFrameMs,
       },

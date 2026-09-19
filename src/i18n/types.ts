@@ -87,6 +87,11 @@ export interface Messages {
   readonly autoScroll: string;
   readonly showTx: string;
   readonly filterPlaceholder: string;
+  /** 过滤框旁的 `.*` 开关：把过滤词当正则解释。 */
+  readonly filterRegex: string;
+  readonly filterRegexTip: string;
+  readonly filterRegexPlaceholder: string;
+  readonly filterRegexError: (detail: string) => string;
   readonly onlyMatch: string;
 
   // 分帧

@@ -237,6 +237,7 @@ describe('selectRows 的 hiddenEarlier', () => {
     language: 'zh' as const,
     view: 'text' as const,
     filter: '',
+    filterKind: 'text' as const,
     onlyMatch: false,
     showTx: true,
     timestampMode: 'none' as const,
@@ -293,6 +294,7 @@ describe('时间列', () => {
     language: 'zh' as const,
     view: 'text' as const,
     filter: '',
+    filterKind: 'text' as const,
     onlyMatch: false,
     showTx: true,
     upTo: null,
@@ -356,6 +358,7 @@ describe('渲染上界（暂停刷新靠它）', () => {
     language: 'zh' as const,
     view: 'text' as const,
     filter: '',
+    filterKind: 'text' as const,
     onlyMatch: false,
     showTx: true,
     timestampMode: 'none' as const,
@@ -413,5 +416,98 @@ describe('渲染上界（暂停刷新靠它）', () => {
     feed(5);
 
     expect(latestEntryId() - before).toBe(5);
+  });
+});
+
+describe('正则过滤', () => {
+  beforeEach(() => {
+    __resetLogStoreForTests();
+    setSelectorMessages(zh);
+  });
+
+  const base = {
+    version: 0,
+    language: 'zh' as const,
+    view: 'text' as const,
+    filter: '',
+    filterKind: 'text' as const,
+    onlyMatch: true,
+    showTx: true,
+    timestampMode: 'none' as const,
+    upTo: null,
+    limit: 100,
+  };
+
+  function feed(texts: string[]): void {
+    const { appendFrame } = useLogStore.getState();
+    for (const text of texts) appendFrame('rx', encodeUtf8(text));
+    flushPendingEntries();
+  }
+
+  function bodies(selection: ReturnType<typeof selectRows>): string[] {
+    return selection.rows.map((row) => row.segments.map((segment) => segment.text).join(''));
+  }
+
+  it('按正则只留下命中的行', () => {
+    feed(['AT+VER', 'OK', 'ERROR 3']);
+    const selection = selectRows({ ...base, filterKind: 'regex', filter: '^(AT|ERROR)' });
+
+    expect(bodies(selection)).toEqual(['AT+VER', 'ERROR 3']);
+    expect(selection.filterError).toBeNull();
+  });
+
+  it('命中的那一段被标成高亮', () => {
+    feed(['temp=25C']);
+    const { rows } = selectRows({ ...base, filterKind: 'regex', filter: '\\d+' });
+
+    expect(rows[0]?.segments).toEqual([
+      { text: 'temp=', hit: false },
+      { text: '25', hit: true },
+      { text: 'C', hit: false },
+    ]);
+  });
+
+  /**
+   * 正则写到一半几乎必然是非法的（敲下 `[` 那一刻就是）。此时把日志清空的话，
+   * 用户看到的是行数忽然归零 —— 与「数据没了」无法区分。
+   */
+  it('正则非法时交回错误，但不过滤也不高亮', () => {
+    feed(['AT+VER', 'OK']);
+    const selection = selectRows({ ...base, filterKind: 'regex', filter: '[' });
+
+    expect(bodies(selection)).toEqual(['AT+VER', 'OK']);
+    expect(selection.filterError).not.toBeNull();
+  });
+
+  it('切回子串模式后元字符就是普通字符', () => {
+    feed(['a.b', 'axb']);
+
+    expect(bodies(selectRows({ ...base, filterKind: 'text', filter: 'a.b' }))).toEqual(['a.b']);
+    expect(bodies(selectRows({ ...base, filterKind: 'regex', filter: 'a.b' }))).toEqual([
+      'a.b',
+      'axb',
+    ]);
+  });
+
+  it('模式是缓存键的一部分，换一种立刻重算', () => {
+    feed(['a.b', 'axb']);
+    const first = selectRows({ ...base, filterKind: 'text', filter: 'a.b' });
+    const second = selectRows({ ...base, filterKind: 'regex', filter: 'a.b' });
+
+    expect(first.rows).toHaveLength(1);
+    expect(second.rows).toHaveLength(2);
+  });
+
+  it('不勾「仅匹配」时只高亮不过滤', () => {
+    feed(['AT+VER', 'OK']);
+    const selection = selectRows({
+      ...base,
+      onlyMatch: false,
+      filterKind: 'regex',
+      filter: '^AT',
+    });
+
+    expect(bodies(selection)).toEqual(['AT+VER', 'OK']);
+    expect(selection.rows[0]?.segments.some((segment) => segment.hit)).toBe(true);
   });
 });

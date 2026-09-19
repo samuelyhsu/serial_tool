@@ -57,6 +57,12 @@ export const zh: Messages = {
   autoScroll: '自动滚屏',
   showTx: '显示发送',
   filterPlaceholder: '过滤 / 高亮关键字…',
+  filterRegex: '正则匹配',
+  filterRegexTip:
+    '把过滤词当正则表达式（不区分大小写）。写到一半时几乎必然是非法的，' +
+    '那一刻不过滤也不高亮，而不是把日志清空',
+  filterRegexPlaceholder: '正则，如 ^AT\\+|ERROR',
+  filterRegexError: (detail) => `正则写错了：${detail}`,
   onlyMatch: '仅匹配',
 
   framing: '分帧',

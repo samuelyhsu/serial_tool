@@ -61,6 +61,13 @@ export const en: Messages = {
   autoScroll: 'Auto-scroll',
   showTx: 'Show TX',
   filterPlaceholder: 'Filter / highlight…',
+  filterRegex: 'Regular expression',
+  filterRegexTip:
+    'Treat the filter as a regular expression (case-insensitive). A half-typed pattern is ' +
+    'almost always invalid; while it is, nothing is filtered or highlighted rather than ' +
+    'the log going blank',
+  filterRegexPlaceholder: 'Regex, e.g. ^AT\\+|ERROR',
+  filterRegexError: (detail) => `Invalid regular expression: ${detail}`,
   onlyMatch: 'Matches only',
 
   framing: 'Framing',

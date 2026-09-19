@@ -207,3 +207,9 @@
   font-weight: 600;
   white-space: nowrap;
 }
+
+/* 过滤框旁的正则开关。`.*` 是行业记号，按等宽排，宽度不随状态变 */
+.regexToggle {
+  padding: 5px 8px;
+  font-family: var(--font-mono);
+}

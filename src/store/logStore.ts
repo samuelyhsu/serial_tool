@@ -11,6 +11,7 @@ import { RingBuffer } from '@/core/buffer/ringBuffer';
 import { formatHex } from '@/core/codec/hex';
 import { directionTag, formatDateTime, formatStamp, FrameFormatter } from '@/core/log/logLine';
 import type { LogKind, LogView, TimestampMode } from '@/core/log/logLine';
+import { createMatcher, type MatcherKind, type Span } from '@/core/log/matcher';
 import type { SessionNotice } from '@/core/session/notices';
 import type { Direction } from '@/core/session/serialSession';
 import type { Language, Messages } from '@/i18n';
@@ -311,6 +312,8 @@ export interface LogRow {
 
 export interface LogSelection {
   rows: LogRow[];
+  /** 正则写错了的话是那句错误，界面据此把输入框标红。子串模式恒为 null。 */
+  filterError: string | null;
   /**
    * 因为 limit 而没扫到的、更早的条目数。
    *
@@ -332,6 +335,8 @@ export interface RowQuery {
   language: Language;
   view: LogView;
   filter: string;
+  /** 过滤词按子串还是按正则解释。 */
+  filterKind: MatcherKind;
   onlyMatch: boolean;
   showTx: boolean;
   timestampMode: TimestampMode;
@@ -339,7 +344,7 @@ export interface RowQuery {
 }
 
 let cacheKey = '';
-let cacheSelection: LogSelection = { rows: [], hiddenEarlier: 0 };
+let cacheSelection: LogSelection = { rows: [], hiddenEarlier: 0, filterError: null };
 
 /**
  * 计算要渲染的行 —— 缺陷 D7 的核心修复。
@@ -355,6 +360,7 @@ export function selectRows(query: RowQuery): LogSelection {
     query.language,
     query.view,
     query.filter,
+    query.filterKind,
     query.onlyMatch ? 1 : 0,
     query.showTx ? 1 : 0,
     query.timestampMode,
@@ -364,7 +370,10 @@ export function selectRows(query: RowQuery): LogSelection {
   if (key === cacheKey) return cacheSelection;
 
   const messages = messagesRef;
-  const needle = query.filter.trim().toLowerCase();
+  const compiled = createMatcher(query.filter, query.filterKind);
+  // 正则写到一半几乎必然是非法的（`[` 敲下去那一刻就是）。此时不过滤也不高亮，
+  // 而不是把日志清空 —— 一边打字一边看着行数忽然归零只会让人以为数据没了
+  const matcher = compiled.ok ? compiled.matcher : null;
   const rows: LogRow[] = [];
 
   let scanned = ring.size - 1;
@@ -376,7 +385,8 @@ export function selectRows(query: RowQuery): LogSelection {
     if (entry.kind === 'tx' && !query.showTx) continue;
 
     const body = entryBody(entry, query.view, messages);
-    if (needle && query.onlyMatch && !body.toLowerCase().includes(needle)) continue;
+    const spans = matcher?.find(body) ?? [];
+    if (matcher && query.onlyMatch && spans.length === 0) continue;
 
     rows.push({
       id: entry.id,
@@ -384,14 +394,18 @@ export function selectRows(query: RowQuery): LogSelection {
       // 间隔要的是**缓冲里**的前一条，不是过滤后的前一条：隐藏 TX 行
       // 不该让剩下两条之间的间隔凭空变大
       timestamp: formatStamp(query.timestampMode, entry.time, ring.at(scanned - 1)?.time ?? null),
-      segments: highlight(body, needle, query.filter.trim().length),
+      segments: highlight(body, spans),
     });
   }
 
   rows.reverse();
   // 循环因 limit 提前停下时 scanned 还指着未检查的那条，剩下的都比已渲染的更早。
   // 它们仍在缓冲里、导出时拿得到，只是没渲染。
-  const selection: LogSelection = { rows, hiddenEarlier: Math.max(0, scanned + 1) };
+  const selection: LogSelection = {
+    rows,
+    hiddenEarlier: Math.max(0, scanned + 1),
+    filterError: compiled.ok ? null : compiled.error,
+  };
   cacheKey = key;
   cacheSelection = selection;
   return selection;
@@ -406,22 +420,19 @@ export function setSelectorMessages(messages: Messages): void {
   messagesRef = messages;
 }
 
-function highlight(body: string, needle: string, needleLength: number): RowSegment[] {
-  if (!needle || needleLength === 0) return [{ text: body, hit: false }];
+/** 按匹配区间把一行切成若干段。原型只高亮第一处，这里把所有匹配都标出来。 */
+function highlight(body: string, spans: readonly Span[]): RowSegment[] {
+  if (spans.length === 0) return [{ text: body, hit: false }];
 
   const segments: RowSegment[] = [];
-  const haystack = body.toLowerCase();
   let cursor = 0;
-  // 原型只高亮第一处匹配，这里把所有匹配都标出来
-  for (;;) {
-    const index = haystack.indexOf(needle, cursor);
-    if (index === -1) break;
-    if (index > cursor) segments.push({ text: body.slice(cursor, index), hit: false });
-    segments.push({ text: body.slice(index, index + needleLength), hit: true });
-    cursor = index + needleLength;
+  for (const span of spans) {
+    if (span.start > cursor) segments.push({ text: body.slice(cursor, span.start), hit: false });
+    segments.push({ text: body.slice(span.start, span.end), hit: true });
+    cursor = span.end;
   }
   if (cursor < body.length) segments.push({ text: body.slice(cursor), hit: false });
-  return segments.length > 0 ? segments : [{ text: body, hit: false }];
+  return segments;
 }
 
 /** 仅供测试：重置模块级状态。 */
@@ -435,7 +446,7 @@ export function __resetLogStoreForTests(): void {
   nextId = 1;
   throughputWindow = 0;
   cacheKey = '';
-  cacheSelection = { rows: [], hiddenEarlier: 0 };
+  cacheSelection = { rows: [], hiddenEarlier: 0, filterError: null };
   textFormatter.reset();
   ring.resize(DEFAULT_LOG_CAPACITY);
   useLogStore.setState({

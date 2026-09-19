@@ -171,6 +171,76 @@ describe('LogPane', () => {
   });
 });
 
+describe('正则过滤', () => {
+  beforeEach(() => {
+    __resetLogStoreForTests();
+    setSelectorMessages(messagesFor('zh'));
+    useUiStore.setState({
+      language: 'zh',
+      view: 'text',
+      filter: '',
+      filterKind: 'text',
+      onlyMatch: true,
+      showTx: true,
+      timestampMode: 'none',
+      autoScroll: true,
+    });
+  });
+
+  afterEach(cleanup);
+
+  function regexToggle(): HTMLElement {
+    return screen.getByRole('button', { name: '正则匹配' });
+  }
+
+  it('默认是子串模式，开关没按下', () => {
+    render(<LogPane />);
+    expect(regexToggle()).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('打开之后过滤词按正则解释', async () => {
+    render(<LogPane />);
+    feed('AT+VER');
+    feed('OK');
+    await rowTexts(2);
+
+    await userEvent.click(regexToggle());
+    await userEvent.type(screen.getByRole('textbox', { name: /过滤/ }), '^AT');
+
+    expect((await rowTexts(1)).join()).toContain('AT+VER');
+  });
+
+  // 一边打字一边看着行数忽然归零，只会让人以为数据没了
+  it('正则写到一半时不过滤，并把那句错误挂在框上', async () => {
+    render(<LogPane />);
+    feed('AT+VER');
+    feed('OK');
+    await rowTexts(2);
+
+    await userEvent.click(regexToggle());
+    const input = screen.getByRole('textbox', { name: /过滤/ });
+    // user-event 会把 `[` 当成按键描述符，这里要的就是这个字面字符
+    fireEvent.change(input, { target: { value: '[' } });
+
+    await waitFor(() => expect(input).toHaveAttribute('aria-invalid', 'true'));
+    expect(await rowTexts(2)).toHaveLength(2);
+    expect(input.getAttribute('title')).toMatch(/正则写错了/);
+  });
+
+  it('关掉之后元字符又变回普通字符', async () => {
+    render(<LogPane />);
+    feed('a.b');
+    feed('axb');
+    await rowTexts(2);
+
+    await userEvent.type(screen.getByRole('textbox', { name: /过滤/ }), 'a.b');
+    expect((await rowTexts(1)).join()).toContain('a.b');
+
+    await userEvent.click(regexToggle());
+    expect(await rowTexts(2)).toHaveLength(2);
+  });
+});
+
 describe('暂停刷新', () => {
   beforeEach(() => {
     __resetLogStoreForTests();
