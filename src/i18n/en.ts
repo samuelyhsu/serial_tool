@@ -124,6 +124,10 @@ export const en: Messages = {
   copyPayload: 'Copy',
   copyPayloadTip:
     'Copy what will actually be sent: TXT as normalized escapes, HEX including the checksum',
+  sendHistory: 'History',
+  sendHistoryTip:
+    'Payloads you have sent, newest first. Ctrl+Up / Ctrl+Down in the editor walks it too',
+  clearSendHistory: 'Clear history',
   copied: 'Payload copied to clipboard',
   copyFailed: 'Copy failed: clipboard unavailable',
 

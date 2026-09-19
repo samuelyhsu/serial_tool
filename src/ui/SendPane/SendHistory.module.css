@@ -1,0 +1,74 @@
+.wrap {
+  position: relative;
+  flex: none;
+}
+
+.toggle {
+  padding: 4px 9px;
+}
+
+/*
+ * 往上弹而不是往下：这个按钮在发送区的底部一行，往下弹会被面板边缘裁掉。
+ * 右对齐到按钮本身。
+ */
+.menu {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  right: 0;
+  z-index: 20;
+  min-width: 220px;
+  max-width: 340px;
+  max-height: 260px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 3px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: 0 6px 18px oklch(0 0 0 / 0.25);
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  padding: 5px 8px;
+  text-align: left;
+  font-size: 11.5px;
+}
+
+.item:hover,
+.item:focus-visible {
+  background: var(--hover);
+}
+
+/* 同一串字符在 TXT / HEX 下是完全不同的字节，标记不能省 */
+.badge {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--faint);
+}
+
+.text {
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.clear {
+  margin-top: 3px;
+  border-top: 1px solid var(--line2);
+  border-radius: 0;
+  color: var(--faint);
+  justify-content: center;
+}

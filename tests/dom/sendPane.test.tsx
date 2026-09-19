@@ -6,6 +6,84 @@ import { useSendStore } from '@/store/sendStore';
 import { useUiStore } from '@/store/uiStore';
 import { SendPane } from '@/ui/SendPane/SendPane';
 
+describe('发送历史', () => {
+  beforeEach(() => {
+    __resetLogStoreForTests();
+    useUiStore.setState({ language: 'zh' });
+    useSendStore.setState({
+      payload: 'draft',
+      mode: 'text',
+      checksum: 'none',
+      intervalMs: 1000,
+      parseError: null,
+      modeIssue: null,
+      history: [
+        { payload: 'AT+VER?', mode: 'text' },
+        { payload: 'AA BB', mode: 'hex' },
+      ],
+      historyCursor: -1,
+      historyDraft: null,
+    });
+  });
+
+  afterEach(cleanup);
+
+  it('历史为空时按钮是禁用的', () => {
+    useSendStore.setState({ history: [] });
+    render(<SendPane />);
+    expect(screen.getByRole('button', { name: '历史' })).toBeDisabled();
+  });
+
+  it('点开列出发过的，带上 TXT / HEX 标记', async () => {
+    render(<SendPane />);
+    await userEvent.click(screen.getByRole('button', { name: '历史' }));
+
+    const items = screen.getAllByRole('menuitem');
+    expect(items[0]).toHaveTextContent('TXT');
+    expect(items[0]).toHaveTextContent('AT+VER?');
+    expect(items[1]).toHaveTextContent('HEX');
+  });
+
+  it('点一条就填回输入框，模式跟着切', async () => {
+    render(<SendPane />);
+    await userEvent.click(screen.getByRole('button', { name: '历史' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: /AA BB/ }));
+
+    expect(useSendStore.getState().payload).toBe('AA BB');
+    expect(useSendStore.getState().mode).toBe('hex');
+  });
+
+  it('清空之后按钮回到禁用', async () => {
+    render(<SendPane />);
+    await userEvent.click(screen.getByRole('button', { name: '历史' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: '清空历史' }));
+
+    expect(screen.getByRole('button', { name: '历史' })).toBeDisabled();
+  });
+
+  /** 这是个多行输入框，光秃秃的上下键得留给光标。 */
+  it('输入框里 Ctrl+↑ / Ctrl+↓ 翻历史', async () => {
+    render(<SendPane />);
+    const editor = screen.getByRole('textbox', { name: '发送内容' });
+    editor.focus();
+
+    await userEvent.keyboard('{Control>}{ArrowUp}{/Control}');
+    expect(useSendStore.getState().payload).toBe('AT+VER?');
+
+    await userEvent.keyboard('{Control>}{ArrowDown}{/Control}');
+    expect(useSendStore.getState().payload).toBe('draft');
+  });
+
+  it('不按 Ctrl 的方向键不动历史', async () => {
+    render(<SendPane />);
+    const editor = screen.getByRole('textbox', { name: '发送内容' });
+    editor.focus();
+
+    await userEvent.keyboard('{ArrowUp}');
+    expect(useSendStore.getState().payload).toBe('draft');
+  });
+});
+
 describe('SendPane', () => {
   beforeEach(() => {
     __resetLogStoreForTests();

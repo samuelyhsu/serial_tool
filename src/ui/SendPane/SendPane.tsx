@@ -9,6 +9,7 @@ import { useSendStore } from '@/store/sendStore';
 import { isTaskRunning, SINGLE_TASK, useTasksStore } from '@/store/tasksStore';
 import { payloadErrorText } from '../dataFormat';
 import { FormatToggle } from '../FormatToggle';
+import { SendHistory } from './SendHistory';
 import { useMessages } from '../useMessages';
 import styles from './SendPane.module.css';
 
@@ -31,6 +32,7 @@ export function SendPane(): React.JSX.Element {
   const setIntervalMs = useSendStore((s) => s.setIntervalMs);
   const sendOnce = useSendStore((s) => s.sendOnce);
   const toggleLoop = useSendStore((s) => s.toggleLoop);
+  const recallHistory = useSendStore((s) => s.recallHistory);
 
   const running = useTasksStore((s) => s.running);
   const looping = isTaskRunning(running, SINGLE_TASK);
@@ -141,6 +143,16 @@ export function SendPane(): React.JSX.Element {
             if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
               event.preventDefault();
               void sendOnce();
+              return;
+            }
+            // 翻历史用 Ctrl/Cmd+方向键，而不是光秃秃的方向键：这是个多行输入框，
+            // 上下键得留给光标。Alt 也不行 —— 多条发送那边用它调顺序了
+            if (
+              (event.ctrlKey || event.metaKey) &&
+              (event.key === 'ArrowUp' || event.key === 'ArrowDown')
+            ) {
+              event.preventDefault();
+              recallHistory(event.key === 'ArrowUp' ? 1 : -1);
             }
           }}
         />
@@ -154,6 +166,8 @@ export function SendPane(): React.JSX.Element {
           >
             {t.send}
           </button>
+
+          <SendHistory />
 
           <div className={styles.loopBox}>
             <label className="label" htmlFor={intervalId}>

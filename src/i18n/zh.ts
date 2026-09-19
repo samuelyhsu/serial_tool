@@ -115,6 +115,9 @@ export const zh: Messages = {
   byteCountTip: '真正写到串口上的字节数：转义已解析、校验和已计入',
   copyPayload: '复制',
   copyPayloadTip: '复制最终会发出去的报文：TXT 写成规范化的转义，HEX 含校验和',
+  sendHistory: '历史',
+  sendHistoryTip: '发过的报文，最近的在前。在输入框里按 Ctrl+↑ / Ctrl+↓ 也能翻',
+  clearSendHistory: '清空历史',
   copied: '报文已复制到剪贴板',
   copyFailed: '复制失败：剪贴板不可用',
 

@@ -140,6 +140,10 @@ export interface Messages {
   readonly byteCountTip: string;
   readonly copyPayload: string;
   readonly copyPayloadTip: string;
+  /** 发送历史：底部那个下拉，以及它的清空项。 */
+  readonly sendHistory: string;
+  readonly sendHistoryTip: string;
+  readonly clearSendHistory: string;
   readonly copied: string;
   readonly copyFailed: string;
 
