@@ -53,11 +53,12 @@ src/core/     纯 TypeScript：不 import React / zustand / ui / store，不碰 
   scheduler/    周期任务调度、断线重连退避
   session/      把上面几层编排成一次串口会话
   buffer/       日志环形缓冲
+  log/          日志行的文本形态（时间戳 / 方向标记 / 帧格式化）、过滤匹配器、录制器
   prefs/        偏好键名前缀（webview 与扩展宿主共认同一个键名）
 src/store/    Zustand 状态层，订阅 core 的事件回调
-src/ui/       React 组件（每个目录 = 组件 + CSS Module）
+src/ui/       React 组件（每个目录 = 组件 + CSS Module）；全局快捷键在 useShortcuts.ts
 src/i18n/     文案目录（zh / en）
-src/lib/      存储安全包装、偏好持久化、跨页面端口占用广播、下载
+src/lib/      存储安全包装、偏好持久化、跨页面端口占用广播、下载、File System Access 落盘
 apps/vscode/  VS Code 扩展（npm workspace 成员，serialport 只装在这里）
   src/host/     扩展宿主进程：NodeSerialTransport、SessionHost、占用表、端口轮询
   src/webview/  webview 侧：RPC 客户端、平台实现、入口
@@ -135,6 +136,28 @@ webview 入口靠 `import './bootstrap'` 排在第一行来保证「先装环境
   `visibilitychange` 时立即落盘），读用 `pickInt` / `pickEnum` / `pickBoolean` / `pickString`
   逐字段校验、非法值回退默认。键名前缀 `wst.` 由 `src/lib/storage.ts` 统一加。
   新增持久化项时沿用这套，不要直接调 `localStorage`。
+- **「归会话那一侧」是一条反复出现的判据**：周期发送、录制到文件都归它。判断标准是
+  「面板隐藏、webview 被销毁之后，这件事还该不该继续」——该继续的就必须活在宿主进程。
+  录制因此挂在**帧产生的地方**（浏览器是 webPlatform 包装 onFrame，VS Code 是
+  `SessionHost.#pushFrame`），store 完全不知道有录制这回事。
+  回环测试里那两条 `hidePanel()` 用例是这条判据唯一的守卫 —— 同进程下不掐断通道，
+  跑在哪一侧都是绿的。**新增这类长驻能力时，先问这个问题，再写回环测试。**
+- **日志的显示状态里，有两样必须在 store 而不是组件里**：
+  - `uiStore.paused`（暂停刷新）——全局快捷键 Alt+P 够不着组件内部的 useState；
+  - 它带着 `upTo`（渲染上界），因为**光冻住 version 不够**：暂停期间改一下过滤词，
+    `selectRows` 的缓存键跟着变、重扫一遍，暂停之后到的行就冒出来了。
+    反过来，**输入信号线的读数有意留在组件本地**（`SignalPad` 的 useState）：它每秒一次，
+    进了 store 就是每秒把订阅那份状态的整棵树唤醒一次（缺陷 D8 的同一个坑）。
+    判据是「有没有组件之外的东西要读它」。
+- **控制信号线：不在 `open()` 之后替用户下发任何东西**。打开端口时驱动怎么摆 DTR/RTS
+  由它自己决定，工具再补一次就是**凭空多一个复位脉冲**——ESP32 与带自动下载电路的
+  Arduino 上那正是用户最不想要的副作用。代价是界面显示的只能是「本工具最后一次设置的值」
+  （这两条是输出线，规范里没有读回接口）。`setSignals` 也**只传调用方提到的那几条线**，
+  补默认值等于顺手动了别的线。
+- **过滤与高亮共用同一份匹配区间**（`core/log/matcher.ts`）。分成两套写法迟早会出现
+  「这一行被留下了，但一个字都没高亮」。正则那条路上有两个必须处理的坑：零长匹配
+  （`a*`）不推进 lastIndex 会让 exec 原地打转成死循环；一行里的匹配处数要封顶，
+  否则 `.` 这样的正则在 8 KB 的行上能生出几千个 DOM 节点。
 - **周期任务的唯一真相源是 `TaskScheduler`**：UI 只读 `useTasksStore().running`，不要另存
   「是否在跑」的布尔标志。调度器本身归 Platform 所有 —— VS Code 里它跑在宿主进程，
   面板隐藏也照跑。**任务必须带 `frames` 启动**：只给 `run` 闭包的任务会退化成在 webview
@@ -171,7 +194,8 @@ webview 入口靠 `import './bootstrap'` 排在第一行来保证「先装环境
 2. **回环**（`apps/vscode/src/webview/loopback.test.ts`）：把 webview 侧 store 与宿主侧会话
    直接对接，中间 RPC 全是真代码，并用真实的 `bootstrap.ts` 装配（`acquireVsCodeApi`
    换成回环那一头）—— 初始化顺序出过两次问题，测试必须跑真接线而不是另抄一份。
-   它还能 `hidePanel()` 模拟面板被隐藏（掐断两侧通道）。
+   它还能 `hidePanel()` 模拟面板被隐藏（掐断两侧通道）—— **凡是「面板隐藏后还该继续」
+   的能力（周期发送、录制），守卫都在这里**，同进程下不掐断通道，跑在哪一侧都是绿的。
 3. **真实串口**（`SERIAL_LOOPBACK_PORTS=COM1,COM2 npm run test:hardware`）：一对互通的口，
    走完整栈测真实驱动的分块时序、分帧、高速完整性、端口占用与释放。**必须靠环境变量显式
    开启**，自动探测会打断别人正在调试的设备。背压那条会先探这对口是否真按波特率限速 ——
@@ -197,11 +221,29 @@ webview 入口靠 `import './bootstrap'` 排在第一行来保证「先装环境
   不 import 内部类型**）。它既是集成测试的观察窗口，也是别的扩展驱动它的入口。
 - `vscode` 模块在 vitest 里被 `tests/vscodeStub.ts` 替掉（vite.config.ts 的 test.alias），
   宿主侧碰 VS Code API 的代码才能被覆盖到。只实现被测代码真正用到的那部分。
-- 组件测试在 `tests/dom/`，用 Testing Library + jsdom。
+- 组件测试在 `tests/dom/`，用 Testing Library + jsdom。jsdom 不做布局也不实现
+  `URL.createObjectURL`：涉及滚动的用例得自己填 `scrollHeight` / `clientHeight`
+  （见 logPane 的暂停那组），涉及下载的用例要 `vi.mock('@/lib/download')`。
+  **纯 CSS 的改动这一档一个都盯不住**，只能人工看。
 - 涉及定时器的模块（分帧空闲超时、调度器、persist 攒批）用 fake timers；persist 提供
   `__resetPersistForTests()` 避免定时器跨用例泄漏。
 - Web Serial 需要用户手势和真实硬件，CI 覆盖不到。README「测试」一节末尾有 8 条人工验收
   清单，改动端口选择 / 重连 / 高速收发相关逻辑后应对照走一遍。
+
+## 快捷键
+
+全部在 `src/ui/useShortcuts.ts` 一处注册（既有的 `Alt+数字` 发预设在 PresetPane 内，
+因为它要看当前分组）。完整表在 README。三条硬约束：
+
+- **认 `event.code` 不认 `event.key`**：按住 Alt 时 key 在部分键盘布局下已经不是那个
+  字母了（macOS 上 Option+S 直接变成 ß）。
+- **选键受两头夹击**：浏览器保留了一批（`Ctrl+L`/`K`/`E`/`N`/`T`/`W`、`Alt+F` 与 `Alt+E`
+  的菜单），页面 `preventDefault` 对它们无效；VS Code 的 webview 里 `Ctrl+F`/`S`/`O`
+  可能被编辑器抢走（**尚未在真机验证**）。核心动作因此落在 `Alt + 字母` 上。
+- **破坏性动作不给快捷键**。「清空」已经要按两下确认，配上快捷键只会把误触变便宜。
+
+快捷键写在各控件的 `title` 里，**不写进 placeholder** —— 占位文本是给「这里填什么」用的，
+而「Alt+S 跳到这里」这种提示，看得到它时已经不需要它了。
 
 ## 其他约定
 
@@ -215,6 +257,9 @@ webview 入口靠 `import './bootstrap'` 排在第一行来保证「先装环境
 - tsconfig 开了全套严格选项（含 `noUncheckedIndexedAccess`、`noUnusedLocals`、
   `verbatimModuleSyntax`），类型导入必须写成 `import type` / inline `type`（ESLint 也在管）。
 - 空 catch 块被 ESLint 禁掉：要么处理，要么写注释说明为何可以忽略。
+- **改文案会打断 DOM 测试**：`tests/dom/` 里有按 `getByTitle` / `getByPlaceholderText`
+  找控件的用例。改 title 或 placeholder 时它们会红。能按 `getByRole(name)` 找就按它找 ——
+  可访问名是这个控件对外的契约，措辞则会随时调整。
 
 ## 依赖冻结
 
