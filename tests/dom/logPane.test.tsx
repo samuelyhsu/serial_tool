@@ -47,6 +47,7 @@ describe('LogPane', () => {
       showTx: true,
       timestampMode: 'none',
       autoScroll: true,
+      paused: null,
     });
   });
 
@@ -82,7 +83,7 @@ describe('LogPane', () => {
     feed('AT');
     await rowTexts();
 
-    await userEvent.click(screen.getByTitle('切换 TXT / HEX 模式'));
+    await userEvent.click(screen.getByRole('button', { name: /^数据格式：/ }));
     expect(await rowTexts()).toEqual([expect.stringContaining('41 54')]);
   });
 
@@ -184,6 +185,7 @@ describe('正则过滤', () => {
       showTx: true,
       timestampMode: 'none',
       autoScroll: true,
+      paused: null,
     });
   });
 
@@ -253,6 +255,7 @@ describe('暂停刷新', () => {
       showTx: true,
       timestampMode: 'none',
       autoScroll: true,
+      paused: null,
     });
   });
 
@@ -357,6 +360,7 @@ describe('时间列的下拉框', () => {
       showTx: true,
       timestampMode: 'time',
       autoScroll: true,
+      paused: null,
     });
   });
 
@@ -416,6 +420,7 @@ describe('LogPane 的缓冲容量与「更早的未显示」提示', () => {
       showTx: true,
       timestampMode: 'none',
       autoScroll: true,
+      paused: null,
     });
   });
 

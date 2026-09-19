@@ -41,6 +41,7 @@ export const zh: Messages = {
   resizePanes: '拖动调整左右分栏宽度（方向键微调，Home / End 到两端）',
   switchTheme: '切换深色 / 浅色主题',
   payloadLabel: '发送内容',
+  payloadTip: 'Ctrl+Enter 发送，Alt+S 从别处跳到这里，Ctrl+↑ / Ctrl+↓ 翻发送历史',
 
   receive: '接收区',
   timestamp: '时间',
@@ -57,6 +58,7 @@ export const zh: Messages = {
   autoScroll: '自动滚屏',
   showTx: '显示发送',
   filterPlaceholder: '过滤 / 高亮关键字…',
+  filterTip: '过滤并高亮日志（Ctrl+F 跳到这里）。勾上「仅匹配」只留命中的行',
   filterRegex: '正则匹配',
   filterRegexTip:
     '把过滤词当正则表达式（不区分大小写）。写到一半时几乎必然是非法的，' +
@@ -77,6 +79,7 @@ export const zh: Messages = {
     line: '遇到换行符即成一帧',
   },
   saveLog: '保存日志',
+  saveLogTip: '把缓冲里的全部日志存成文件（Ctrl+S）',
   record: '录制',
   recordTip:
     '把收发数据边收边写进文件，不受缓冲条数限制 —— 挂一夜等偶发问题用它。' +
@@ -92,8 +95,8 @@ export const zh: Messages = {
   pause: '暂停',
   resume: '继续',
   pauseTip:
-    '定住画面看一眼，数据照收照存，只是不往上刷。往上滚也会自动暂停、滚回底部自动恢复；' +
-    '手动按下的这个要再按一次才恢复',
+    '定住画面看一眼（Alt+P），数据照收照存，只是不往上刷。往上滚也会自动暂停、' +
+    '滚回底部自动恢复；手动按下的这个要再按一次才恢复',
   pausedBacklog: (count) => (count > 0 ? `已暂停 · 期间新到 ${count} 条` : '已暂停'),
   logCapacity: '缓冲',
   logCapacityUnit: '条',
@@ -159,6 +162,7 @@ export const zh: Messages = {
   deleteTab: (title) => `删除分组「${title}」`,
   confirmDeleteTab: '确认删除？',
   toggleHexMode: '切换 TXT / HEX 模式',
+  toggleViewTip: '接收区按 TXT 还是 HEX 显示（Alt+H）',
   formatToggleLabel: (current, next) => `数据格式：${current}，点击切换为 ${next}`,
 
   frames: '帧',

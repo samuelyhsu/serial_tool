@@ -7,6 +7,8 @@ interface Props {
   /** 预设行那种密集排版下用小号。 */
   compact?: boolean;
   disabled?: boolean;
+  /** 覆盖默认提示。接收区那个要把 Alt+H 写进去 —— 快捷键只管它这一个。 */
+  title?: string;
 }
 
 /**
@@ -18,7 +20,13 @@ interface Props {
  * 无障碍要点：按钮上的可见文字是**当前状态**而非动作，所以不能直接把它当可访问名。
  * aria-label 里同时给出当前格式和点击后的结果，屏幕阅读器用户才知道现在是什么、按下去会变成什么。
  */
-export function FormatToggle({ value, onChange, compact, disabled }: Props): React.JSX.Element {
+export function FormatToggle({
+  value,
+  onChange,
+  compact,
+  disabled,
+  title,
+}: Props): React.JSX.Element {
   const t = useMessages();
   const next: DataFormat = value === 'hex' ? 'text' : 'hex';
 
@@ -27,7 +35,7 @@ export function FormatToggle({ value, onChange, compact, disabled }: Props): Rea
       type="button"
       className={`formatToggle${compact ? ' formatToggle--sm' : ''}`}
       data-format={value}
-      title={t.toggleHexMode}
+      title={title ?? t.toggleHexMode}
       aria-label={t.formatToggleLabel(FORMAT_LABEL[value], FORMAT_LABEL[next])}
       disabled={disabled}
       onClick={() => onChange(next)}

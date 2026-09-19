@@ -9,9 +9,10 @@ import { LogPane } from '@/ui/LogPane/LogPane';
 import { PresetPane } from '@/ui/PresetPane/PresetPane';
 import { SendPane } from '@/ui/SendPane/SendPane';
 
-const TOGGLE_TITLE: Record<Language, string> = {
-  zh: '切换 TXT / HEX 模式',
-  en: 'Toggle TXT / HEX mode',
+/** 按可访问名找，而不是按 title：接收区那个的提示里另带着快捷键。 */
+const TOGGLE_NAME: Record<Language, RegExp> = {
+  zh: /^数据格式：/,
+  en: /^Data format: /,
 };
 
 function useLanguage(language: Language): void {
@@ -38,31 +39,31 @@ describe('数据格式控件', () => {
     useLanguage(language);
     render(<LogPane />);
 
-    const toggle = screen.getByTitle(TOGGLE_TITLE[language]);
+    const toggle = screen.getByRole('button', { name: TOGGLE_NAME[language] });
     expect(toggle).toHaveTextContent('TXT');
     // 旧的双按钮分段控件不该再出现
-    expect(screen.queryAllByTitle(TOGGLE_TITLE[language])).toHaveLength(1);
+    expect(screen.queryAllByRole('button', { name: TOGGLE_NAME[language] })).toHaveLength(1);
   });
 
   it.each(['zh', 'en'] as const)('发送区在 %s 界面下是单个按钮，默认 TXT', (language) => {
     useLanguage(language);
     render(<SendPane />);
 
-    const toggle = screen.getByTitle(TOGGLE_TITLE[language]);
+    const toggle = screen.getByRole('button', { name: TOGGLE_NAME[language] });
     expect(toggle).toHaveTextContent('TXT');
-    expect(screen.queryAllByTitle(TOGGLE_TITLE[language])).toHaveLength(1);
+    expect(screen.queryAllByRole('button', { name: TOGGLE_NAME[language] })).toHaveLength(1);
   });
 
   it('点击后在 TXT 与 HEX 之间来回切换', async () => {
     render(<SendPane />);
-    const toggle = screen.getByTitle(TOGGLE_TITLE.zh);
+    const toggle = screen.getByRole('button', { name: TOGGLE_NAME.zh });
 
     expect(toggle).toHaveTextContent('TXT');
     await userEvent.click(toggle);
     expect(useSendStore.getState().mode).toBe('hex');
-    expect(screen.getByTitle(TOGGLE_TITLE.zh)).toHaveTextContent('HEX');
+    expect(screen.getByRole('button', { name: TOGGLE_NAME.zh })).toHaveTextContent('HEX');
 
-    await userEvent.click(screen.getByTitle(TOGGLE_TITLE.zh));
+    await userEvent.click(screen.getByRole('button', { name: TOGGLE_NAME.zh }));
     expect(useSendStore.getState().mode).toBe('text');
   });
 
@@ -70,14 +71,14 @@ describe('数据格式控件', () => {
     render(<LogPane />);
     expect(useUiStore.getState().view).toBe('text');
 
-    await userEvent.click(screen.getByTitle(TOGGLE_TITLE.zh));
+    await userEvent.click(screen.getByRole('button', { name: TOGGLE_NAME.zh }));
     expect(useUiStore.getState().view).toBe('hex');
   });
 
   /** 按钮上的可见文字是当前状态而非动作，可访问名必须同时给出现状和按下后的结果。 */
   it('可访问名同时说明当前格式与点击后的结果', () => {
     render(<SendPane />);
-    expect(screen.getByTitle(TOGGLE_TITLE.zh)).toHaveAccessibleName(
+    expect(screen.getByRole('button', { name: TOGGLE_NAME.zh })).toHaveAccessibleName(
       '数据格式：TXT，点击切换为 HEX',
     );
   });
@@ -85,7 +86,7 @@ describe('数据格式控件', () => {
   it('英文界面下可访问名也用 TXT / HEX 这两个标识符', () => {
     useLanguage('en');
     render(<SendPane />);
-    expect(screen.getByTitle(TOGGLE_TITLE.en)).toHaveAccessibleName(
+    expect(screen.getByRole('button', { name: TOGGLE_NAME.en })).toHaveAccessibleName(
       'Data format: TXT, click to switch to HEX',
     );
   });
@@ -94,7 +95,7 @@ describe('数据格式控件', () => {
     useLanguage(language);
     render(<PresetPane />);
 
-    const toggles = screen.getAllByTitle(TOGGLE_TITLE[language]);
+    const toggles = screen.getAllByRole('button', { name: TOGGLE_NAME[language] });
     expect(toggles.length).toBeGreaterThan(0);
     expect(new Set(toggles.map((el) => el.textContent))).toEqual(new Set(['TXT', 'HEX']));
     // 与另两处共用同一套样式类

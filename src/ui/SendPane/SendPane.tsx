@@ -9,6 +9,7 @@ import { useSendStore } from '@/store/sendStore';
 import { isTaskRunning, SINGLE_TASK, useTasksStore } from '@/store/tasksStore';
 import { payloadErrorText } from '../dataFormat';
 import { FormatToggle } from '../FormatToggle';
+import { FOCUS_TARGET_ATTR } from '../useShortcuts';
 import { SendHistory } from './SendHistory';
 import { useMessages } from '../useMessages';
 import styles from './SendPane.module.css';
@@ -133,7 +134,9 @@ export function SendPane(): React.JSX.Element {
         </label>
         <textarea
           id={editorId}
+          {...{ [FOCUS_TARGET_ATTR]: 'send' }}
           className={styles.textarea}
+          title={t.payloadTip}
           value={payload}
           spellCheck={false}
           placeholder={t.singlePlaceholder}

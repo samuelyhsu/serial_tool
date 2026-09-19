@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { resolveFraming, type FrameMode } from '@/core/framing/frameAssembler';
-import { logFileName, type TimestampMode } from '@/core/log/logLine';
-import { downloadText } from '@/lib/download';
+import type { TimestampMode } from '@/core/log/logLine';
 import {
   latestEntryId,
-  logText,
   LOG_CAPACITY_MIN,
   selectRows,
   useLogStore,
@@ -15,6 +13,8 @@ import { useRecordStore } from '@/store/recordStore';
 import { useUiStore } from '@/store/uiStore';
 import { FormatToggle } from '../FormatToggle';
 import { useConfirm } from '../useConfirm';
+import { saveLogFile } from '../logActions';
+import { FOCUS_TARGET_ATTR } from '../useShortcuts';
 import { CapacityInput } from './CapacityInput';
 import { IdleFrameInput } from './IdleFrameInput';
 import { useMessages } from '../useMessages';
@@ -33,21 +33,6 @@ const RENDER_LIMIT = 1000;
 const BOTTOM_THRESHOLD = 24;
 
 const ARROWS: Record<LogRow['kind'], string> = { rx: '◀', tx: '▶', sys: '·' };
-
-/**
- * 暂停刷新的状态。
- *
- * **来源必须区分开**：往上滚是「我要看看刚才那段」，滚回底部就该自己恢复；
- * 点按钮是「我要它停在这」，那就得一直停到再点一次为止 —— 滚回底部把它悄悄恢复了，
- * 正是用户按那个按钮想避免的事。
- *
- * `upTo` 是冻结那一刻最后一条日志的编号：暂停期间只渲染它及更早的条目，
- * 新数据照收照存，只是不往画面上刷。
- */
-interface Paused {
-  source: 'manual' | 'scroll';
-  upTo: number;
-}
 
 export function LogPane(): React.JSX.Element {
   const t = useMessages();
@@ -97,7 +82,11 @@ export function LogPane(): React.JSX.Element {
   const capacity = useLogStore((s) => s.capacity);
   const setCapacity = useLogStore((s) => s.setCapacity);
 
-  const [paused, setPaused] = useState<Paused | null>(null);
+  // 暂停状态住在 store 里：Alt+P 那条全局快捷键也要够得着它
+  const paused = useUiStore((s) => s.paused);
+  const pause = useUiStore((s) => s.pause);
+  const resume = useUiStore((s) => s.resume);
+  const togglePause = useUiStore((s) => s.togglePause);
 
   // 缺陷 D7：记忆化的选择器，重渲染不重算；输入过滤词时也只算一次
   const { rows, hiddenEarlier, filterError } = selectRows({
@@ -126,14 +115,15 @@ export function LogPane(): React.JSX.Element {
    * 真正的滚动 —— 用户滚的，或者「回到底部」按钮滚的。自动滚屏把视口钉在底部时
    * atBottom 一直是 true，不会误判成用户往上翻。
    */
-  const updateAtBottom = useCallback((next: boolean) => {
-    setAtBottom(next);
-    setPaused((current) => {
-      // 回到底部：只解除滚动引起的那一次；手动按下的要一直停到再按一次
-      if (next) return current?.source === 'scroll' ? null : current;
-      return current ?? { source: 'scroll', upTo: latestEntryId() };
-    });
-  }, []);
+  const updateAtBottom = useCallback(
+    (next: boolean) => {
+      setAtBottom(next);
+      // 回到底部：只解除滚动引起的那一次；手动按下的要一直停到再触发一次
+      if (next) resume('scroll');
+      else pause('scroll', latestEntryId());
+    },
+    [pause, resume],
+  );
 
   const handleScroll = useCallback(() => {
     const element = listRef.current;
@@ -149,15 +139,14 @@ export function LogPane(): React.JSX.Element {
     updateAtBottom(true);
   }, [updateAtBottom]);
 
-  /** 按钮：停在这儿 / 接着刷。恢复时顺带回到底部，否则画面还停在半空中。 */
-  const togglePause = useCallback(() => {
-    if (paused === null) {
-      setPaused({ source: 'manual', upTo: latestEntryId() });
-      return;
-    }
-    setPaused(null);
-    // 下一帧再滚：这一帧渲染的还是冻结的那批行，现在滚过去的是旧的底部
-    requestAnimationFrame(scrollToBottom);
+  /**
+   * 恢复刷新时回到底部，否则画面还停在半空中。
+   *
+   * 放在 effect 里而不是按钮的处理器里，是因为恢复有三条入口（按钮、Alt+P、
+   * 滚回底部），而只有这里能保证跑在「冻结的行已经换成最新那批」之后。
+   */
+  useEffect(() => {
+    if (paused === null) scrollToBottom();
   }, [paused, scrollToBottom]);
 
   useLayoutEffect(() => {
@@ -171,11 +160,8 @@ export function LogPane(): React.JSX.Element {
     if (autoScroll) scrollToBottom();
   }, [autoScroll, scrollToBottom]);
 
-  const saveLog = useCallback(() => {
-    const { text, lines } = logText(view, t);
-    downloadText(logFileName(), text);
-    useLogStore.getState().appendMessage(t.exportedLog(lines));
-  }, [view, t]);
+  // 与 Ctrl+S 共用同一段：抄一份出来的话，两边迟早会长歪
+  const saveLog = useCallback(() => saveLogFile(view, t), [view, t]);
 
   // 清空要按两下：缓冲里的全部采集数据连同统计一起丢、不可撤销，而按钮就紧挨着「保存日志」
   const { armed: confirmingClear, confirm } = useConfirm<'clear'>();
@@ -205,7 +191,7 @@ export function LogPane(): React.JSX.Element {
   return (
     <section className={styles.pane} aria-label={t.receive}>
       <div className={styles.toolbar}>
-        <FormatToggle value={view} onChange={setView} />
+        <FormatToggle value={view} onChange={setView} title={t.toggleViewTip} />
 
         {/*
           时间 / 日期时间 / 间隔三者互斥，所以和分帧一样只给一个下拉框：
@@ -286,7 +272,7 @@ export function LogPane(): React.JSX.Element {
           className={`btn ${paused !== null ? 'btn--on' : ''}`}
           aria-pressed={paused !== null}
           title={t.pauseTip}
-          onClick={togglePause}
+          onClick={() => togglePause(latestEntryId())}
         >
           {paused !== null ? `▶ ${t.resume}` : `⏸ ${t.pause}`}
         </button>
@@ -304,12 +290,13 @@ export function LogPane(): React.JSX.Element {
           </label>
           <input
             id={filterId}
+            {...{ [FOCUS_TARGET_ATTR]: 'filter' }}
             className={`field ${styles.filterInput}`}
             value={filter}
             placeholder={filterKind === 'regex' ? t.filterRegexPlaceholder : t.filterPlaceholder}
             aria-invalid={filterError !== null}
             // 正则写错时把那句话原样挂在框上：说「无效正则」等于什么都没说
-            title={filterError !== null ? t.filterRegexError(filterError) : undefined}
+            title={filterError !== null ? t.filterRegexError(filterError) : t.filterTip}
             onChange={(event) => setFilter(event.target.value)}
           />
           <button
@@ -356,7 +343,7 @@ export function LogPane(): React.JSX.Element {
             {recording.active ? `■ ${t.recording(recording.lines)}` : `● ${t.record}`}
           </button>
 
-          <button type="button" className="btn" onClick={saveLog}>
+          <button type="button" className="btn" title={t.saveLogTip} onClick={saveLog}>
             {t.saveLog}
           </button>
           <button type="button" className="btn btn--danger" onClick={onClear}>
