@@ -185,8 +185,14 @@ describe('SendPane', () => {
   });
 
 describe('复制按钮', () => {
-  function stubClipboard(result: Promise<void> | undefined) {
-    const writeText = vi.fn(() => result);
+  /**
+   * 接的是**工厂**而不是现成的 promise：`Promise.reject(...)` 在实参求值那一刻就
+   * 处于 rejected，而它要等 writeText 被调用、返回、被 `.then(ok, err)` 接住才有
+   * handler。这中间隔多久取决于机器快慢 —— 本地躲得过，CI 上就是一条
+   * unhandled rejection，整个测试进程以非零码退出、发布流水线跟着红。
+   */
+  function stubClipboard(result: (() => Promise<void>) | undefined) {
+    const writeText = vi.fn(() => result?.());
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
       value: result === undefined ? undefined : { writeText },
@@ -203,7 +209,7 @@ describe('复制按钮', () => {
    * 粘回来还是同样的字节，非 UTF-8 也不会在剪贴板里坏掉。
    */
   it('TXT 模式复制解析后的报文，不是输入框里的原文', async () => {
-    const writeText = stubClipboard(Promise.resolve());
+    const writeText = stubClipboard(() => Promise.resolve());
     // \x41 就是 A：复制出来的该是规范化之后的样子，照抄输入就看不出区别了
     useSendStore.setState({ payload: String.raw`\x41T\r\n`, mode: 'text' });
     render(<SendPane />);
@@ -214,7 +220,7 @@ describe('复制按钮', () => {
   });
 
   it('HEX 模式复制的是含校验和的字节', async () => {
-    const writeText = stubClipboard(Promise.resolve());
+    const writeText = stubClipboard(() => Promise.resolve());
     useSendStore.setState({
       payload: '01 03 00 00 00 02',
       mode: 'hex',
@@ -228,7 +234,7 @@ describe('复制按钮', () => {
   });
 
   it('复制成功后在日志里说一声', async () => {
-    stubClipboard(Promise.resolve());
+    stubClipboard(() => Promise.resolve());
     render(<SendPane />);
 
     await userEvent.click(screen.getByRole('button', { name: '复制' }));
@@ -240,7 +246,7 @@ describe('复制按钮', () => {
 
   /** VS Code 的 webview 里剪贴板未必给得了权限，不能静悄悄地什么都不发生。 */
   it('剪贴板不可用时也要说一声', async () => {
-    stubClipboard(Promise.reject(new Error('denied')));
+    stubClipboard(() => Promise.reject(new Error('denied')));
     render(<SendPane />);
 
     await userEvent.click(screen.getByRole('button', { name: '复制' }));
