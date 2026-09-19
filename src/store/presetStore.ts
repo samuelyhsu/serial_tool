@@ -203,6 +203,19 @@ function loadSequenceStep(): SequenceStep {
 }
 
 /** 第 index 组的那 PRESET_TAB_SIZE 条。 */
+/**
+ * 一次移动之后，原本指着第 `index` 组的下标该落到哪。
+ *
+ * 选中的那一组要跟着走，没被拖的那些则按「让开一格」平移 —— 不这么算的话，
+ * 拖动别的分组会让当前选中的内容在眼前换掉，而用户根本没碰它。
+ */
+export function shiftIndex(index: number, from: number, to: number): number {
+  if (index === from) return to;
+  if (from < index && index <= to) return index - 1;
+  if (to <= index && index < from) return index + 1;
+  return index;
+}
+
 export function tabPresets(presets: readonly Preset[], index: number): readonly Preset[] {
   return presets.slice(index * PRESET_TAB_SIZE, (index + 1) * PRESET_TAB_SIZE);
 }
@@ -297,6 +310,21 @@ interface PresetState {
   selectTab: (index: number) => void;
   /** 标题的取值规则见 parseTabTitle；清洗后为空则不改。 */
   renameTab: (id: string, title: string) => void;
+  /**
+   * 把还在用默认标题的分组固化成给定的名字（按下标一一对应）。
+   *
+   * **重排之前必须先调它**：默认标题是按位置生成的（「分组 1」「分组 2」…），
+   * 不固化的话拖完文字还留在原地、内容却换了位置，用户只会以为拖拽没生效。
+   * 固化之后这些分组就不再随语言切换改名 —— 与预设改名同一套规矩（缺陷 D16）。
+   */
+  freezeTitles: (titles: readonly string[]) => void;
+  /**
+   * 把第 from 组挪到第 to 组的位置，返回是否真的动了。
+   *
+   * **顺序循环的发送次序会跟着变** —— 它是跨分组按 presets 的顺序发的，
+   * 而分组顺序就是 presets 的分段顺序，两者本来就是同一件事。
+   */
+  moveTab: (from: number, to: number) => boolean;
   /** 在末尾加一组空行并切换过去。 */
   addTab: () => void;
   /** 删掉一组连同它的预设，至少留一组；组里还在循环的预设一并停掉。 */
@@ -472,6 +500,40 @@ export const usePresetStore = create<PresetState>()((set, get) => {
       set((state) => ({
         tabs: state.tabs.map((tab) => (tab.id === id ? { ...tab, title: clean } : tab)),
       }));
+    },
+
+    freezeTitles: (titles) =>
+      set((state) => ({
+        tabs: state.tabs.map((tab, index) =>
+          tab.title === null && titles[index] !== undefined
+            ? { ...tab, title: titles[index] }
+            : tab,
+        ),
+      })),
+
+    moveTab: (from, to) => {
+      const { tabs, presets, activeTab } = get();
+      if (from === to || from < 0 || to < 0 || from >= tabs.length || to >= tabs.length) {
+        return false;
+      }
+
+      const nextTabs = [...tabs];
+      nextTabs.splice(to, 0, ...nextTabs.splice(from, 1));
+
+      // 分组只记标题，内容按段排在 presets 里（见 tabPresets），两者必须一起搬
+      const block = presets.slice(from * PRESET_TAB_SIZE, (from + 1) * PRESET_TAB_SIZE);
+      const rest = [
+        ...presets.slice(0, from * PRESET_TAB_SIZE),
+        ...presets.slice((from + 1) * PRESET_TAB_SIZE),
+      ];
+      const nextPresets = [
+        ...rest.slice(0, to * PRESET_TAB_SIZE),
+        ...block,
+        ...rest.slice(to * PRESET_TAB_SIZE),
+      ];
+
+      set({ tabs: nextTabs, presets: nextPresets, activeTab: shiftIndex(activeTab, from, to) });
+      return true;
     },
 
     addTab: () =>

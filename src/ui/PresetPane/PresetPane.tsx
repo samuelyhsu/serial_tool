@@ -17,6 +17,7 @@ import {
 import { isTaskRunning, presetTask, SEQUENCE_TASK, useTasksStore } from '@/store/tasksStore';
 import { FormatToggle } from '../FormatToggle';
 import { useConfirm } from '../useConfirm';
+import { useDragReorder } from '../useDragReorder';
 import { useMessages } from '../useMessages';
 import styles from './PresetPane.module.css';
 
@@ -190,6 +191,7 @@ export function PresetPane(): React.JSX.Element {
 
       <div
         className={styles.list}
+        data-preset-list=""
         role="tabpanel"
         id={panelId}
         aria-labelledby={tabs[activeTab] ? tabDomId(tabs[activeTab].id) : undefined}
@@ -348,6 +350,30 @@ function PresetTabs({ tabDomId, panelId, onRequestRemove }: TabsProps): React.JS
     buttons.current[activeTab]?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
   }, [activeTab]);
 
+  const tablistRef = useRef<HTMLDivElement>(null);
+  const moveTab = usePresetStore((s) => s.moveTab);
+  const freezeTitles = usePresetStore((s) => s.freezeTitles);
+
+  /**
+   * 重排分组。
+   *
+   * 动手之前先把默认标题固化：它们是按位置生成的（「分组 1」「分组 2」…），
+   * 不固化的话拖完文字还留在原地、内容却换了位置 —— 用户只会以为拖拽没生效。
+   */
+  const reorderTabs = useCallback(
+    (from: number, to: number): boolean => {
+      freezeTitles(tabs.map((tab, index) => presetTabTitle(tab, index, t)));
+      return moveTab(from, to);
+    },
+    [freezeTitles, moveTab, tabs, t],
+  );
+  const tabDrag = useDragReorder({
+    axis: 'x',
+    // 按 DOM 顺序问，不问那个 ref 数组：某一组正在重命名时它会留下空洞，下标就错位了
+    items: () => [...(tablistRef.current?.querySelectorAll<HTMLElement>('[role="tab"]') ?? [])],
+    move: reorderTabs,
+  });
+
   const startRename = (index: number): void => {
     const tab = tabs[index];
     if (!tab) return;
@@ -391,6 +417,14 @@ function PresetTabs({ tabDomId, panelId, onRequestRemove }: TabsProps): React.JS
               ? last
               : null;
 
+    // Alt+←→ 是挪动分组本身；不带修饰键的 ←→ 仍然只是切换选中项
+    if (event.altKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+      event.preventDefault();
+      const to = index + (event.key === 'ArrowLeft' ? -1 : 1);
+      if (reorderTabs(index, to)) pendingFocus.current = to;
+      return;
+    }
+
     if (target !== null) {
       event.preventDefault();
       selectTab(target);
@@ -405,7 +439,7 @@ function PresetTabs({ tabDomId, panelId, onRequestRemove }: TabsProps): React.JS
   };
 
   return (
-    <div className={styles.tabs} role="tablist" aria-label={t.presetTabs}>
+    <div ref={tablistRef} className={styles.tabs} role="tablist" aria-label={t.presetTabs}>
       {tabs.map((tab, index) =>
         tab.id === renamingId ? (
           <input
@@ -438,6 +472,8 @@ function PresetTabs({ tabDomId, panelId, onRequestRemove }: TabsProps): React.JS
             aria-controls={panelId}
             tabIndex={index === activeTab ? 0 : -1}
             title={t.tabHint}
+            data-dragging={tabDrag.dragging || undefined}
+            onPointerDown={tabDrag.onPointerDown}
             onClick={() => selectTab(index)}
             onDoubleClick={() => startRename(index)}
             onKeyDown={(event) => onTabKeyDown(event, index)}
@@ -666,6 +702,7 @@ interface RowProps {
 function PresetRow({ preset, movable, invalid, looping, canSend }: RowProps): React.JSX.Element {
   const t = useMessages();
   const nameRef = useRef<HTMLInputElement>(null);
+  const dataRef = useRef<HTMLInputElement>(null);
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState('');
 
@@ -695,6 +732,28 @@ function PresetRow({ preset, movable, invalid, looping, canSend }: RowProps): Re
     if (draft.trim() !== '') rename(preset.id, draft);
     setRenaming(false);
   }, [rename, preset.id, draft]);
+
+  /**
+   * 数据框就是这一行的拖拽手柄：按住左键上下拖重排。
+   *
+   * 挑它而不是整行，是因为一行里别的控件（勾选框、格式按钮、发送按钮、周期框）
+   * 按下去各有各的动作，拖拽会跟它们抢。数据框本身只有「选文本」这一个原生行为，
+   * 而那是横向动作 —— `dominantAxis` 把两者分开：横着拖照旧选文本，竖着拖才重排。
+   */
+  const rowDrag = useDragReorder({
+    axis: 'y',
+    dominantAxis: true,
+    items: () => [
+      ...(dataRef.current
+        ?.closest('[data-preset-list]')
+        ?.querySelectorAll<HTMLElement>('[data-preset-data]') ?? []),
+    ],
+    move: (from, to) => {
+      // movePreset 一次只换相邻两格，连续调用等价于一路冒泡到位
+      const step = to > from ? 1 : -1;
+      for (let at = from; at !== to; at += step) movePreset(preset.id, step);
+    },
+  });
 
   const onRowKey = (event: React.KeyboardEvent): void => {
     // F2 挂在整行而不是发送按钮上：用鼠标聚焦发送按钮的唯一办法是点它，
@@ -735,11 +794,15 @@ function PresetRow({ preset, movable, invalid, looping, canSend }: RowProps): Re
         <FormatToggle compact value={preset.mode} onChange={() => toggleMode(preset.id)} />
 
         <input
+          ref={dataRef}
           className={styles.data}
+          data-preset-data={movable ? '' : undefined}
+          data-dragging={rowDrag.dragging || undefined}
           value={preset.data}
           spellCheck={false}
           placeholder={t.dataPlaceholder}
           title={t.rowKeyHint}
+          onPointerDown={movable ? rowDrag.onPointerDown : undefined}
           aria-label={`${label} ${t.colData}`}
           aria-invalid={invalid}
           onChange={(event) => setData(preset.id, event.target.value)}

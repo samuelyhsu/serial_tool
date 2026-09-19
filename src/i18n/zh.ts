@@ -132,7 +132,7 @@ export const zh: Messages = {
   searchPresets: '搜索预设',
   presetMenu: '分组与文件',
   noMatch: '没有匹配的预设',
-  rowKeyHint: 'F2 重命名，Alt+↑↓ 调整顺序，Alt+Shift+↑↓ 挪到相邻分组',
+  rowKeyHint: 'F2 重命名，Alt+↑↓ 调整顺序（按住本框上下拖同效），Alt+Shift+↑↓ 挪到相邻分组',
   tabFull: '相邻分组没有空行了',
   colSequence: '序列',
   colFormat: '格式',
@@ -157,7 +157,9 @@ export const zh: Messages = {
   presetTabTitle: (index) => `分组 ${index}`,
   newTab: '新建分组',
   renameTab: '重命名分组',
-  tabHint: '分组标签：← → 切换（Home / End 到首尾），双击或按 F2 重命名，按 Delete 删除',
+  tabHint:
+    '分组标签：← → 切换（Home / End 到首尾），Alt+← → 调整顺序（左键拖动同效），' +
+    '双击或按 F2 重命名，按 Delete 删除',
   deleteTab: (title) => `删除分组「${title}」`,
   confirmDeleteTab: '确认删除？',
   toggleHexMode: '切换 TXT / HEX 模式',

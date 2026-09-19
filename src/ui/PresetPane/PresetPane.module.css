@@ -396,3 +396,23 @@
 .kbdHint:hover {
   color: var(--text);
 }
+
+/*
+ * 拖动中的分组标签与预设行。
+ *
+ * 只压低不透明度、不做位移动画：元素是实时换位的（每越过一个邻居的中线就交换），
+ * 再叠一层动画会让人分不清自己拖到哪了。
+ */
+.tab[data-dragging],
+.data[data-dragging] {
+  opacity: 0.55;
+}
+
+/* 数据框兼作这一行的拖拽手柄，指针要透出「能拖」这件事 */
+.data[data-preset-data] {
+  cursor: text;
+}
+
+.data[data-dragging] {
+  cursor: grabbing;
+}

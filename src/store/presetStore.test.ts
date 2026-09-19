@@ -12,6 +12,8 @@ import {
   presetTabTitle,
   tabPresets,
   usePresetStore,
+  type Preset,
+  type PresetTab,
   type PresetCollection,
 } from './presetStore';
 
@@ -393,5 +395,96 @@ describe('指令库的整理', () => {
   it('没有相邻分组时挪不动', () => {
     const store = usePresetStore.getState();
     expect(store.movePresetToTab(store.presets[0]!.id, -1)).toBe(false);
+  });
+});
+
+describe('分组重排', () => {
+  beforeEach(() => {
+    usePresetStore.getState().replaceAll(buildTabs(3));
+  });
+
+  /** 三组，每组第一条的数据写成 g0 / g1 / g2，便于看出整段有没有跟着搬。 */
+  function buildTabs(count: number): { tabs: PresetTab[]; presets: Preset[] } {
+    const tabs: PresetTab[] = [];
+    const presets: Preset[] = [];
+    for (let g = 0; g < count; g += 1) {
+      tabs.push({ id: `t${g}`, title: `G${g}` });
+      for (let i = 0; i < PRESET_TAB_SIZE; i += 1) {
+        presets.push({
+          id: `p${g}-${i}`,
+          labelKey: null,
+          name: `#${i + 1}`,
+          data: i === 0 ? `g${g}` : '',
+          mode: 'text',
+          intervalMs: 1000,
+          inSequence: false,
+        });
+      }
+    }
+    return { tabs, presets };
+  }
+
+  function titles(): string[] {
+    return usePresetStore.getState().tabs.map((tab) => tab.title ?? '');
+  }
+
+  /** 每组第一条的数据，用来确认内容跟着分组一起搬了。 */
+  function firstOfEachTab(): string[] {
+    const { presets, tabs } = usePresetStore.getState();
+    return tabs.map((_, index) => tabPresets(presets, index)[0]?.data ?? '');
+  }
+
+  it('标题与内容一起搬 —— 分组只是 presets 的一段', () => {
+    expect(usePresetStore.getState().moveTab(0, 2)).toBe(true);
+
+    expect(titles()).toEqual(['G1', 'G2', 'G0']);
+    expect(firstOfEachTab()).toEqual(['g1', 'g2', 'g0']);
+  });
+
+  it('往前拖同样对', () => {
+    usePresetStore.getState().moveTab(2, 0);
+
+    expect(titles()).toEqual(['G2', 'G0', 'G1']);
+    expect(firstOfEachTab()).toEqual(['g2', 'g0', 'g1']);
+  });
+
+  it('拖的就是当前选中的那组，选中跟着走', () => {
+    usePresetStore.getState().selectTab(0);
+    usePresetStore.getState().moveTab(0, 2);
+
+    expect(usePresetStore.getState().activeTab).toBe(2);
+  });
+
+  /** 拖别的分组不该让当前看着的内容在眼前换掉。 */
+  it('拖别的分组，选中的仍是原来那一组', () => {
+    usePresetStore.getState().selectTab(1);
+    usePresetStore.getState().moveTab(0, 2);
+
+    expect(usePresetStore.getState().activeTab).toBe(0);
+    expect(titles()[0]).toBe('G1');
+  });
+
+  it('把后面的拖到前面，中间那些往后让一格', () => {
+    usePresetStore.getState().selectTab(0);
+    usePresetStore.getState().moveTab(2, 0);
+
+    expect(usePresetStore.getState().activeTab).toBe(1);
+  });
+
+  it('原地不动、越界都当没发生', () => {
+    expect(usePresetStore.getState().moveTab(1, 1)).toBe(false);
+    expect(usePresetStore.getState().moveTab(0, 9)).toBe(false);
+    expect(usePresetStore.getState().moveTab(-1, 0)).toBe(false);
+    expect(titles()).toEqual(['G0', 'G1', 'G2']);
+  });
+
+  it('搬完每组仍是整整 PRESET_TAB_SIZE 条', () => {
+    usePresetStore.getState().moveTab(0, 2);
+    const { presets, tabs } = usePresetStore.getState();
+
+    expect(presets).toHaveLength(tabs.length * PRESET_TAB_SIZE);
+    for (let i = 0; i < tabs.length; i += 1) {
+      expect(tabPresets(presets, i)).toHaveLength(PRESET_TAB_SIZE);
+    }
   });
 });
