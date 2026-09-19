@@ -14,6 +14,7 @@ export const en: Messages = {
   flow: 'Flow',
   none: 'None',
   autoReconnect: 'Auto-reconnect',
+  autoReconnectTip: 'Auto-reconnect: reopen the same port with exponential backoff',
   signals: 'Control signals',
   outputLineTip:
     'Click to flip this output line. What you see is the last value this tool set — ' +
@@ -35,8 +36,8 @@ export const en: Messages = {
     'Label the device yourself here; it survives reloads. Note: the browser exposes no serial ' +
     'number, so ports without USB info (or identical models) are told apart by enumeration order — ' +
     'labels may swap if that order changes.',
-  openPort: 'Open port',
-  closePort: 'Close port',
+  openPort: 'Open',
+  closePort: 'Close',
   disconnected: 'Disconnected',
   opened: 'open',
   opening: 'opening…',
@@ -59,8 +60,7 @@ export const en: Messages = {
     datetime: 'yyyy-mm-dd hh:mm:ss.mmm, for captures that run past midnight',
     delta: 'Gap since the previous entry in the buffer; hiding TX rows does not widen it',
   },
-  autoScroll: 'Auto-scroll',
-  showTx: 'Show TX',
+  showTx: 'TX',
   filterPlaceholder: 'Filter / highlight…',
   filterTip: 'Filter and highlight the log. Tick "Matches only" to drop the rest',
   filterRegex: 'Regular expression',
@@ -71,6 +71,7 @@ export const en: Messages = {
   filterRegexPlaceholder: 'Regex, e.g. ^AT\\+|ERROR',
   filterRegexError: (detail) => `Invalid regular expression: ${detail}`,
   onlyMatch: 'Matches only',
+  onlyMatchTip: 'Matches only: hide rows that do not match the filter',
 
   framing: 'Framing',
   frameModeRaw: 'Raw chunks',
@@ -83,7 +84,7 @@ export const en: Messages = {
     idle: 'Silence longer than the set time ends a frame',
     line: 'A newline ends a frame',
   },
-  saveLog: 'Save log',
+  saveLog: 'Save',
   record: 'Record',
   recordTip:
     'Stream received and sent data straight to a file, free of the buffer limit — ' +
@@ -103,7 +104,6 @@ export const en: Messages = {
     'Freeze the view to read it. Data keeps arriving and is still buffered, it just ' +
     'stops scrolling by. Scrolling up pauses automatically and scrolling back to the bottom ' +
     'resumes; this button stays paused until you press it again',
-  pausedBacklog: (count) => (count > 0 ? `Paused · ${count} new since` : 'Paused'),
   logCapacity: 'Buffer',
   logCapacityUnit: 'entries',
   logCapacityHint: (min) =>
@@ -179,12 +179,7 @@ export const en: Messages = {
 
   frames: 'fr',
   uptime: 'Uptime',
-  noTimer: 'No periodic task',
   queued: (bytes) => `${bytes} B queued`,
-  silentFor: (text) => `silent ${text}`,
-  noRx: 'no data yet',
-  bufferUsage: (used, capacity) =>
-    `${used} of ${capacity} entries buffered; the oldest are dropped once full`,
   filterMatches: (count, partial) => `${partial ? `${count}+` : count} hits`,
 
   unsupportedTitle: 'This browser has no Web Serial',
@@ -199,7 +194,6 @@ export const en: Messages = {
   presetCount: (total, inSequence) => `${total} items · ${inSequence} in sequence`,
   sequenceHint: (count) =>
     count > 0 ? `${count} selected, sent in order` : 'tick the rows to include',
-  runningTasks: (count) => `${count} periodic task(s) running`,
 
   notice: (notice) => {
     switch (notice.code) {

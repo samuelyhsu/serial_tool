@@ -8,8 +8,8 @@
 .toolbar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 7px 12px;
+  gap: 8px;
+  padding: 7px 10px;
   background: var(--panel);
   border-bottom: 1px solid var(--line);
   flex-wrap: wrap;
@@ -23,7 +23,7 @@
 }
 
 .filterInput {
-  width: 148px;
+  width: 128px;
   font-family: var(--font-sans);
 }
 
@@ -180,8 +180,11 @@
   white-space: nowrap;
 }
 
-/* 过滤框旁的正则开关。`.*` 是行业记号，按等宽排，宽度不随状态变 */
-.regexToggle {
+/*
+ * 只有一个字形的开关（`.*` 正则、`∇` 仅匹配）。按等宽排，宽度不随状态变。
+ * 记号本身讲不全的那部分挂在 title 上 —— 图标省的是横向空间，不是说明。
+ */
+.iconBtn {
   padding: 5px 8px;
   font-family: var(--font-mono);
 }

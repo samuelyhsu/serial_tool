@@ -47,7 +47,6 @@ describe('LogPane', () => {
       onlyMatch: false,
       showTx: true,
       timestampMode: 'none',
-      autoScroll: true,
     });
   });
 
@@ -98,26 +97,26 @@ describe('LogPane', () => {
     });
   });
 
-  it('勾选「仅匹配」后不含关键字的行被隐藏', async () => {
+  it('按下「仅匹配」后不含关键字的行被隐藏', async () => {
     render(<LogPane />);
     feed('alpha\n');
     feed('beta\n');
     await rowTexts();
 
     await userEvent.type(screen.getByPlaceholderText('过滤 / 高亮关键字…'), 'alpha');
-    await userEvent.click(screen.getByRole('checkbox', { name: '仅匹配' }));
+    await userEvent.click(screen.getByRole('button', { name: '仅匹配' }));
 
     const texts = await rowTexts(1);
     expect(texts[0]).toContain('alpha');
   });
 
-  it('取消「显示发送」后 TX 行被隐藏', async () => {
+  it('取消「TX」后发送的行被隐藏', async () => {
     render(<LogPane />);
     useLogStore.getState().appendFrame('tx', encoder.encode('AT\r\n'));
     feed('OK\r\n');
     await rowTexts(2);
 
-    await userEvent.click(screen.getByRole('checkbox', { name: '显示发送' }));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'TX' }));
     const remaining = await rowTexts(1);
     expect(remaining[0]).toContain('OK');
   });
@@ -184,7 +183,6 @@ describe('正则过滤', () => {
       onlyMatch: true,
       showTx: true,
       timestampMode: 'none',
-      autoScroll: true,
     });
   });
 
@@ -253,7 +251,6 @@ describe('暂停刷新', () => {
       onlyMatch: false,
       showTx: true,
       timestampMode: 'none',
-      autoScroll: true,
     });
   });
 
@@ -281,7 +278,7 @@ describe('暂停刷新', () => {
     feed('second');
     flushPendingEntries();
 
-    await waitFor(() => expect(screen.getByText(/期间新到/)).toBeInTheDocument());
+    await waitFor(() => expect(pauseButton()).toHaveAttribute('aria-pressed', 'true'));
     expect(currentRows().join()).not.toContain('second');
     expect(allEntries()).toHaveLength(2);
   });
@@ -357,7 +354,6 @@ describe('时间列的下拉框', () => {
       onlyMatch: false,
       showTx: true,
       timestampMode: 'time',
-      autoScroll: true,
     });
   });
 
@@ -367,8 +363,18 @@ describe('时间列的下拉框', () => {
     return screen.getByRole('combobox', { name: '时间' });
   }
 
+  /** 控件在状态栏，被它改变的那一列在接收区。 */
+  function renderBoth(): void {
+    render(
+      <>
+        <LogPane />
+        <StatusBar />
+      </>,
+    );
+  }
+
   it('四种模式互斥，只有一个控件在管它', () => {
-    render(<LogPane />);
+    renderBoth();
     expect(stamp()).toHaveValue('time');
     expect(
       [...stamp().querySelectorAll('option')].map((option) => option.getAttribute('value')),
@@ -376,7 +382,7 @@ describe('时间列的下拉框', () => {
   });
 
   it('换成日期时间后那一列带上日期', async () => {
-    render(<LogPane />);
+    renderBoth();
     useLogStore.getState().appendFrame('rx', encoder.encode('hi'), new Date(2026, 8, 19).getTime());
     flushPendingEntries();
 
@@ -385,7 +391,7 @@ describe('时间列的下拉框', () => {
   });
 
   it('换成间隔后显示的是与上一条的差', async () => {
-    render(<LogPane />);
+    renderBoth();
     const { appendFrame } = useLogStore.getState();
     appendFrame('rx', encoder.encode('a'), 1_000_000);
     appendFrame('rx', encoder.encode('b'), 1_000_030);
@@ -396,7 +402,7 @@ describe('时间列的下拉框', () => {
   });
 
   it('关掉之后那一列整个消失', async () => {
-    render(<LogPane />);
+    renderBoth();
     useLogStore.getState().appendFrame('rx', encoder.encode('hi'));
     flushPendingEntries();
 
@@ -416,7 +422,6 @@ describe('缓冲容量与「更早的未显示」提示', () => {
       onlyMatch: false,
       showTx: true,
       timestampMode: 'none',
-      autoScroll: true,
     });
   });
 

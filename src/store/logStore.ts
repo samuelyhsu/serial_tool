@@ -60,7 +60,6 @@ let pending: LogEntry[] = [];
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
 let rxWindow = 0;
 let txWindow = 0;
-let lastRxTime = 0;
 
 export function entryHex(entry: LogEntry): string {
   if (entry.bytes === null) return '';
@@ -80,8 +79,6 @@ interface LogState {
   version: number;
   /** 环形缓冲容量。超出后自动丢弃最旧的记录。 */
   capacity: number;
-  /** 缓冲里现存的条数。涨到 capacity 就意味着最旧的正在被丢弃。 */
-  size: number;
   rxBytes: number;
   txBytes: number;
   rxFrames: number;
@@ -128,7 +125,6 @@ interface LogState {
 export const useLogStore = create<LogState>()((set, get) => ({
   version: 0,
   capacity: ring.capacity,
-  size: 0,
   rxBytes: 0,
   txBytes: 0,
   rxFrames: 0,
@@ -203,7 +199,7 @@ export const useLogStore = create<LogState>()((set, get) => ({
     const dropped = Math.max(0, ring.size - value);
     ring.resize(value);
     saveSoon(LOG_CAPACITY_KEY, value);
-    set((state) => ({ version: state.version + 1, capacity: value, size: ring.size }));
+    set((state) => ({ version: state.version + 1, capacity: value }));
     return dropped;
   },
 
@@ -213,10 +209,8 @@ export const useLogStore = create<LogState>()((set, get) => ({
     textFormatter.reset();
     rxWindow = 0;
     txWindow = 0;
-    lastRxTime = 0;
     set((state) => ({
       version: state.version + 1,
-      size: 0,
       rxBytes: 0,
       txBytes: 0,
       rxFrames: 0,
@@ -253,9 +247,6 @@ function flushNow(): void {
     if (entry.kind === 'rx') {
       rxBytes += entry.bytes?.length ?? 0;
       rxFrames += 1;
-      // 取帧自身的时刻而不是此刻：VS Code 里帧是宿主攒批送来的，回放历史快照时
-      // 用「现在」会把一段几分钟前的日志说成刚刚收到，静默时长直接归零
-      lastRxTime = Math.max(lastRxTime, entry.time.getTime());
     } else if (entry.kind === 'tx') {
       txBytes += entry.bytes?.length ?? 0;
       txFrames += 1;
@@ -264,7 +255,6 @@ function flushNow(): void {
 
   useLogStore.setState((state) => ({
     version: state.version + 1,
-    size: ring.size,
     rxBytes: state.rxBytes + rxBytes,
     txBytes: state.txBytes + txBytes,
     rxFrames: state.rxFrames + rxFrames,
@@ -298,15 +288,6 @@ export function consumeThroughputWindow(): ThroughputWindow {
 export interface ThroughputWindow {
   rx: number;
   tx: number;
-}
-
-/**
- * 最后一帧接收数据的时刻（毫秒），从未收到过则为 0。
- *
- * 状态栏据此显示静默时长：字节计数停着不动时，人眼分不出是链路断了还是对端本来就慢。
- */
-export function lastRxAt(): number {
-  return lastRxTime;
 }
 
 /**
@@ -517,7 +498,6 @@ export function __resetLogStoreForTests(): void {
   nextId = 1;
   rxWindow = 0;
   txWindow = 0;
-  lastRxTime = 0;
   cacheKey = '';
   cacheSelection = EMPTY_SELECTION;
   textFormatter.reset();
@@ -525,7 +505,6 @@ export function __resetLogStoreForTests(): void {
   useLogStore.setState({
     version: 0,
     capacity: DEFAULT_LOG_CAPACITY,
-    size: 0,
     filterMatches: null,
     rxBytes: 0,
     txBytes: 0,

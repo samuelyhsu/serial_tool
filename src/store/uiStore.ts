@@ -69,7 +69,6 @@ function loadRightPaneWidth(): number | null {
 interface ViewPrefs {
   view: LogView;
   timestampMode: TimestampMode;
-  autoScroll: boolean;
   showTx: boolean;
   onlyMatch: boolean;
   /**
@@ -88,7 +87,6 @@ interface ViewPrefs {
 const DEFAULT_VIEW_PREFS: ViewPrefs = {
   view: 'text',
   timestampMode: 'time',
-  autoScroll: true,
   showTx: true,
   onlyMatch: false,
   filterKind: 'text',
@@ -107,7 +105,6 @@ function loadViewPrefs(): ViewPrefs {
   return {
     view: pickEnum(raw, 'view', VIEWS, DEFAULT_VIEW_PREFS.view),
     timestampMode: loadTimestampMode(raw),
-    autoScroll: pickBoolean(raw, 'autoScroll', DEFAULT_VIEW_PREFS.autoScroll),
     showTx: pickBoolean(raw, 'showTx', DEFAULT_VIEW_PREFS.showTx),
     onlyMatch: pickBoolean(raw, 'onlyMatch', DEFAULT_VIEW_PREFS.onlyMatch),
     filterKind: pickEnum(raw, 'filterKind', FILTER_KINDS, DEFAULT_VIEW_PREFS.filterKind),
@@ -149,7 +146,6 @@ interface UiState {
   theme: Theme;
   view: LogView;
   timestampMode: TimestampMode;
-  autoScroll: boolean;
   showTx: boolean;
   filter: string;
   onlyMatch: boolean;
@@ -162,7 +158,6 @@ interface UiState {
   toggleTheme: () => void;
   setView: (view: LogView) => void;
   setTimestampMode: (mode: TimestampMode) => void;
-  setAutoScroll: (value: boolean) => void;
   setShowTx: (value: boolean) => void;
   setFilter: (value: string) => void;
   setOnlyMatch: (value: boolean) => void;
@@ -202,7 +197,6 @@ export const useUiStore = create<UiState>()((set) => ({
 
   setView: (view) => set({ view }),
   setTimestampMode: (timestampMode) => set({ timestampMode }),
-  setAutoScroll: (autoScroll) => set({ autoScroll }),
   setShowTx: (showTx) => set({ showTx }),
   setFilter: (filter) => set({ filter }),
   setOnlyMatch: (onlyMatch) => set({ onlyMatch }),
@@ -228,13 +222,12 @@ useUiStore.subscribe(({ rightPaneWidth }) => {
 });
 
 useUiStore.subscribe(
-  ({ view, timestampMode, autoScroll, showTx, onlyMatch, filterKind, frameMode, idleFrameMs }) => {
+  ({ view, timestampMode, showTx, onlyMatch, filterKind, frameMode, idleFrameMs }) => {
     saveSoon(
       VIEW_PREFS_KEY,
       {
         view,
         timestampMode,
-        autoScroll,
         showTx,
         onlyMatch,
         filterKind,

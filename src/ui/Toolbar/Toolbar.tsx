@@ -36,10 +36,6 @@ export function Toolbar(): React.JSX.Element {
 
   return (
     <header className={styles.header}>
-      <div className={styles.brand}>
-        <div className={styles.title}>{t.app}</div>
-      </div>
-
       <PortPicker />
 
       <div className={styles.group}>
@@ -109,14 +105,16 @@ export function Toolbar(): React.JSX.Element {
       <SignalPad />
 
       <div className={styles.right}>
-        <label className="check">
-          <input
-            type="checkbox"
-            checked={autoReconnect}
-            onChange={(event) => setAutoReconnect(event.target.checked)}
-          />
-          {t.autoReconnect}
-        </label>
+        <button
+          type="button"
+          className={`btn ${styles.iconBtn} ${autoReconnect ? 'btn--on' : ''}`}
+          aria-pressed={autoReconnect}
+          aria-label={t.autoReconnect}
+          title={t.autoReconnectTip}
+          onClick={() => setAutoReconnect(!autoReconnect)}
+        >
+          ⟳
+        </button>
 
         {/* 看得见的只有按钮，但掉线、重连这类不是用户点出来的变化仍要播报给屏幕阅读器（缺陷 D20） */}
         <span className="visuallyHidden" role="status" aria-live="polite">

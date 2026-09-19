@@ -1,8 +1,8 @@
 .bar {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 5px 16px;
+  gap: 10px;
+  padding: 5px 14px;
   background: var(--panel);
   border-top: 1px solid var(--line);
   font-family: var(--font-mono);
@@ -38,28 +38,27 @@
 
 .modeSelect {
   /* 够放下最长的一项（"Idle timeout"），不必让下拉宽度随选中项跳动 */
-  width: 104px;
+  width: 94px;
+}
+
+.stampSelect {
+  /* 同理，按最长的一项（"Date + time"）定宽 */
+  width: 88px;
 }
 
 .idleInput {
-  width: 58px;
+  width: 52px;
 }
 
 /* 容量是五位数，比空闲时长宽一点才不至于把数字挤没 */
 .capacityInput {
-  width: 72px;
+  width: 64px;
 }
 
-/* 已存条数与容量输入框是一组读数，内部靠得比栏里其他项更近 */
-.buffer {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
-/* 存满了就开始丢最旧的，这是要让人注意到的状态，不是普通读数 */
-.bufferFull {
-  color: var(--amber);
+/* 应用名在最左，和右边那串读数不是一类东西 */
+.app {
+  font-weight: 600;
+  color: var(--text);
 }
 
 .matches {
@@ -67,6 +66,8 @@
 }
 
 .right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin-left: auto;
-  color: var(--faint);
 }

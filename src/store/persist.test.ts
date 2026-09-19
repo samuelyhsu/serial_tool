@@ -244,11 +244,10 @@ describe('预设持久化', () => {
 });
 
 describe('接收区显示偏好持久化', () => {
-  it('HEX 视图、时间戳、自动滚屏、显示 TX 刷新后都在', async () => {
+  it('HEX 视图、时间戳、显示 TX 刷新后都在', async () => {
     let app = await reload();
     app.ui.useUiStore.getState().setView('hex');
     app.ui.useUiStore.getState().setTimestampMode('datetime');
-    app.ui.useUiStore.getState().setAutoScroll(false);
     app.ui.useUiStore.getState().setShowTx(false);
     app.ui.useUiStore.getState().setOnlyMatch(true);
     app.persist.flushPersist();
@@ -257,7 +256,6 @@ describe('接收区显示偏好持久化', () => {
     const ui = app.ui.useUiStore.getState();
     expect(ui.view).toBe('hex');
     expect(ui.timestampMode).toBe('datetime');
-    expect(ui.autoScroll).toBe(false);
     expect(ui.showTx).toBe(false);
     expect(ui.onlyMatch).toBe(true);
   });

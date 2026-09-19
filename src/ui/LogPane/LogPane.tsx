@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
-import { logFileName, type TimestampMode } from '@/core/log/logLine';
+import { logFileName } from '@/core/log/logLine';
 import { downloadText } from '@/lib/download';
 import { latestEntryId, logText, selectRows, useLogStore, type LogRow } from '@/store/logStore';
 import { useConnectionStore } from '@/store/connectionStore';
@@ -42,7 +42,6 @@ interface Paused {
 export function LogPane(): React.JSX.Element {
   const t = useMessages();
   const filterId = useId();
-  const stampId = useId();
   const listRef = useRef<HTMLDivElement>(null);
 
   const version = useLogStore((s) => s.version);
@@ -51,15 +50,12 @@ export function LogPane(): React.JSX.Element {
   const language = useUiStore((s) => s.language);
   const view = useUiStore((s) => s.view);
   const timestampMode = useUiStore((s) => s.timestampMode);
-  const autoScroll = useUiStore((s) => s.autoScroll);
   const showTx = useUiStore((s) => s.showTx);
   const filter = useUiStore((s) => s.filter);
   const onlyMatch = useUiStore((s) => s.onlyMatch);
   const filterKind = useUiStore((s) => s.filterKind);
   // 逐个订阅 action：selector 返回新对象会让 zustand 每次快照都不相等，触发无谓重渲染
   const setView = useUiStore((s) => s.setView);
-  const setTimestampMode = useUiStore((s) => s.setTimestampMode);
-  const setAutoScroll = useUiStore((s) => s.setAutoScroll);
   const setShowTx = useUiStore((s) => s.setShowTx);
   const setFilter = useUiStore((s) => s.setFilter);
   const setOnlyMatch = useUiStore((s) => s.setOnlyMatch);
@@ -140,15 +136,10 @@ export function LogPane(): React.JSX.Element {
   }, [paused, scrollToBottom]);
 
   useLayoutEffect(() => {
-    if (!autoScroll || !atBottom || paused !== null) return;
+    if (!atBottom || paused !== null) return;
     const element = listRef.current;
     if (element) element.scrollTop = element.scrollHeight;
-  }, [rows, autoScroll, atBottom, paused]);
-
-  // 重新勾选「自动滚屏」时立即回到底部，符合直觉
-  useEffect(() => {
-    if (autoScroll) scrollToBottom();
-  }, [autoScroll, scrollToBottom]);
+  }, [rows, atBottom, paused]);
 
   const saveLog = useCallback(() => {
     const { text, lines } = logText(view, t);
@@ -173,34 +164,6 @@ export function LogPane(): React.JSX.Element {
       <div className={styles.toolbar}>
         <FormatToggle value={view} onChange={setView} />
 
-        {/*
-          时间 / 日期时间 / 间隔三者互斥，所以和分帧一样只给一个下拉框：
-          关闭状态下它本身就写着当前显示的是哪一种，而且那一列的宽度不会
-          因为多勾一个选项就跟着变。
-        */}
-        <label className="label" htmlFor={stampId}>
-          {t.timestamp}
-        </label>
-        <select
-          id={stampId}
-          className={`field field--sm ${styles.stampSelect}`}
-          value={timestampMode}
-          title={t.timestampHint[timestampMode]}
-          onChange={(event) => setTimestampMode(event.target.value as TimestampMode)}
-        >
-          <option value="none">{t.timestampNone}</option>
-          <option value="time">{t.timestampTime}</option>
-          <option value="datetime">{t.timestampDateTime}</option>
-          <option value="delta">{t.timestampDelta}</option>
-        </select>
-        <label className="check">
-          <input
-            type="checkbox"
-            checked={autoScroll}
-            onChange={(event) => setAutoScroll(event.target.checked)}
-          />
-          {t.autoScroll}
-        </label>
         <label className="check">
           <input
             type="checkbox"
@@ -224,13 +187,6 @@ export function LogPane(): React.JSX.Element {
           {paused !== null ? `▶ ${t.resume}` : `⏸ ${t.pause}`}
         </button>
 
-        {/* 暂停期间必须说清「数据还在收」，否则和「设备不发了」看起来一模一样 */}
-        {paused !== null ? (
-          <span className={styles.pausedNote} role="status">
-            {t.pausedBacklog(Math.max(0, latestEntryId() - paused.upTo))}
-          </span>
-        ) : null}
-
         <div className={styles.toolbarRight}>
           <label className="visuallyHidden" htmlFor={filterId}>
             {t.filterPlaceholder}
@@ -247,7 +203,7 @@ export function LogPane(): React.JSX.Element {
           />
           <button
             type="button"
-            className={`btn ${styles.regexToggle} ${filterKind === 'regex' ? 'btn--on' : ''}`}
+            className={`btn ${styles.iconBtn} ${filterKind === 'regex' ? 'btn--on' : ''}`}
             aria-pressed={filterKind === 'regex'}
             aria-label={t.filterRegex}
             title={t.filterRegexTip}
@@ -255,14 +211,17 @@ export function LogPane(): React.JSX.Element {
           >
             .*
           </button>
-          <label className="check check--amber">
-            <input
-              type="checkbox"
-              checked={onlyMatch}
-              onChange={(event) => setOnlyMatch(event.target.checked)}
-            />
-            {t.onlyMatch}
-          </label>
+          {/* 漏斗：只让命中的行漏下去 */}
+          <button
+            type="button"
+            className={`btn ${styles.iconBtn} ${onlyMatch ? 'btn--on' : ''}`}
+            aria-pressed={onlyMatch}
+            aria-label={t.onlyMatch}
+            title={t.onlyMatchTip}
+            onClick={() => setOnlyMatch(!onlyMatch)}
+          >
+            ∇
+          </button>
 
           <span className={styles.divider} aria-hidden="true" />
 

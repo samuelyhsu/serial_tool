@@ -51,6 +51,8 @@ export interface Messages {
   readonly flow: string;
   readonly none: string;
   readonly autoReconnect: string;
+  /** 自动重连是个图标按钮，行为只能靠这句说清。 */
+  readonly autoReconnectTip: string;
   /** 控制信号线那一组（DTR / RTS / Break 与输入线指示灯）。 */
   readonly signals: string;
   readonly outputLineTip: string;
@@ -85,7 +87,6 @@ export interface Messages {
   readonly timestampDateTime: string;
   readonly timestampDelta: string;
   readonly timestampHint: Readonly<Record<'none' | 'time' | 'datetime' | 'delta', string>>;
-  readonly autoScroll: string;
   readonly showTx: string;
   readonly filterPlaceholder: string;
   readonly filterTip: string;
@@ -95,6 +96,8 @@ export interface Messages {
   readonly filterRegexPlaceholder: string;
   readonly filterRegexError: (detail: string) => string;
   readonly onlyMatch: string;
+  /** 「仅匹配」同样是图标按钮。 */
+  readonly onlyMatchTip: string;
 
   // 分帧
   readonly framing: string;
@@ -117,11 +120,10 @@ export interface Messages {
   readonly noData: string;
   readonly noDataHint: string;
   readonly jumpToBottom: string;
-  /** 暂停刷新：手动按下的那个按钮，以及暂停期间的积压提示。 */
+  /** 暂停刷新的那个按钮。 */
   readonly pause: string;
   readonly resume: string;
   readonly pauseTip: string;
-  readonly pausedBacklog: (count: number) => string;
   readonly logCapacity: string;
   readonly logCapacityUnit: string;
   readonly logCapacityHint: (min: number) => string;
@@ -202,20 +204,8 @@ export interface Messages {
   // 状态栏
   readonly frames: string;
   readonly uptime: string;
-  readonly noTimer: string;
   /** 写队列积压。只在真的堵着时才显示，是背压最直接的观测点。 */
   readonly queued: (bytes: number) => string;
-  /**
-   * 距上一帧接收数据过了多久。
-   *
-   * 字节计数停着不动时，「链路断了」和「对端本来就慢」看起来一模一样，
-   * 这个读数是两者唯一的区别。
-   */
-  readonly silentFor: (text: string) => string;
-  /** 一直没收到过数据时代替静默时长显示。 */
-  readonly noRx: string;
-  /** 缓冲占用的说明，挂在「已用 / 容量」那组读数上。 */
-  readonly bufferUsage: (used: number, capacity: number) => string;
   /** 过滤命中数。`partial` 为真时扫描被渲染上限截断，给出的是下界。 */
   readonly filterMatches: (count: number, partial: boolean) => string;
 
@@ -232,7 +222,6 @@ export interface Messages {
   /* ---------- 需要参数的文案 ---------- */
   readonly presetCount: (total: number, inSequence: number) => string;
   readonly sequenceHint: (count: number) => string;
-  readonly runningTasks: (count: number) => string;
   readonly notice: (notice: SessionNotice) => string;
   readonly hexError: (error: HexParseError) => string;
   /** TXT 里的转义写错了。index 指向那个反斜杠。 */

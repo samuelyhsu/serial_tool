@@ -1,24 +1,11 @@
 .header {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 10px 16px;
+  gap: 10px;
+  padding: 8px 14px;
   background: var(--panel);
   border-bottom: 1px solid var(--line);
   flex-wrap: wrap;
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  padding-right: 14px;
-  border-right: 1px solid var(--line);
-}
-
-.title {
-  font-weight: 600;
-  font-size: 14px;
-  letter-spacing: 0.01em;
 }
 
 .group {
@@ -35,8 +22,8 @@
 /* 多一层选择器：模块 CSS 先于 base.css 加载，同权重下全局 .field 的 padding 会盖掉这里，
    数字就会钻到下拉按钮底下 */
 .baudCombo .baudInput {
-  width: 104px;
-  padding-right: 26px;
+  width: 92px;
+  padding-right: 24px;
   text-align: right;
 }
 
@@ -169,4 +156,10 @@
 .connect:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* 只有一个字形的按钮：按等宽排，宽度不随状态变 */
+.iconBtn {
+  padding: 5px 8px;
+  font-family: var(--font-mono);
 }

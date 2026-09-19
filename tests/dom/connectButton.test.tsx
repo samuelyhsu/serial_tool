@@ -37,9 +37,9 @@ describe('连接按钮', () => {
 
   afterEach(cleanup);
 
-  it('未连接时是可点的「打开串口」', () => {
+  it('未连接时是可点的「打开」', () => {
     renderToolbar('closed');
-    expect(screen.getByRole('button', { name: '打开串口' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: '打开' })).toBeEnabled();
   });
 
   it('打开过程中显示「打开中…」并禁用', () => {
@@ -47,14 +47,14 @@ describe('连接按钮', () => {
     expect(screen.getByRole('button', { name: '打开中…' })).toBeDisabled();
   });
 
-  it('已连接时是「关闭串口」', () => {
+  it('已连接时是「关闭」', () => {
     renderToolbar('open');
-    expect(screen.getByRole('button', { name: '关闭串口' })).toHaveAttribute('data-state', 'open');
+    expect(screen.getByRole('button', { name: '关闭' })).toHaveAttribute('data-state', 'open');
   });
 
-  it('重连中仍可点「关闭串口」停下来，按钮换色并提示正在重连', () => {
+  it('重连中仍可点「关闭」停下来，按钮换色并提示正在重连', () => {
     renderToolbar('reconnecting');
-    const button = screen.getByRole('button', { name: '关闭串口' });
+    const button = screen.getByRole('button', { name: '关闭' });
     expect(button).toBeEnabled();
     expect(button).toHaveAttribute('data-state', 'reconnecting');
     expect(button).toHaveAttribute('title', '重连中…');

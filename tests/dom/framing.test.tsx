@@ -32,7 +32,6 @@ describe('状态栏的分帧控件', () => {
       onlyMatch: false,
       showTx: true,
       timestampMode: 'time',
-      autoScroll: true,
       frameMode: 'idle',
       idleFrameMs: 10,
     });

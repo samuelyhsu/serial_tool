@@ -1,15 +1,14 @@
 import { useCallback, useEffect, useId, useState } from 'react';
 import { resolveFraming, type FrameMode } from '@/core/framing/frameAssembler';
+import type { TimestampMode } from '@/core/log/logLine';
 import { APP_VERSION } from '@/lib/appVersion';
 import { useConnectionStore } from '@/store/connectionStore';
 import {
   consumeThroughputWindow,
-  lastRxAt,
   LOG_CAPACITY_MIN,
   useLogStore,
   type ThroughputWindow,
 } from '@/store/logStore';
-import { useTasksStore } from '@/store/tasksStore';
 import { useUiStore } from '@/store/uiStore';
 import { useMessages } from '../useMessages';
 import { CapacityInput } from './CapacityInput';
@@ -18,13 +17,6 @@ import styles from './StatusBar.module.css';
 
 const NO_WINDOW: ThroughputWindow = { rx: 0, tx: 0 };
 
-/** 静默时长。超过一分钟就不再报秒数之外的精度，那时候关心的只是「很久了」。 */
-function formatSilence(ms: number): string {
-  const seconds = Math.max(0, Math.floor(ms / 1000));
-  if (seconds < 60) return `${seconds}s`;
-  return `${Math.floor(seconds / 60)}m${String(seconds % 60).padStart(2, '0')}s`;
-}
-
 /**
  * 状态栏自己持有秒级时钟。
  *
@@ -32,11 +24,12 @@ function formatSilence(ms: number): string {
  * 于是空闲时整棵树每秒重渲染两次 —— 缺陷 D8。这里时钟只驱动状态栏一个组件，
  * 而且端口关闭时根本不启动。
  *
- * 靠 store 订阅拿到的读数（缓冲占用、过滤命中）不搭这趟时钟：它们在端口关着时
- * 照样要是对的，挂到只在打开期间跑的 tick 上会停在最后一个值。
+ * 靠 store 订阅拿到的读数（过滤命中）不搭这趟时钟：它在端口关着时照样要是对的，
+ * 挂到只在打开期间跑的 tick 上会停在最后一个值。
  */
 export function StatusBar(): React.JSX.Element {
   const t = useMessages();
+  const stampId = useId();
   const modeId = useId();
   const idleId = useId();
   const capacityId = useId();
@@ -45,16 +38,16 @@ export function StatusBar(): React.JSX.Element {
   const txBytes = useLogStore((s) => s.txBytes);
   const rxFrames = useLogStore((s) => s.rxFrames);
   const txFrames = useLogStore((s) => s.txFrames);
-  const size = useLogStore((s) => s.size);
   const capacity = useLogStore((s) => s.capacity);
   const setCapacity = useLogStore((s) => s.setCapacity);
   const matches = useLogStore((s) => s.filterMatches);
 
   const sessionState = useConnectionStore((s) => s.sessionState);
   const openedAt = useConnectionStore((s) => s.openedAt);
-  const runningCount = useTasksStore((s) => s.running.length);
 
   const view = useUiStore((s) => s.view);
+  const timestampMode = useUiStore((s) => s.timestampMode);
+  const setTimestampMode = useUiStore((s) => s.setTimestampMode);
   const frameMode = useUiStore((s) => s.frameMode);
   const idleFrameMs = useUiStore((s) => s.idleFrameMs);
   const setFrameMode = useUiStore((s) => s.setFrameMode);
@@ -66,8 +59,6 @@ export function StatusBar(): React.JSX.Element {
 
   const [uptimeSec, setUptimeSec] = useState(0);
   const [rate, setRate] = useState<ThroughputWindow>(NO_WINDOW);
-  /** 距上一帧接收数据过了多久；-1 表示这次会话还没收到过。 */
-  const [silenceMs, setSilenceMs] = useState(-1);
   /**
    * 写队列的积压量。
    *
@@ -83,15 +74,12 @@ export function StatusBar(): React.JSX.Element {
     if (!isOpen || openedAt === 0) {
       setUptimeSec(0);
       setRate(NO_WINDOW);
-      setSilenceMs(-1);
       setQueued(0);
       return;
     }
     const tick = setInterval(() => {
       setUptimeSec(Math.max(0, Math.floor((Date.now() - openedAt) / 1000)));
       setRate(consumeThroughputWindow());
-      const last = lastRxAt();
-      setSilenceMs(last === 0 ? -1 : Date.now() - last);
       setQueued(useConnectionStore.getState().pendingBytes());
     }, 1000);
     return () => clearInterval(tick);
@@ -123,7 +111,8 @@ export function StatusBar(): React.JSX.Element {
 
   return (
     <footer className={styles.bar}>
-      {/* 固定在左下角：反馈问题时先要知道用的是哪一版，内网离线包尤其说不清 */}
+      {/* 应用名与版本号同在左下角：反馈问题时先要知道这是什么、用的是哪一版 */}
+      <span className={styles.app}>{t.app}</span>
       <span className={styles.faint}>v{APP_VERSION}</span>
       <span className={styles.rx}>
         RX {rxBytes} B · {rxFrames} {t.frames}
@@ -136,19 +125,30 @@ export function StatusBar(): React.JSX.Element {
       <span>
         {t.uptime} {isOpen ? `${minutes}:${seconds}` : '--:--'}
       </span>
-      {/*
-        「收了多少」回答不了「现在还在收吗」：字节数停着不动时，链路断了和对端本来就慢
-        看起来一模一样。这个读数是两者唯一的区别，所以它跟着运行时长一起常驻。
-      */}
-      {isOpen ? (
-        <span className={styles.faint}>
-          {silenceMs < 0 ? t.noRx : t.silentFor(formatSilence(silenceMs))}
-        </span>
-      ) : null}
       {/* 只在真的堵着时才占位置：平时它恒为 0，常驻只会让状态栏更难读 */}
       {queued > 0 ? <span className={styles.queued}>{t.queued(queued)}</span> : null}
 
       <span className={styles.divider} aria-hidden="true" />
+
+      {/*
+        时间 / 日期时间 / 间隔三者互斥，所以和分帧一样只给一个下拉框：
+        关闭状态下它本身就写着当前显示的是哪一种。
+      */}
+      <label className="label" htmlFor={stampId}>
+        {t.timestamp}
+      </label>
+      <select
+        id={stampId}
+        className={`field field--sm ${styles.stampSelect}`}
+        value={timestampMode}
+        title={t.timestampHint[timestampMode]}
+        onChange={(event) => setTimestampMode(event.target.value as TimestampMode)}
+      >
+        <option value="none">{t.timestampNone}</option>
+        <option value="time">{t.timestampTime}</option>
+        <option value="datetime">{t.timestampDateTime}</option>
+        <option value="delta">{t.timestampDelta}</option>
+      </select>
 
       {/*
         分帧三者互斥，所以只给一个下拉框：关闭状态下它本身就写着当前模式，
@@ -186,44 +186,36 @@ export function StatusBar(): React.JSX.Element {
         </>
       ) : null}
 
-      <span className={styles.divider} aria-hidden="true" />
-
-      {/*
-        容量输入框和「已存多少」放一起：改容量是一次性设置，但它的后果 —— 存满之后
-        开始丢最旧的 —— 此前完全不可见，日志凭空变短与数据丢失看起来没有区别。
-      */}
-      <span className={styles.buffer} title={t.bufferUsage(size, capacity)}>
-        <label className="label" htmlFor={capacityId}>
-          {t.logCapacity}
-        </label>
-        <span className={size >= capacity ? styles.bufferFull : undefined}>{size}</span>
-        <span className={styles.faint}>/</span>
-        <CapacityInput
-          id={capacityId}
-          label={t.logCapacity}
-          title={t.logCapacityHint(LOG_CAPACITY_MIN)}
-          value={capacity}
-          onCommit={onCapacityCommit}
-        />
-        <span className="label">{t.logCapacityUnit}</span>
-      </span>
+      <label className="label" htmlFor={capacityId}>
+        {t.logCapacity}
+      </label>
+      <CapacityInput
+        id={capacityId}
+        label={t.logCapacity}
+        title={t.logCapacityHint(LOG_CAPACITY_MIN)}
+        value={capacity}
+        onCommit={onCapacityCommit}
+      />
 
       {/* 过滤着却一行不剩时，「没匹配上」和「根本没数据」得能分开 */}
       {matches !== null ? (
         <span className={styles.matches}>{t.filterMatches(matches.count, matches.partial)}</span>
       ) : null}
 
-      <span className={styles.right}>
-        {runningCount > 0 ? t.runningTasks(runningCount) : t.noTimer}
-      </span>
-
       {/* 一天按不到一次的全局偏好，从「打开串口」旁边挪到这里 */}
-      <button type="button" className="btn" onClick={toggleLanguage} aria-label={t.switchLanguage}>
-        {language === 'zh' ? 'EN' : 'CN'}
-      </button>
-      <button type="button" className="btn" onClick={toggleTheme} aria-label={t.switchTheme}>
-        {theme === 'dark' ? '☀' : '☾'}
-      </button>
+      <span className={styles.right}>
+        <button
+          type="button"
+          className="btn"
+          onClick={toggleLanguage}
+          aria-label={t.switchLanguage}
+        >
+          {language === 'zh' ? 'EN' : 'CN'}
+        </button>
+        <button type="button" className="btn" onClick={toggleTheme} aria-label={t.switchTheme}>
+          {theme === 'dark' ? '☀' : '☾'}
+        </button>
+      </span>
     </footer>
   );
 }

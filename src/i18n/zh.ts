@@ -13,6 +13,7 @@ export const zh: Messages = {
   flow: '流控',
   none: '无',
   autoReconnect: '自动重连',
+  autoReconnectTip: '自动重连：掉线后按指数退避重新打开同一个端口',
   signals: '控制信号线',
   outputLineTip:
     '点一下翻转这条输出线。显示的是本工具最后一次设置的值 —— 这两条线读不回来，' +
@@ -31,8 +32,8 @@ export const zh: Messages = {
     '浏览器不提供真实端口名（COM3 之类），只给 USB 厂商/产品 ID。' +
     '在这里自己标注设备，刷新后仍然保留。注意：浏览器不暴露序列号，' +
     '无 USB 信息或同型号的多个端口只能按枚举顺序区分，若顺序变化备注可能对调。',
-  openPort: '打开串口',
-  closePort: '关闭串口',
+  openPort: '打开',
+  closePort: '关闭',
   disconnected: '未连接',
   opened: '已打开',
   opening: '打开中…',
@@ -55,8 +56,7 @@ export const zh: Messages = {
     datetime: '年-月-日 时:分:秒.毫秒。跨夜抓的日志要它',
     delta: '与上一条的间隔。注意它算的是缓冲里物理上的上一条，隐藏 TX 行不会让间隔变大',
   },
-  autoScroll: '自动滚屏',
-  showTx: '显示发送',
+  showTx: 'TX',
   filterPlaceholder: '过滤 / 高亮关键字…',
   filterTip: '过滤并高亮日志。勾上「仅匹配」只留命中的行',
   filterRegex: '正则匹配',
@@ -66,6 +66,7 @@ export const zh: Messages = {
   filterRegexPlaceholder: '正则，如 ^AT\\+|ERROR',
   filterRegexError: (detail) => `正则写错了：${detail}`,
   onlyMatch: '仅匹配',
+  onlyMatchTip: '仅匹配：只留下命中过滤词的行',
 
   framing: '分帧',
   frameModeRaw: '原样显示',
@@ -78,7 +79,7 @@ export const zh: Messages = {
     idle: '静默超过设定时长即成一帧',
     line: '遇到换行符即成一帧',
   },
-  saveLog: '保存日志',
+  saveLog: '保存',
   record: '录制',
   recordTip:
     '把收发数据边收边写进文件，不受缓冲条数限制 —— 挂一夜等偶发问题用它。' +
@@ -96,7 +97,6 @@ export const zh: Messages = {
   pauseTip:
     '定住画面看一眼，数据照收照存，只是不往上刷。往上滚也会自动暂停、滚回底部自动恢复；' +
     '手动按下的这个要再按一次才恢复',
-  pausedBacklog: (count) => (count > 0 ? `已暂停 · 期间新到 ${count} 条` : '已暂停'),
   logCapacity: '缓冲',
   logCapacityUnit: '条',
   logCapacityHint: (min) =>
@@ -167,12 +167,7 @@ export const zh: Messages = {
 
   frames: '帧',
   uptime: '运行',
-  noTimer: '无周期任务',
   queued: (bytes) => `积压 ${bytes} B`,
-  silentFor: (text) => `静默 ${text}`,
-  noRx: '未收到数据',
-  bufferUsage: (used, capacity) =>
-    `日志缓冲已存 ${used} 条，容量 ${capacity} 条；存满后自动丢弃最旧的`,
   filterMatches: (count, partial) => `命中 ${partial ? `${count}+` : count}`,
 
   unsupportedTitle: '此浏览器不支持 Web Serial',
@@ -186,7 +181,6 @@ export const zh: Messages = {
 
   presetCount: (total, inSequence) => `${total} 条 · ${inSequence} 条在序列中`,
   sequenceHint: (count) => (count > 0 ? `按序依次发送 ${count} 条` : '先勾选要参与循环的指令'),
-  runningTasks: (count) => `${count} 个周期任务运行中`,
 
   notice: (notice) => {
     switch (notice.code) {

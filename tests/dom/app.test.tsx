@@ -30,10 +30,11 @@ describe('App', () => {
     }
   });
 
-  it('版本号显示在左下角：状态栏的第一项', () => {
+  it('应用名与版本号在左下角：状态栏最前面那两项', () => {
     render(<App />);
     const statusBar = screen.getByRole('contentinfo');
-    expect(statusBar.firstElementChild).toHaveTextContent(`v${APP_VERSION}`);
+    expect(statusBar.children[0]).toHaveTextContent('串口助手');
+    expect(statusBar.children[1]).toHaveTextContent(`v${APP_VERSION}`);
   });
 
   /**
@@ -50,10 +51,10 @@ describe('App', () => {
     );
   });
 
-  it('不支持时「选择端口」和「打开串口」都是禁用的', () => {
+  it('不支持时「选择端口」和「打开」都是禁用的', () => {
     render(<App />);
     expect(screen.getByRole('button', { name: '选择端口…' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: '打开串口' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '打开' })).toBeDisabled();
   });
 
   /** 单端口语义：端口区只剩一个按钮，没有下拉框、没有授权计数、没有撤销按钮。 */
@@ -73,11 +74,11 @@ describe('App', () => {
 
   it('语言切换后界面文案整体换成英文', async () => {
     render(<App />);
-    expect(screen.getByText('自动滚屏')).toBeInTheDocument();
+    expect(screen.getByText('分帧')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: /切换语言|Switch language/ }));
-    expect(screen.getByText('Auto-scroll')).toBeInTheDocument();
-    expect(screen.queryByText('自动滚屏')).not.toBeInTheDocument();
+    expect(screen.getByText('Framing')).toBeInTheDocument();
+    expect(screen.queryByText('分帧')).not.toBeInTheDocument();
   });
 
   it('语言按钮显示要切过去的那种：中文界面是 EN，英文界面是 CN', async () => {
