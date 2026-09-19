@@ -19,6 +19,7 @@ const samples: { [K in SessionNoticeCode]: Extract<SessionNotice, { code: K }> }
   'record-started': { code: 'record-started', target: 'a.log' },
   'record-stopped': { code: 'record-stopped', target: 'a.log', lines: 12 },
   'record-error': { code: 'record-error', message: 'ENOSPC' },
+  'signal-error': { code: 'signal-error', message: 'EIO' },
 };
 
 describe('noticeLogEntry', () => {

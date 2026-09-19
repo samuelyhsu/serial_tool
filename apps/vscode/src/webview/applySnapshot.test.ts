@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { IDLE_RECORDING } from '@/core/log/recorder';
 import { LOG_CAPACITY_PREF_KEY } from '@/core/buffer/logCapacity';
 import type { ConnectionOptions } from '@/core/transport/types';
 import { __resetPersistForTests } from '@/lib/persist';
@@ -38,6 +39,7 @@ function snapshot(language: string, overrides: Partial<Snapshot> = {}): Snapshot
     pendingBytes: 0,
     frames: [],
     runningTasks: [],
+    recording: IDLE_RECORDING,
     prefs: {},
     language,
     ...overrides,

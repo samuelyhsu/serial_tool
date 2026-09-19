@@ -2,6 +2,8 @@ import { TransportError } from '@/core/transport/errors';
 import type {
   CloseReason,
   ConnectionOptions,
+  InputSignals,
+  OutputSignals,
   Transport,
   TransportEvents,
   TransportState,
@@ -21,6 +23,20 @@ export class FakeTransport implements Transport {
   readonly openCalls: ConnectionOptions[] = [];
   /** 设为非 null 时，下一次 open() 会以该错误失败（用于测试重连的失败分支）。 */
   failNextOpen: Error | null = null;
+
+  /** 每次 setSignals 的原始入参，按顺序。测试据此确认「只动被提到的那几条线」。 */
+  readonly signalWrites: OutputSignals[] = [];
+  /** 累积后的输出线状态。 */
+  outputs: OutputSignals = {};
+  /** getSignals 返回什么，由测试摆布。 */
+  inputs: InputSignals = {
+    clearToSend: false,
+    dataCarrierDetect: false,
+    dataSetReady: false,
+    ringIndicator: false,
+  };
+  /** 设为非 null 时，信号线读写一律以该错误失败。 */
+  failSignals: TransportError | null = null;
 
   readonly #handlers = new Set<Partial<TransportEvents>>();
   #openGate: Promise<void> | null = null;
@@ -64,6 +80,25 @@ export class FakeTransport implements Transport {
     }
     this.written.push(data);
     return Promise.resolve();
+  }
+
+  setSignals(signals: OutputSignals): Promise<void> {
+    if (this.state !== 'open') {
+      return Promise.reject(new TransportError('invalid-state', 'Port is not open'));
+    }
+    if (this.failSignals) return Promise.reject(this.failSignals);
+    this.signalWrites.push(signals);
+    // 只合并调用方提到的那几条线，与真实传输层一致
+    this.outputs = { ...this.outputs, ...signals };
+    return Promise.resolve();
+  }
+
+  getSignals(): Promise<InputSignals> {
+    if (this.state !== 'open') {
+      return Promise.reject(new TransportError('invalid-state', 'Port is not open'));
+    }
+    if (this.failSignals) return Promise.reject(this.failSignals);
+    return Promise.resolve(this.inputs);
   }
 
   subscribe(handlers: Partial<TransportEvents>): () => void {

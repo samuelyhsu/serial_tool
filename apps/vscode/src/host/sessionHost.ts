@@ -255,6 +255,17 @@ export class SessionHost {
         this.#session.setReconnectSettings({ enabled: body.enabled });
         return undefined;
 
+      case 'session.setSignals':
+        await this.#session.setSignals(body.signals);
+        return undefined;
+
+      case 'session.sendBreak':
+        await this.#session.sendBreak(body.durationMs);
+        return undefined;
+
+      case 'session.getSignals':
+        return this.#session.getSignals();
+
       case 'prefs.write':
         this.deps.writePref(body.key, body.value);
         // 容量是会话这边自己也要照做的偏好：界面那份 ring 在 webview 里，

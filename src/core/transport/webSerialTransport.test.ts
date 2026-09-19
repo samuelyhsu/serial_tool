@@ -237,6 +237,48 @@ describe('WebSerialTransport', () => {
     expect(port.closeCalls).toBe(0);
     expect(closes).toEqual([]);
   });
+
+  describe('控制信号线', () => {
+    it('端口没打开时拒绝读写', async () => {
+      await expect(transport.setSignals({ dataTerminalReady: true })).rejects.toThrow(
+        /Port is not open/,
+      );
+      await expect(transport.getSignals()).rejects.toThrow(/Port is not open/);
+    });
+
+    // 补默认值等于顺手动了别的线，在带自动下载电路的板子上就是一次意外复位
+    it('原样把要改的线交给端口，不补默认值', async () => {
+      await transport.open(OPTIONS);
+      await transport.setSignals({ dataTerminalReady: false });
+
+      expect(port.signalWrites).toEqual([{ dataTerminalReady: false }]);
+      await transport.close();
+    });
+
+    it('读回四条输入线', async () => {
+      await transport.open(OPTIONS);
+      port.inputSignals = {
+        clearToSend: true,
+        dataCarrierDetect: true,
+        dataSetReady: false,
+        ringIndicator: false,
+      };
+
+      await expect(transport.getSignals()).resolves.toEqual(port.inputSignals);
+      await transport.close();
+    });
+
+    it('底层失败归一成 signals 类错误', async () => {
+      await transport.open(OPTIONS);
+      port.failSignals = new Error('NetworkError');
+
+      await expect(transport.setSignals({ break: true })).rejects.toMatchObject({
+        kind: 'signals',
+      });
+      await expect(transport.getSignals()).rejects.toMatchObject({ kind: 'signals' });
+      await transport.close();
+    });
+  });
 });
 
 describe('TransportError.from', () => {

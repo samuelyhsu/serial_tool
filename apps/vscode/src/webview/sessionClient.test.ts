@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { IDLE_RECORDING } from '@/core/log/recorder';
 import type { ConnectionOptions } from '@/core/transport/types';
 import type { HostEvent, HostRequest } from '../shared/protocol';
 import { HostError, SessionClient } from './sessionClient';
@@ -163,6 +164,7 @@ function snapshot(): HostEvent {
     pendingBytes: 0,
     frames: [],
     runningTasks: [],
+    recording: IDLE_RECORDING,
     prefs: {},
     language: 'zh',
   };

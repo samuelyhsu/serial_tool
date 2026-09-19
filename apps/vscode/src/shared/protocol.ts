@@ -5,7 +5,7 @@ import type { TaskFrame } from '@/core/scheduler/framePlan';
 import type { SessionNotice } from '@/core/session/notices';
 import type { Direction, SessionState } from '@/core/session/serialSession';
 import type { PortDescriptor } from '@/core/transport/portDescriptor';
-import type { ConnectionOptions } from '@/core/transport/types';
+import type { ConnectionOptions, OutputSignals } from '@/core/transport/types';
 
 /**
  * webview 与扩展宿主之间的消息协议。
@@ -43,6 +43,14 @@ export type RequestBody =
   | { method: 'session.send'; bytes: Uint8Array }
   | { method: 'session.setFraming'; framing: Partial<FramingConfig> }
   | { method: 'session.setReconnect'; enabled: boolean }
+  /**
+   * 控制信号线。必须由宿主执行 —— serialport 的句柄在那边，
+   * webview 连 `navigator.serial` 都没有。
+   */
+  | { method: 'session.setSignals'; signals: OutputSignals }
+  | { method: 'session.sendBreak'; durationMs: number }
+  /** 读输入线。应答是 `InputSignals | null`（null = 端口没开 / 读失败）。 */
+  | { method: 'session.getSignals' }
   | { method: 'prefs.write'; key: string; value: unknown }
   /**
    * 清空宿主保留的日志历史。

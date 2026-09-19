@@ -78,6 +78,14 @@ function createSession(recorder: FrameRecorder): WebSession {
     },
     setFraming: (config) => session.setFraming(config),
     setReconnectSettings: (settings) => session.setReconnectSettings(settings),
+    // 失败原因已经作为通知进了日志，界面不需要再处理一遍
+    setSignals: async (signals) => {
+      await session.setSignals(signals);
+    },
+    sendBreak: async (durationMs) => {
+      await session.sendBreak(durationMs);
+    },
+    getSignals: () => session.getSignals(),
     get pendingBytes() {
       return session.pendingBytes;
     },

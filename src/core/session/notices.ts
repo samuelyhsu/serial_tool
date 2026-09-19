@@ -31,7 +31,9 @@ export type SessionNotice =
    */
   | { code: 'record-started'; target: string }
   | { code: 'record-stopped'; target: string; lines: number }
-  | { code: 'record-error'; message: string };
+  | { code: 'record-error'; message: string }
+  /** DTR / RTS / Break 写失败。读失败不报 —— 轮询每秒一次，报了就是刷屏。 */
+  | { code: 'signal-error'; message: string };
 
 export type SessionNoticeCode = SessionNotice['code'];
 

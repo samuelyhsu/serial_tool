@@ -1,7 +1,7 @@
 import { FrameAssembler, type FramingConfig } from '../framing/frameAssembler';
 import { ReconnectController } from '../scheduler/reconnectController';
 import { TransportError } from '../transport/errors';
-import type { ConnectionOptions, Transport } from '../transport/types';
+import type { ConnectionOptions, InputSignals, OutputSignals, Transport } from '../transport/types';
 import type { SendFailure, SessionNotice } from './notices';
 
 export type SessionState = 'closed' | 'opening' | 'open' | 'reconnecting';
@@ -183,6 +183,55 @@ export class SerialSession<TPort = unknown> {
           : { code: 'write-error', message: describeError(error) };
       this.#notify(failure);
       return failure;
+    }
+  }
+
+  /**
+   * 改输出信号线（DTR / RTS / Break）。端口没打开时报 not-open 并当作没发生。
+   *
+   * 不自动在 open() 之后下发任何东西：打开端口时驱动会怎么摆这几条线由它自己决定，
+   * 本工具再补一次就是**多出来一个复位脉冲** —— 在 ESP32、带自动下载电路的
+   * Arduino 上，那正是用户最不想要的副作用。
+   */
+  async setSignals(signals: OutputSignals): Promise<boolean> {
+    const transport = this.#transport;
+    if (this.#state !== 'open' || !transport) {
+      this.#notify({ code: 'not-open' });
+      return false;
+    }
+    try {
+      await transport.setSignals(signals);
+      return true;
+    } catch (error) {
+      this.#notify({ code: 'signal-error', message: describeError(error) });
+      return false;
+    }
+  }
+
+  /**
+   * 发一个 Break 脉冲：拉住 `durationMs` 毫秒再放开。
+   *
+   * 做成脉冲而不是开关，是因为真实用法就是脉冲 —— 打断 U-Boot、唤醒 LIN 总线上的
+   * 从机。拉住不放的开关谁都会忘了关，而 Break 期间线路是拉低的，对端收到的是
+   * 持续的帧错误。
+   */
+  async sendBreak(durationMs: number): Promise<boolean> {
+    if (!(await this.setSignals({ break: true }))) return false;
+    await new Promise((resolve) => setTimeout(resolve, durationMs));
+    // 即便这中间端口被关掉了也要试一次：放不开的 Break 会让对端一直收错
+    return this.setSignals({ break: false });
+  }
+
+  /** 读输入信号线。端口没打开、或读失败时返回 null。 */
+  async getSignals(): Promise<InputSignals | null> {
+    const transport = this.#transport;
+    if (this.#state !== 'open' || !transport) return null;
+    try {
+      return await transport.getSignals();
+    } catch {
+      // 轮询失败不该刷屏：设备刚被拔掉时每秒都会失败一次，
+      // 而「掉线」这件事本身已经由 onClose 报过了
+      return null;
     }
   }
 

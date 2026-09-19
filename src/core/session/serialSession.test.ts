@@ -478,3 +478,86 @@ describe('SerialSession', () => {
     expect(harness.notices).toContainEqual({ code: 'reconnect-succeeded', attempt: 1 });
   });
 });
+
+describe('控制信号线', () => {
+  let harness: Harness;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    harness = makeHarness();
+  });
+
+  afterEach(() => {
+    harness.session.dispose();
+    vi.useRealTimers();
+  });
+
+  it('端口没打开时不下发，并报 not-open', async () => {
+    await expect(harness.session.setSignals({ dataTerminalReady: false })).resolves.toBe(false);
+    expect(harness.notices).toContainEqual({ code: 'not-open' });
+  });
+
+  // 一次 setSignals 把没提到的线也写一遍，在带自动下载电路的板子上就是一次意外复位
+  it('只把调用方提到的那几条线交给传输层', async () => {
+    await harness.session.open(FAKE_PORT, 'port-1', TEST_OPTIONS);
+    await harness.session.setSignals({ dataTerminalReady: false });
+
+    expect(harness.current().signalWrites).toEqual([{ dataTerminalReady: false }]);
+  });
+
+  it('下发失败变成一条可见的通知', async () => {
+    await harness.session.open(FAKE_PORT, 'port-1', TEST_OPTIONS);
+    harness.current().failSignals = new TransportError('signals', 'EIO');
+
+    await expect(harness.session.setSignals({ requestToSend: true })).resolves.toBe(false);
+    expect(harness.notices).toContainEqual({ code: 'signal-error', message: 'EIO' });
+  });
+
+  it('Break 是拉住再放开的脉冲，不是开关', async () => {
+    await harness.session.open(FAKE_PORT, 'port-1', TEST_OPTIONS);
+    const pulse = harness.session.sendBreak(250);
+
+    // 拉住期间只发出去了「拉起」这一条
+    await vi.advanceTimersByTimeAsync(0);
+    expect(harness.current().signalWrites).toEqual([{ break: true }]);
+
+    await vi.advanceTimersByTimeAsync(250);
+    await expect(pulse).resolves.toBe(true);
+    expect(harness.current().signalWrites).toEqual([{ break: true }, { break: false }]);
+  });
+
+  it('端口没开时脉冲直接失败，不会留下一条拉起的线', async () => {
+    await expect(harness.session.sendBreak(250)).resolves.toBe(false);
+  });
+
+  it('读输入线', async () => {
+    await harness.session.open(FAKE_PORT, 'port-1', TEST_OPTIONS);
+    harness.current().inputs = {
+      clearToSend: true,
+      dataCarrierDetect: false,
+      dataSetReady: true,
+      ringIndicator: false,
+    };
+
+    await expect(harness.session.getSignals()).resolves.toEqual({
+      clearToSend: true,
+      dataCarrierDetect: false,
+      dataSetReady: true,
+      ringIndicator: false,
+    });
+  });
+
+  it('端口没开时读回 null，不报错也不刷日志', async () => {
+    await expect(harness.session.getSignals()).resolves.toBeNull();
+    expect(harness.notices).toHaveLength(0);
+  });
+
+  // 设备刚被拔掉时轮询每秒都会失败一次，而「掉线」本身已经报过了
+  it('读失败静默返回 null', async () => {
+    await harness.session.open(FAKE_PORT, 'port-1', TEST_OPTIONS);
+    harness.current().failSignals = new TransportError('signals', 'EIO');
+
+    await expect(harness.session.getSignals()).resolves.toBeNull();
+    expect(harness.notices.filter((n) => n.code === 'signal-error')).toHaveLength(0);
+  });
+});

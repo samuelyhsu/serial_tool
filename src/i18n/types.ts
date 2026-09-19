@@ -51,6 +51,11 @@ export interface Messages {
   readonly flow: string;
   readonly none: string;
   readonly autoReconnect: string;
+  /** 控制信号线那一组（DTR / RTS / Break 与输入线指示灯）。 */
+  readonly signals: string;
+  readonly outputLineTip: string;
+  readonly breakTip: string;
+  readonly inputLineTip: string;
   readonly selectPort: string;
   readonly selectPortTip: string;
   readonly changePortTip: string;

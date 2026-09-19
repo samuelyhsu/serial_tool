@@ -53,6 +53,8 @@ export function noticeLogEntry(notice: SessionNotice): NoticeLogEntry | null {
       return { level: 'info', message: `recording stopped (${notice.lines} lines)` };
     case 'record-error':
       return { level: 'error', message: `recording failed: ${notice.message}` };
+    case 'signal-error':
+      return { level: 'error', message: `set signals failed: ${notice.message}` };
     case 'not-open':
       return null;
   }

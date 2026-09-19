@@ -26,6 +26,11 @@ class FakeNodePort implements NodePortHandle {
   failWrite: Error | null = null;
   /** 让 close 回调报错，模拟「端口没能真正释放」。 */
   failClose: Error | null = null;
+  /** 每次 set() 的原始入参，按顺序。 */
+  readonly signalWrites: { dtr?: boolean; rts?: boolean; brk?: boolean }[] = [];
+  /** get() 报什么。 */
+  status: { cts?: boolean; dsr?: boolean; dcd?: boolean } = {};
+  failSignals: Error | null = null;
 
   onData = (listener: (chunk: Uint8Array) => void): void => {
     this.dataListener = listener;
@@ -48,6 +53,29 @@ class FakeNodePort implements NodePortHandle {
     }
     this.written.push(data);
     queueMicrotask(() => callback(null));
+  };
+
+  set = (
+    signals: { dtr?: boolean; rts?: boolean; brk?: boolean },
+    callback: (error?: Error | null) => void,
+  ): void => {
+    if (this.failSignals) {
+      const failure = this.failSignals;
+      queueMicrotask(() => callback(failure));
+      return;
+    }
+    this.signalWrites.push(signals);
+    queueMicrotask(() => callback(null));
+  };
+
+  get = (
+    callback: (
+      error: Error | null,
+      status?: { cts?: boolean; dsr?: boolean; dcd?: boolean },
+    ) => void,
+  ): void => {
+    const failure = this.failSignals;
+    queueMicrotask(() => callback(failure, failure ? undefined : this.status));
   };
 
   close = (callback: (error?: Error | null) => void): void => {
@@ -282,5 +310,78 @@ describe('NodeSerialTransport', () => {
     const h = makeHarness();
     await h.transport.open(OPTIONS);
     await expect(h.transport.open(OPTIONS)).rejects.toThrow(/Cannot open/);
+  });
+});
+
+describe('控制信号线', () => {
+  it('端口没打开时拒绝读写', async () => {
+    const h = makeHarness();
+    await expect(h.transport.setSignals({ dataTerminalReady: true })).rejects.toThrow(
+      /Port is not open/,
+    );
+    await expect(h.transport.getSignals()).rejects.toThrow(/Port is not open/);
+  });
+
+  /**
+   * 字段名要从 Web Serial 那一套翻成 serialport 自己的，而且**只翻调用方提到的那几条**。
+   *
+   * serialport 的 set() 会把传进去的字段全写一遍，补上默认值等于顺手动了别的线 ——
+   * 在带自动下载电路的板子上那就是一次意料之外的复位。
+   */
+  it('按 serialport 的字段名映射，且只动提到的那几条线', async () => {
+    const h = makeHarness();
+    await h.transport.open(OPTIONS);
+
+    await h.transport.setSignals({ dataTerminalReady: false });
+    await h.transport.setSignals({ requestToSend: true });
+    await h.transport.setSignals({ break: true });
+
+    expect(h.port.signalWrites).toEqual([{ dtr: false }, { rts: true }, { brk: true }]);
+  });
+
+  it('一次改多条线也只发一次', async () => {
+    const h = makeHarness();
+    await h.transport.open(OPTIONS);
+    await h.transport.setSignals({ dataTerminalReady: false, requestToSend: false });
+
+    expect(h.port.signalWrites).toEqual([{ dtr: false, rts: false }]);
+  });
+
+  it('读回来的字段翻回 Web Serial 那一套', async () => {
+    const h = makeHarness();
+    await h.transport.open(OPTIONS);
+    h.port.status = { cts: true, dsr: false, dcd: true };
+
+    await expect(h.transport.getSignals()).resolves.toEqual({
+      clearToSend: true,
+      dataSetReady: false,
+      dataCarrierDetect: true,
+      // serialport 的 get() 根本不读这条线，报恒假比假装拿到了强
+      ringIndicator: false,
+    });
+  });
+
+  it('底层没给状态时四条线一律当假，而不是 undefined', async () => {
+    const h = makeHarness();
+    await h.transport.open(OPTIONS);
+    h.port.status = {};
+
+    await expect(h.transport.getSignals()).resolves.toEqual({
+      clearToSend: false,
+      dataSetReady: false,
+      dataCarrierDetect: false,
+      ringIndicator: false,
+    });
+  });
+
+  it('底层失败归一成 signals 类错误', async () => {
+    const h = makeHarness();
+    await h.transport.open(OPTIONS);
+    h.port.failSignals = new Error('EIO');
+
+    await expect(h.transport.setSignals({ break: false })).rejects.toMatchObject({
+      kind: 'signals',
+    });
+    await expect(h.transport.getSignals()).rejects.toMatchObject({ kind: 'signals' });
   });
 });

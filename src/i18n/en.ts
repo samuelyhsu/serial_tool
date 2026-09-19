@@ -14,6 +14,15 @@ export const en: Messages = {
   flow: 'Flow',
   none: 'None',
   autoReconnect: 'Auto-reconnect',
+  signals: 'Control signals',
+  outputLineTip:
+    'Click to flip this output line. What you see is the last value this tool set — ' +
+    'these two lines cannot be read back, and right after opening a port the driver ' +
+    'decides them (usually both asserted, which is why an ESP32 resets on open). ' +
+    'This tool never asserts them for you on open',
+  breakTip: 'Send a 250 ms break pulse: interrupts U-Boot, wakes slaves on a bus',
+  inputLineTip:
+    'Input lines driven by the other end, polled once a second. RI is not readable in VS Code, so that lamp stays off',
   selectPort: 'Choose port…',
   selectPortTip: 'Opens the browser port chooser. You can label the port afterwards.',
   changePortTip: 'Click to choose a different port',
@@ -188,6 +197,8 @@ export const en: Messages = {
         return `Recording stopped, ${notice.lines} lines written to ${notice.target}`;
       case 'record-error':
         return `Recording failed: ${notice.message}`;
+      case 'signal-error':
+        return `Failed to set control signals: ${notice.message}`;
     }
   },
 

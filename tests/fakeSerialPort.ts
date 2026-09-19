@@ -21,6 +21,18 @@ export class FakeSerialPort extends EventTarget {
   /** getInfo() 抛错，验证标签生成的容错。 */
   infoThrows = false;
 
+  /** 每次 setSignals 的原始入参，按顺序。 */
+  readonly signalWrites: SerialOutputSignals[] = [];
+  /** getSignals 返回什么，由测试摆布。 */
+  inputSignals: SerialInputSignals = {
+    dataCarrierDetect: false,
+    clearToSend: false,
+    ringIndicator: false,
+    dataSetReady: false,
+  };
+  /** 非 null 时信号线读写一律失败。 */
+  failSignals: Error | null = null;
+
   #controller: ReadableStreamDefaultController<Uint8Array> | null = null;
   #info: SerialPortInfo;
   #opened = false;
@@ -93,15 +105,13 @@ export class FakeSerialPort extends EventTarget {
   }
 
   getSignals(): Promise<SerialInputSignals> {
-    return Promise.resolve({
-      dataCarrierDetect: false,
-      clearToSend: false,
-      ringIndicator: false,
-      dataSetReady: false,
-    });
+    if (this.failSignals) return Promise.reject(this.failSignals);
+    return Promise.resolve(this.inputSignals);
   }
 
-  setSignals(): Promise<void> {
+  setSignals(signals: SerialOutputSignals): Promise<void> {
+    if (this.failSignals) return Promise.reject(this.failSignals);
+    this.signalWrites.push(signals);
     return Promise.resolve();
   }
 

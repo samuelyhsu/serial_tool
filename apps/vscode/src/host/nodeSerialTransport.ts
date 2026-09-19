@@ -2,6 +2,8 @@ import { TransportError } from '@/core/transport/errors';
 import type {
   CloseReason,
   ConnectionOptions,
+  InputSignals,
+  OutputSignals,
   Transport,
   TransportEvents,
   TransportState,
@@ -29,6 +31,18 @@ export interface NodePortHandle {
   /** 端口关闭。`disconnected` 为真表示设备被拔了，而不是我们主动关的。 */
   onClose: (listener: (info: { disconnected: boolean }) => void) => void;
   write: (data: Uint8Array, callback: (error?: Error | null) => void) => void;
+  /** serialport 的 port.set()。字段名是它自己的那一套，映射在传输层里做。 */
+  set: (
+    signals: { dtr?: boolean; rts?: boolean; brk?: boolean },
+    callback: (error?: Error | null) => void,
+  ) => void;
+  /** serialport 的 port.get()。它不报 ringIndicator，见 getSignals()。 */
+  get: (
+    callback: (
+      error: Error | null,
+      status?: { cts?: boolean; dsr?: boolean; dcd?: boolean },
+    ) => void,
+  ) => void;
   close: (callback: (error?: Error | null) => void) => void;
   /** 解除全部监听。拆卸时调用，避免关闭过程本身又触发一轮回调。 */
   dispose: () => void;
@@ -182,6 +196,49 @@ export class NodeSerialTransport implements Transport {
       return Promise.reject(new TransportError('invalid-state', 'Port is not open'));
     }
     return this.#queue.enqueue(data);
+  }
+
+  setSignals(signals: OutputSignals): Promise<void> {
+    const port = this.#port;
+    if (this.#state !== 'open' || !port) {
+      return Promise.reject(new TransportError('invalid-state', 'Port is not open'));
+    }
+    // 只映射调用方真正提到的那几条线：serialport 的 set() 会把传进去的字段全写一遍，
+    // 补上默认值等于顺手动了别的线 —— 在带自动下载电路的板子上就是一次意外复位
+    const mapped: { dtr?: boolean; rts?: boolean; brk?: boolean } = {};
+    if (signals.dataTerminalReady !== undefined) mapped.dtr = signals.dataTerminalReady;
+    if (signals.requestToSend !== undefined) mapped.rts = signals.requestToSend;
+    if (signals.break !== undefined) mapped.brk = signals.break;
+
+    return new Promise<void>((resolve, reject) => {
+      port.set(mapped, (error) => {
+        if (error) reject(TransportError.from(error, 'signals', 'Failed to set control signals'));
+        else resolve();
+      });
+    });
+  }
+
+  getSignals(): Promise<InputSignals> {
+    const port = this.#port;
+    if (this.#state !== 'open' || !port) {
+      return Promise.reject(new TransportError('invalid-state', 'Port is not open'));
+    }
+    return new Promise<InputSignals>((resolve, reject) => {
+      port.get((error, status) => {
+        if (error) {
+          reject(TransportError.from(error, 'signals', 'Failed to read control signals'));
+          return;
+        }
+        resolve({
+          clearToSend: status?.cts ?? false,
+          dataCarrierDetect: status?.dcd ?? false,
+          dataSetReady: status?.dsr ?? false,
+          // serialport 的 get() 不报 RI（它的绑定层就没读这条线）。
+          // 报一个恒假的值比假装拿到了强：界面上那盏灯永远不亮，而不是随机亮
+          ringIndicator: false,
+        });
+      });
+    });
   }
 
   /**

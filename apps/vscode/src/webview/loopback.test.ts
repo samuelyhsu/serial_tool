@@ -376,6 +376,59 @@ describe('webview ⇄ 扩展宿主 回环', () => {
   });
 
   /**
+   * 信号线必须由宿主那一侧真的写下去。
+   *
+   * webview 里连 `navigator.serial` 都没有，界面上点 DTR 只是发一条 RPC；
+   * 这条把整段接线跑一遍，顺带盯住「只动被提到的那条线」—— 那是 ESP32
+   * 不被意外复位的全部保证。
+   */
+  it('点 DTR 会让宿主那边真的改那一条线，且只改那一条', async () => {
+    const app = await loopback();
+    app.connection.useConnectionStore.getState().selectPort('COM3');
+    await app.connection.useConnectionStore.getState().toggleConnection();
+    await app.settle();
+
+    await app.connection.useConnectionStore.getState().toggleOutputLine('dataTerminalReady');
+    await app.settle();
+
+    expect(app.transport().signalWrites).toEqual([{ dataTerminalReady: false }]);
+    expect(app.connection.useConnectionStore.getState().outputSignals).toEqual({
+      dataTerminalReady: false,
+      requestToSend: true,
+    });
+  });
+
+  it('Break 是一拉一放的脉冲，两次都走到宿主', async () => {
+    const app = await loopback();
+    app.connection.useConnectionStore.getState().selectPort('COM3');
+    await app.connection.useConnectionStore.getState().toggleConnection();
+    await app.settle();
+
+    await app.connection.useConnectionStore.getState().sendBreak();
+    await app.settle();
+
+    expect(app.transport().signalWrites).toEqual([{ break: true }, { break: false }]);
+  });
+
+  it('输入线的读数一路从宿主回到界面', async () => {
+    const app = await loopback();
+    app.connection.useConnectionStore.getState().selectPort('COM3');
+    await app.connection.useConnectionStore.getState().toggleConnection();
+    await app.settle();
+
+    app.transport().inputs = {
+      clearToSend: true,
+      dataCarrierDetect: false,
+      dataSetReady: true,
+      ringIndicator: false,
+    };
+
+    await expect(
+      app.connection.useConnectionStore.getState().readInputSignals(),
+    ).resolves.toMatchObject({ clearToSend: true, dataSetReady: true });
+  });
+
+  /**
    * 与上一条同一个道理，换成录制。
    *
    * 录制若挂在 webview 上，面板一隐藏文件就断了 —— 而「挂一夜等一次偶发异常」

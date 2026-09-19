@@ -130,6 +130,10 @@ export function createVsCodePlatform(deps: VsCodePlatformDeps): VsCodePlatform {
     send: (bytes) => client.send(bytes),
     setFraming: (config) => client.setFraming(config),
     setReconnectSettings: (settings) => client.setReconnectSettings(settings),
+    // 失败原因由宿主作为通知推回来，与浏览器版走同一条路
+    setSignals: (signals) => client.setSignals(signals).catch(() => undefined),
+    sendBreak: (durationMs) => client.sendBreak(durationMs).catch(() => undefined),
+    getSignals: () => client.getSignals().catch(() => null),
     // 背压发生在宿主那边，读数搭 frames / state 事件捎回来（见 protocol.ts）
     get pendingBytes() {
       return pendingBytes;

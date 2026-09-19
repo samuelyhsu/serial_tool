@@ -5,7 +5,7 @@ import type { TaskFrame } from '@/core/scheduler/framePlan';
 import type { PeriodicTaskSpec } from '@/core/scheduler/taskScheduler';
 import type { SessionEvents } from '@/core/session/serialSession';
 import type { PortDescriptor } from '@/core/transport/portDescriptor';
-import type { ConnectionOptions } from '@/core/transport/types';
+import type { ConnectionOptions, InputSignals, OutputSignals } from '@/core/transport/types';
 import type { LeaseHolders } from '@/lib/portLease';
 import { createWebPlatform } from './webPlatform';
 
@@ -34,6 +34,12 @@ export interface SessionLike {
   send: (bytes: Uint8Array) => Promise<void>;
   setFraming: (config: Partial<FramingConfig>) => void;
   setReconnectSettings: (settings: { enabled: boolean }) => void;
+  /** 改输出信号线（DTR / RTS / Break）。只传要改的那几条。 */
+  setSignals: (signals: OutputSignals) => Promise<void>;
+  /** 发一个 Break 脉冲：拉住给定毫秒数再放开。 */
+  sendBreak: (durationMs: number) => Promise<void>;
+  /** 读输入信号线；端口没开或读失败时是 null。没有事件可订阅，只能轮询。 */
+  getSignals: () => Promise<InputSignals | null>;
   readonly pendingBytes: number;
   dispose: () => void;
 }

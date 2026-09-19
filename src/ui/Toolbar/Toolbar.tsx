@@ -5,6 +5,7 @@ import { useUiStore } from '@/store/uiStore';
 import { useMessages } from '../useMessages';
 import { BaudRateInput } from './BaudRateInput';
 import { PortPicker } from './PortPicker';
+import { SignalPad } from './SignalPad';
 import styles from './Toolbar.module.css';
 
 export function Toolbar(): React.JSX.Element {
@@ -109,6 +110,9 @@ export function Toolbar(): React.JSX.Element {
           <option value="hardware">RTS/CTS</option>
         </select>
       </div>
+
+      {/* 信号线只在端口开着时有意义，所以紧挨着连接按钮放 */}
+      <SignalPad />
 
       <div className={styles.right}>
         <label className="check">

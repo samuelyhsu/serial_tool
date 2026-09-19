@@ -1,7 +1,7 @@
 import type { FramingConfig } from '@/core/framing/frameAssembler';
 import type { LogView } from '@/core/log/logLine';
 import type { TaskFrame } from '@/core/scheduler/framePlan';
-import type { ConnectionOptions } from '@/core/transport/types';
+import type { ConnectionOptions, InputSignals, OutputSignals } from '@/core/transport/types';
 import type { HostEvent, HostMessage, HostRequest, RequestBody } from '../shared/protocol';
 
 /**
@@ -124,6 +124,20 @@ export class SessionClient {
   setReconnectSettings(settings: { enabled: boolean }): void {
     void this.#call({ method: 'session.setReconnect', enabled: settings.enabled }).catch(
       () => undefined,
+    );
+  }
+
+  setSignals(signals: OutputSignals): Promise<void> {
+    return this.#call({ method: 'session.setSignals', signals }).then(() => undefined);
+  }
+
+  sendBreak(durationMs: number): Promise<void> {
+    return this.#call({ method: 'session.sendBreak', durationMs }).then(() => undefined);
+  }
+
+  getSignals(): Promise<InputSignals | null> {
+    return this.#call({ method: 'session.getSignals' }).then(
+      (result) => result as InputSignals | null,
     );
   }
 

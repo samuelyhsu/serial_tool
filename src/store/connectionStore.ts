@@ -4,7 +4,7 @@ import { prefKey } from '@/core/prefs/prefKey';
 import type { SessionState } from '@/core/session/serialSession';
 import { portDisplayLabel } from '@/core/transport/portAlias';
 import type { PortDescriptor } from '@/core/transport/portDescriptor';
-import type { ConnectionOptions, Parity } from '@/core/transport/types';
+import type { ConnectionOptions, InputSignals, Parity } from '@/core/transport/types';
 import { isRecord, pickBoolean, pickEnum, pickInt, saveSoon } from '@/lib/persist';
 import type { LeaseHolders } from '@/lib/portLease';
 import { readLayered, readStoredJson, writeLayered } from '@/lib/storage';
@@ -45,6 +45,36 @@ export const BAUD_RATE_MAX = 20_000_000;
 export function isValidBaudRate(value: number): boolean {
   return Number.isInteger(value) && value >= BAUD_RATE_MIN && value <= BAUD_RATE_MAX;
 }
+
+/**
+ * 本工具能控制的两条输出线。Break 不在里面 —— 它是脉冲，没有「当前状态」。
+ */
+export interface OutputLines {
+  dataTerminalReady: boolean;
+  requestToSend: boolean;
+}
+
+/**
+ * 输出线的显示初值。
+ *
+ * 取 true 是因为绝大多数驱动打开端口时就断言了 DTR/RTS（这正是 ESP32 一开口就复位的
+ * 原因）。它只是个显示值：工具**不会**在 open() 之后照着它下发一遍，那等于凭空多一次复位。
+ */
+export const DEFAULT_OUTPUT_SIGNALS: OutputLines = {
+  dataTerminalReady: true,
+  requestToSend: true,
+};
+
+/**
+ * Break 脉冲的时长。
+ *
+ * 250ms 远长于任何波特率下的一个字符时间，对端一定认得出来；又短到不会把一条
+ * 正常的链路堵住。打断 U-Boot、唤醒 LIN 从机都够用。
+ */
+export const BREAK_PULSE_MS = 250;
+
+/** 输入线的轮询间隔。没有事件可订阅，只能问。 */
+export const SIGNAL_POLL_MS = 1000;
 
 export const DEFAULT_OPTIONS: ConnectionOptions = {
   baudRate: 115200,
@@ -167,6 +197,11 @@ session.setHandlers({
   onNotice: (notice) => useLogStore.getState().appendNotice(notice),
   onStateChange: (sessionState) => {
     useConnectionStore.setState({ sessionState });
+    // 输出线的显示值回到驱动默认：本工具不在打开时下发任何东西，
+    // 留着上一次会话的读数只会让界面说一件没发生过的事
+    if (sessionState !== 'open') {
+      useConnectionStore.setState({ outputSignals: DEFAULT_OUTPUT_SIGNALS });
+    }
     // 链路一旦不再可用，所有周期发送必须跟着停 —— 否则会持续刷「串口未打开」
     if (sessionState === 'closed' || sessionState === 'reconnecting') {
       useTasksStore.getState().stopAll();
@@ -188,6 +223,14 @@ interface ConnectionState {
   openedAt: number;
   /** 被本工具其他页面占用的设备：identity → 占用者 id。 */
   portHolders: LeaseHolders;
+  /**
+   * 输出线的状态 —— **本工具最后一次设置的值**，不是从硬件读回来的。
+   *
+   * 这两条线读不回来（Web Serial 的 getSignals 只给输入线），而打开端口时驱动
+   * 自己会怎么摆它们由驱动说了算。所以这里显示的是驱动默认值，直到用户点过一次为止；
+   * 工具不在 open() 之后主动下发，那会在 ESP32 这类板子上多出一个复位脉冲。
+   */
+  outputSignals: OutputLines;
 
   isOpen: () => boolean;
   /** 当前选中的端口是否正被其他页面占用。 */
@@ -208,6 +251,17 @@ interface ConnectionState {
   setAutoReconnect: (value: boolean) => void;
   toggleConnection: () => Promise<void>;
   send: (bytes: Uint8Array) => Promise<void>;
+  /** 翻转一条输出线并下发。端口没打开时由会话拒掉并写进日志。 */
+  toggleOutputLine: (line: keyof OutputLines) => Promise<void>;
+  /** 发一个 Break 脉冲。 */
+  sendBreak: () => Promise<void>;
+  /**
+   * 读一次输入线。端口没开或读不到时是 null。
+   *
+   * 不把结果存进 store：它只驱动工具栏上那一小块，进了 store 就是每秒把订阅
+   * 这份状态的整棵树重渲染一次（缺陷 D8 的同一个坑）。
+   */
+  readInputSignals: () => Promise<InputSignals | null>;
   pendingBytes: () => number;
 }
 
@@ -220,6 +274,7 @@ export const useConnectionStore = create<ConnectionState>()((set, get) => ({
   sessionState: 'closed',
   openedAt: 0,
   portHolders: leases.holders(),
+  outputSignals: DEFAULT_OUTPUT_SIGNALS,
 
   isOpen: () => get().sessionState === 'open',
 
@@ -323,6 +378,17 @@ export const useConnectionStore = create<ConnectionState>()((set, get) => ({
   },
 
   send: (bytes) => session.send(bytes),
+
+  toggleOutputLine: async (line) => {
+    const next = !get().outputSignals[line];
+    // 先落显示再下发：失败会作为通知进日志，而按钮不该在等 RPC 的那几十毫秒里没反应
+    set((state) => ({ outputSignals: { ...state.outputSignals, [line]: next } }));
+    await session.setSignals({ [line]: next });
+  },
+
+  sendBreak: () => session.sendBreak(BREAK_PULSE_MS),
+
+  readInputSignals: () => session.getSignals(),
 
   pendingBytes: () => session.pendingBytes,
 }));

@@ -42,6 +42,12 @@ function wrap(port: SerialPort): NodePortHandle {
     write: (data, callback) => {
       port.write(Buffer.from(data), callback);
     },
+    set: (signals, callback) => {
+      port.set(signals, callback);
+    },
+    get: (callback) => {
+      port.get((error, status) => callback(error ?? null, status));
+    },
     close: (callback) => {
       // 设备已经拔了的话端口早就不是 open 了，再调 close 只会拿到一个意料之中的错误
       if (!port.isOpen) {

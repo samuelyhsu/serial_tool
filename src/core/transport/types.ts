@@ -34,6 +34,27 @@ export interface ConnectionOptions {
   bufferSize?: number;
 }
 
+/**
+ * 输出信号线。字段名照搬 Web Serial 的 `SerialOutputSignals`，
+ * 桌面端在自己那一层映射成 serialport 的 dtr / rts / brk。
+ *
+ * 只传要改的那几个：一次 setSignals 把没提到的线也一起写一遍，
+ * 在带自动下载电路的开发板上就是一次意料之外的复位。
+ */
+export interface OutputSignals {
+  dataTerminalReady?: boolean;
+  requestToSend?: boolean;
+  break?: boolean;
+}
+
+/** 输入信号线，与 Web Serial 的 `SerialInputSignals` 同形。 */
+export interface InputSignals {
+  clearToSend: boolean;
+  dataCarrierDetect: boolean;
+  dataSetReady: boolean;
+  ringIndicator: boolean;
+}
+
 export interface TransportEvents {
   onData: (chunk: Uint8Array) => void;
   onError: (error: TransportError) => void;
@@ -47,6 +68,15 @@ export interface Transport {
   open(options: ConnectionOptions): Promise<void>;
   close(): Promise<void>;
   write(data: Uint8Array): Promise<void>;
+  /**
+   * 改输出信号线。端口没打开时抛 invalid-state。
+   *
+   * 这是「手动把板子拉进 bootloader」「复位 STM32」「用 Break 唤醒总线设备」
+   * 唯一的入口 —— 打开端口本身会不会拉 DTR 由驱动决定，用户控制不了。
+   */
+  setSignals(signals: OutputSignals): Promise<void>;
+  /** 读输入信号线。没有事件可订阅，只能轮询。 */
+  getSignals(): Promise<InputSignals>;
   /** 返回取消订阅函数。 */
   subscribe(handlers: Partial<TransportEvents>): () => void;
 }

@@ -8,6 +8,8 @@ export type TransportErrorKind =
   | 'read'
   | 'write'
   | 'close-failed'
+  /** 控制信号线读写失败（DTR / RTS / Break，以及 CTS 这些输入线）。 */
+  | 'signals'
   | 'backpressure';
 
 /**

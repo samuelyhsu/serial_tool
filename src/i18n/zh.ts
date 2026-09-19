@@ -13,6 +13,13 @@ export const zh: Messages = {
   flow: '流控',
   none: '无',
   autoReconnect: '自动重连',
+  signals: '控制信号线',
+  outputLineTip:
+    '点一下翻转这条输出线。显示的是本工具最后一次设置的值 —— 这两条线读不回来，' +
+    '端口刚打开时它们由驱动决定（多数是两条都拉起，ESP32 一开口就复位正是因为这个）。' +
+    '本工具不会在打开时替你下发一遍',
+  breakTip: '发一个 250ms 的 Break 脉冲：打断 U-Boot、唤醒总线上的从机用它',
+  inputLineTip: '对端拉起来的输入线，每秒读一次。VS Code 里读不到 RI，那盏灯恒灭',
   selectPort: '选择端口…',
   selectPortTip: '打开浏览器的端口选择器。选中后可以给它起个备注名，方便下次辨认。',
   changePortTip: '点击可重新选择端口',
@@ -182,6 +189,8 @@ export const zh: Messages = {
         return `录制结束，共 ${notice.lines} 行写入 ${notice.target}`;
       case 'record-error':
         return `录制写入失败：${notice.message}`;
+      case 'signal-error':
+        return `信号线设置失败：${notice.message}`;
     }
   },
 

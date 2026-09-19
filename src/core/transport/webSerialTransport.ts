@@ -2,6 +2,8 @@ import { TransportError } from './errors';
 import type {
   CloseReason,
   ConnectionOptions,
+  InputSignals,
+  OutputSignals,
   Transport,
   TransportEvents,
   TransportState,
@@ -141,6 +143,28 @@ export class WebSerialTransport implements Transport {
       return Promise.reject(new TransportError('invalid-state', 'Port is not open'));
     }
     return this.#queue.enqueue(data);
+  }
+
+  async setSignals(signals: OutputSignals): Promise<void> {
+    if (this.#state !== 'open') {
+      throw new TransportError('invalid-state', 'Port is not open');
+    }
+    try {
+      await this.port.setSignals(signals);
+    } catch (error) {
+      throw TransportError.from(error, 'signals', 'Failed to set control signals');
+    }
+  }
+
+  async getSignals(): Promise<InputSignals> {
+    if (this.#state !== 'open') {
+      throw new TransportError('invalid-state', 'Port is not open');
+    }
+    try {
+      return await this.port.getSignals();
+    } catch (error) {
+      throw TransportError.from(error, 'signals', 'Failed to read control signals');
+    }
   }
 
   /**
