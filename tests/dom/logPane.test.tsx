@@ -11,6 +11,7 @@ import {
 } from '@/store/logStore';
 import { useUiStore } from '@/store/uiStore';
 import { LogPane } from '@/ui/LogPane/LogPane';
+import { StatusBar } from '@/ui/StatusBar/StatusBar';
 import { setSelectorMessages } from '@/store/logStore';
 import { messagesFor } from '@/i18n';
 
@@ -404,7 +405,7 @@ describe('时间列的下拉框', () => {
   });
 });
 
-describe('LogPane 的缓冲容量与「更早的未显示」提示', () => {
+describe('缓冲容量与「更早的未显示」提示', () => {
   beforeEach(() => {
     __resetLogStoreForTests();
     setSelectorMessages(messagesFor('zh'));
@@ -421,12 +422,22 @@ describe('LogPane 的缓冲容量与「更早的未显示」提示', () => {
 
   afterEach(cleanup);
 
+  /** 容量控件在状态栏，缩容回执落在接收区的日志里 —— 两边都要渲染出来才走得通。 */
+  function renderBoth(): void {
+    render(
+      <>
+        <LogPane />
+        <StatusBar />
+      </>,
+    );
+  }
+
   function capacityField(): HTMLInputElement {
     return screen.getAllByLabelText('缓冲')[0] as HTMLInputElement;
   }
 
   it('容量输入框显示当前容量，只有下限没有上限', () => {
-    render(<LogPane />);
+    renderBoth();
     const field = capacityField();
     expect(field.value).toBe(String(DEFAULT_LOG_CAPACITY));
     expect(field.min).toBe(String(LOG_CAPACITY_MIN));
@@ -439,7 +450,7 @@ describe('LogPane 的缓冲容量与「更早的未显示」提示', () => {
    */
   it('输入过程中不提交 —— 打字途经的合法值不会把缓冲砍掉', async () => {
     const user = userEvent.setup();
-    render(<LogPane />);
+    renderBoth();
     const field = capacityField();
 
     await user.clear(field);
@@ -455,7 +466,7 @@ describe('LogPane 的缓冲容量与「更早的未显示」提示', () => {
 
   it('回车提交，Esc 放弃并回填生效值', async () => {
     const user = userEvent.setup();
-    render(<LogPane />);
+    renderBoth();
     const field = capacityField();
 
     await user.clear(field);
@@ -470,7 +481,7 @@ describe('LogPane 的缓冲容量与「更早的未显示」提示', () => {
 
   it('远大于默认的容量照收，不再被夹到某个上限', async () => {
     const user = userEvent.setup();
-    render(<LogPane />);
+    renderBoth();
 
     await user.clear(capacityField());
     await user.type(capacityField(), '99999{Enter}');
@@ -480,7 +491,7 @@ describe('LogPane 的缓冲容量与「更早的未显示」提示', () => {
 
   it('低于下限的输入被抬到下限，不会把非法值留在界面上', async () => {
     const user = userEvent.setup();
-    render(<LogPane />);
+    renderBoth();
 
     await user.clear(capacityField());
     await user.type(capacityField(), '1{Enter}');
@@ -490,7 +501,7 @@ describe('LogPane 的缓冲容量与「更早的未显示」提示', () => {
 
   it('空着失焦当作放弃编辑，回填当前值', async () => {
     const user = userEvent.setup();
-    render(<LogPane />);
+    renderBoth();
     await user.clear(capacityField());
     await user.tab();
     expect(capacityField().value).toBe(String(DEFAULT_LOG_CAPACITY));
@@ -499,7 +510,7 @@ describe('LogPane 的缓冲容量与「更早的未显示」提示', () => {
 
   it('缩容丢了记录时在日志里说清楚丢了多少', async () => {
     const user = userEvent.setup();
-    render(<LogPane />);
+    renderBoth();
     act(() => {
       for (let i = 0; i < 1500; i += 1) feed(`line-${i}`);
     });
@@ -515,7 +526,7 @@ describe('LogPane 的缓冲容量与「更早的未显示」提示', () => {
 
   it('没丢东西时只回执新容量，不吓唬人', async () => {
     const user = userEvent.setup();
-    render(<LogPane />);
+    renderBoth();
     act(() => feed('one'));
     await rowTexts();
 
@@ -529,7 +540,7 @@ describe('LogPane 的缓冲容量与「更早的未显示」提示', () => {
   });
 
   it('超出渲染上限时，列表顶部说明更早的还有多少条', async () => {
-    render(<LogPane />);
+    renderBoth();
     act(() => {
       for (let i = 0; i < 1005; i += 1) feed(`line-${i}`);
     });
@@ -541,7 +552,7 @@ describe('LogPane 的缓冲容量与「更早的未显示」提示', () => {
   });
 
   it('条目没超过渲染上限时不显示这条提示', async () => {
-    render(<LogPane />);
+    renderBoth();
     act(() => feed('only-one'));
     await rowTexts(1);
     expect(screen.queryByText(/未在此显示/)).toBeNull();

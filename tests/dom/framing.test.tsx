@@ -5,7 +5,7 @@ import { resolveFraming } from '@/core/framing/frameAssembler';
 import { messagesFor } from '@/i18n';
 import { __resetLogStoreForTests, setSelectorMessages } from '@/store/logStore';
 import { useUiStore } from '@/store/uiStore';
-import { LogPane } from '@/ui/LogPane/LogPane';
+import { StatusBar } from '@/ui/StatusBar/StatusBar';
 
 /** 界面上那个下拉框当前会推给会话的分帧模式。 */
 function effectiveMode(): string {
@@ -21,7 +21,7 @@ function idleInput(): HTMLInputElement {
   return screen.getByLabelText('空闲时长');
 }
 
-describe('接收区分帧控件', () => {
+describe('状态栏的分帧控件', () => {
   beforeEach(() => {
     __resetLogStoreForTests();
     setSelectorMessages(messagesFor('zh'));
@@ -41,20 +41,20 @@ describe('接收区分帧控件', () => {
   afterEach(cleanup);
 
   it('下拉框直接写着当前模式 —— 不必比对两个控件谁在生效', () => {
-    render(<LogPane />);
+    render(<StatusBar />);
     expect(modeSelect()).toHaveValue('idle');
     expect(screen.getByRole('option', { name: '空闲超时', selected: true })).toBeInTheDocument();
   });
 
   it('默认空闲 10ms', () => {
-    render(<LogPane />);
+    render(<StatusBar />);
     expect(idleInput()).toHaveValue(10);
     expect(effectiveMode()).toBe('idle');
   });
 
   it('选「按换行」后 ms 输入框直接消失，界面上只剩一个分帧控件', async () => {
     const user = userEvent.setup();
-    render(<LogPane />);
+    render(<StatusBar />);
     expect(idleInput()).toBeInTheDocument();
 
     await user.selectOptions(modeSelect(), 'line');
@@ -66,7 +66,7 @@ describe('接收区分帧控件', () => {
 
   it('选「原样显示」后同样只剩下拉框', async () => {
     const user = userEvent.setup();
-    render(<LogPane />);
+    render(<StatusBar />);
 
     await user.selectOptions(modeSelect(), 'raw');
 
@@ -76,7 +76,7 @@ describe('接收区分帧控件', () => {
 
   it('切回空闲超时后 ms 输入框回来', async () => {
     const user = userEvent.setup();
-    render(<LogPane />);
+    render(<StatusBar />);
 
     await user.selectOptions(modeSelect(), 'line');
     await user.selectOptions(modeSelect(), 'idle');
@@ -87,7 +87,7 @@ describe('接收区分帧控件', () => {
 
   it('把空闲时长填成 0 会把模式同步成「原样显示」，下拉框不会和实际生效的打架', async () => {
     const user = userEvent.setup();
-    render(<LogPane />);
+    render(<StatusBar />);
 
     await user.clear(idleInput());
     await user.type(idleInput(), '0');
@@ -99,7 +99,7 @@ describe('接收区分帧控件', () => {
 
   it('清空输入框重打时，输入框不会中途消失', async () => {
     const user = userEvent.setup();
-    render(<LogPane />);
+    render(<StatusBar />);
 
     // 清空是「选中重打」的常规动作。若把空串当成 0，模式会立刻变成原样、
     // 输入框自己消失，新值根本打不完。
@@ -113,7 +113,7 @@ describe('接收区分帧控件', () => {
 
   it('输入框留空时失焦，回填当前生效值', async () => {
     const user = userEvent.setup();
-    render(<LogPane />);
+    render(<StatusBar />);
 
     await user.clear(idleInput());
     await user.tab();
@@ -123,7 +123,7 @@ describe('接收区分帧控件', () => {
 
   it('改成 50ms 仍是空闲分帧', async () => {
     const user = userEvent.setup();
-    render(<LogPane />);
+    render(<StatusBar />);
 
     await user.clear(idleInput());
     await user.type(idleInput(), '50');
@@ -134,14 +134,14 @@ describe('接收区分帧控件', () => {
 
   it('HEX 视图下不提供「按换行」选项', () => {
     useUiStore.setState({ view: 'hex' });
-    render(<LogPane />);
+    render(<StatusBar />);
     expect(screen.queryByRole('option', { name: '按换行' })).not.toBeInTheDocument();
     expect(screen.getByRole('option', { name: '空闲超时' })).toBeInTheDocument();
   });
 
   it('在 HEX 视图下，下拉框显示的是实际生效的模式而非存着的偏好', () => {
     useUiStore.setState({ frameMode: 'line', view: 'hex' });
-    render(<LogPane />);
+    render(<StatusBar />);
 
     // 换行分帧在 HEX 下不生效，因此下拉框必须显示回落后的结果
     expect(modeSelect()).toHaveValue('idle');
@@ -150,21 +150,25 @@ describe('接收区分帧控件', () => {
     expect(useUiStore.getState().frameMode).toBe('line');
   });
 
+  /**
+   * 说明搬进了下拉框的 title：状态栏比接收区工具栏还窄，一段随选择变长变短的
+   * 常驻文字会把整条栏挤到折行。它仍然要跟着当前模式走。
+   */
   it('当前模式的说明随选择变化', async () => {
     const user = userEvent.setup();
-    render(<LogPane />);
-    expect(screen.getByText('静默超过设定时长即成一帧')).toBeInTheDocument();
+    render(<StatusBar />);
+    expect(modeSelect()).toHaveAttribute('title', '静默超过设定时长即成一帧');
 
     await user.selectOptions(modeSelect(), 'line');
-    expect(screen.getByText('遇到换行符即成一帧')).toBeInTheDocument();
+    expect(modeSelect()).toHaveAttribute('title', '遇到换行符即成一帧');
 
     await user.selectOptions(modeSelect(), 'raw');
-    expect(screen.getByText(/不做分帧/)).toBeInTheDocument();
+    expect(modeSelect().title).toMatch(/不做分帧/);
   });
 
   it('越界的输入被夹到合法区间', async () => {
     const user = userEvent.setup();
-    render(<LogPane />);
+    render(<StatusBar />);
 
     await user.clear(idleInput());
     await user.type(idleInput(), '99999');
@@ -176,7 +180,7 @@ describe('接收区分帧控件', () => {
   it('英文界面下标签同步翻译', () => {
     useUiStore.setState({ language: 'en' });
     setSelectorMessages(messagesFor('en'));
-    render(<LogPane />);
+    render(<StatusBar />);
     expect(screen.getByLabelText('Framing')).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'On newline' })).toBeInTheDocument();
   });

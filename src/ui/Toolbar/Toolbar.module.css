@@ -170,10 +170,3 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
-
-.switches {
-  display: flex;
-  gap: 4px;
-  padding-left: 10px;
-  border-left: 1px solid var(--line);
-}

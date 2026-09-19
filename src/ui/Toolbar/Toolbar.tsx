@@ -1,7 +1,6 @@
 import { useId } from 'react';
 import type { Parity } from '@/core/transport/types';
 import { useConnectionStore } from '@/store/connectionStore';
-import { useUiStore } from '@/store/uiStore';
 import { useMessages } from '../useMessages';
 import { BaudRateInput } from './BaudRateInput';
 import { PortPicker } from './PortPicker';
@@ -29,11 +28,6 @@ export function Toolbar(): React.JSX.Element {
   // 其他页面占着这个口时不禁用按钮 —— 万一那边是崩溃留下的陈旧登记，
   // 用户仍然要能重试。这里只给提示，真正的拦截在 toggleConnection 里。
   const busyElsewhere = useConnectionStore((s) => s.busyElsewhere());
-
-  const language = useUiStore((s) => s.language);
-  const theme = useUiStore((s) => s.theme);
-  const toggleLanguage = useUiStore((s) => s.toggleLanguage);
-  const toggleTheme = useUiStore((s) => s.toggleTheme);
 
   const isOpen = sessionState === 'open';
   const busy = sessionState === 'opening';
@@ -151,20 +145,6 @@ export function Toolbar(): React.JSX.Element {
         >
           {sessionState === 'closed' ? t.openPort : busy ? t.opening : t.closePort}
         </button>
-
-        <div className={styles.switches}>
-          <button
-            type="button"
-            className="btn"
-            onClick={toggleLanguage}
-            aria-label={t.switchLanguage}
-          >
-            {language === 'zh' ? 'EN' : 'CN'}
-          </button>
-          <button type="button" className="btn" onClick={toggleTheme} aria-label={t.switchTheme}>
-            {theme === 'dark' ? '☀' : '☾'}
-          </button>
-        </div>
       </div>
     </header>
   );

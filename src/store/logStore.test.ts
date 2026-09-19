@@ -122,13 +122,16 @@ describe('logStore', () => {
     const store = useLogStore.getState();
     store.addThroughput('rx', 120);
     store.addThroughput('rx', 80);
-    expect(consumeThroughputWindow()).toBe(200);
-    expect(consumeThroughputWindow()).toBe(0);
+    expect(consumeThroughputWindow()).toEqual({ rx: 200, tx: 0 });
+    expect(consumeThroughputWindow()).toEqual({ rx: 0, tx: 0 });
   });
 
-  it('发送方向不计入接收速率', () => {
-    useLogStore.getState().addThroughput('tx', 500);
-    expect(consumeThroughputWindow()).toBe(0);
+  /** 合在一起数的话，周期发送跑起来时就分不清那些字节是自己发的还是对端回的。 */
+  it('收发两个方向分开数', () => {
+    const store = useLogStore.getState();
+    store.addThroughput('tx', 500);
+    store.addThroughput('rx', 20);
+    expect(consumeThroughputWindow()).toEqual({ rx: 20, tx: 500 });
   });
 });
 

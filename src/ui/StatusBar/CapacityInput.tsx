@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { LOG_CAPACITY_CEILING, LOG_CAPACITY_MIN } from '@/store/logStore';
-import styles from './LogPane.module.css';
+import styles from './StatusBar.module.css';
 
 interface Props {
   id: string;

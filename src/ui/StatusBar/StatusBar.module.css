@@ -1,8 +1,8 @@
 .bar {
   display: flex;
   align-items: center;
-  gap: 18px;
-  padding: 6px 16px;
+  gap: 12px;
+  padding: 5px 16px;
   background: var(--panel);
   border-top: 1px solid var(--line);
   font-family: var(--font-mono);
@@ -25,6 +25,44 @@
 
 /* 积压意味着发得比链路快，属于要让人注意到的状态，用告警色而不是弱化色 */
 .queued {
+  color: var(--amber);
+}
+
+/* 把「链路读数」「分帧」「缓冲」这几组语义不同的东西在视觉上分开 */
+.divider {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 0;
+  background: var(--line);
+}
+
+.modeSelect {
+  /* 够放下最长的一项（"Idle timeout"），不必让下拉宽度随选中项跳动 */
+  width: 104px;
+}
+
+.idleInput {
+  width: 58px;
+}
+
+/* 容量是五位数，比空闲时长宽一点才不至于把数字挤没 */
+.capacityInput {
+  width: 72px;
+}
+
+/* 已存条数与容量输入框是一组读数，内部靠得比栏里其他项更近 */
+.buffer {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* 存满了就开始丢最旧的，这是要让人注意到的状态，不是普通读数 */
+.bufferFull {
+  color: var(--amber);
+}
+
+.matches {
   color: var(--amber);
 }
 

@@ -27,7 +27,7 @@
   font-family: var(--font-sans);
 }
 
-/* 把「显示选项」与「分帧」这两组语义不同的控件在视觉上分开 */
+/* 把「显示选项」与「暂停 / 过滤」这两组语义不同的控件在视觉上分开 */
 .divider {
   width: 1px;
   align-self: stretch;
@@ -35,37 +35,9 @@
   background: var(--line);
 }
 
-.modeSelect {
-  /* 够放下最长的一项（"Idle timeout"），不必让下拉宽度随选中项跳动 */
-  width: 104px;
-}
-
 .stampSelect {
-  /* 同上，按最长的一项（"Date + time"）定宽 */
+  /* 按最长的一项（"Date + time"）定宽，宽度不随选中项跳动 */
   width: 96px;
-}
-
-.idleInput {
-  width: 62px;
-}
-
-/* 容量是五位数，比空闲时长宽一点才不至于把数字挤没 */
-.capacityInput {
-  width: 74px;
-}
-
-/*
- * 当前分帧方式的说明。工具栏窄的时候第一个被牺牲掉 —— 它只是解释，
- * 控件本身已经足够表达状态。
- */
-.frameHint {
-  font-size: 11px;
-  color: var(--dim);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
-  flex: 1 1 0;
 }
 
 .list {

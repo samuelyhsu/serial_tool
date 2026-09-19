@@ -1,22 +1,12 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
-import { resolveFraming, type FrameMode } from '@/core/framing/frameAssembler';
 import { logFileName, type TimestampMode } from '@/core/log/logLine';
 import { downloadText } from '@/lib/download';
-import {
-  latestEntryId,
-  logText,
-  LOG_CAPACITY_MIN,
-  selectRows,
-  useLogStore,
-  type LogRow,
-} from '@/store/logStore';
+import { latestEntryId, logText, selectRows, useLogStore, type LogRow } from '@/store/logStore';
 import { useConnectionStore } from '@/store/connectionStore';
 import { useRecordStore } from '@/store/recordStore';
 import { useUiStore } from '@/store/uiStore';
 import { FormatToggle } from '../FormatToggle';
 import { useConfirm } from '../useConfirm';
-import { CapacityInput } from './CapacityInput';
-import { IdleFrameInput } from './IdleFrameInput';
 import { useMessages } from '../useMessages';
 import styles from './LogPane.module.css';
 
@@ -52,9 +42,6 @@ interface Paused {
 export function LogPane(): React.JSX.Element {
   const t = useMessages();
   const filterId = useId();
-  const modeId = useId();
-  const idleId = useId();
-  const capacityId = useId();
   const stampId = useId();
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -69,8 +56,6 @@ export function LogPane(): React.JSX.Element {
   const filter = useUiStore((s) => s.filter);
   const onlyMatch = useUiStore((s) => s.onlyMatch);
   const filterKind = useUiStore((s) => s.filterKind);
-  const idleFrameMs = useUiStore((s) => s.idleFrameMs);
-  const frameMode = useUiStore((s) => s.frameMode);
   // 逐个订阅 action：selector 返回新对象会让 zustand 每次快照都不相等，触发无谓重渲染
   const setView = useUiStore((s) => s.setView);
   const setTimestampMode = useUiStore((s) => s.setTimestampMode);
@@ -79,28 +64,17 @@ export function LogPane(): React.JSX.Element {
   const setFilter = useUiStore((s) => s.setFilter);
   const setOnlyMatch = useUiStore((s) => s.setOnlyMatch);
   const setFilterKind = useUiStore((s) => s.setFilterKind);
-  const setIdleFrameMs = useUiStore((s) => s.setIdleFrameMs);
-  const setFrameMode = useUiStore((s) => s.setFrameMode);
-
-  // 下拉框显示的必须是**实际生效**的模式，而不是存着的偏好：
-  // 在 HEX 视图下选过的「按换行」并不生效，这时候还显示它就又变回了误导。
-  const effectiveMode = resolveFraming({
-    mode: frameMode,
-    idleMs: idleFrameMs,
-    textView: view === 'text',
-  }).mode;
 
   const sessionState = useConnectionStore((s) => s.sessionState);
   const recording = useRecordStore((s) => s.status);
   const recordSupported = useRecordStore((s) => s.supported);
   const toggleRecord = useRecordStore((s) => s.toggle);
-  const capacity = useLogStore((s) => s.capacity);
-  const setCapacity = useLogStore((s) => s.setCapacity);
+  const setFilterMatches = useLogStore((s) => s.setFilterMatches);
 
   const [paused, setPaused] = useState<Paused | null>(null);
 
   // 缺陷 D7：记忆化的选择器，重渲染不重算；输入过滤词时也只算一次
-  const { rows, hiddenEarlier, filterError } = selectRows({
+  const { rows, matches, hiddenEarlier, filterError } = selectRows({
     version,
     language,
     view,
@@ -112,6 +86,12 @@ export function LogPane(): React.JSX.Element {
     upTo: paused?.upTo ?? null,
     limit: RENDER_LIMIT,
   });
+
+  // 命中数显示在状态栏，但只有这里扫过缓冲 —— 选择器是单槽记忆化的，
+  // 两处各持一份查询条件只会互相把对方的缓存顶掉
+  useEffect(() => {
+    setFilterMatches(matches);
+  }, [matches, setFilterMatches]);
 
   /**
    * 缺陷 D15：原型在每次更新后无条件把滚动条拉到底，用户往上翻查历史时会被强行拽回。
@@ -179,19 +159,6 @@ export function LogPane(): React.JSX.Element {
   // 清空要按两下：缓冲里的全部采集数据连同统计一起丢、不可撤销，而按钮就紧挨着「保存日志」
   const { armed: confirmingClear, confirm } = useConfirm<'clear'>();
 
-  /**
-   * 缩容是破坏性的，所以结果必须回执到日志里：容量一改日志就短了一截，
-   * 不说明的话与「数据丢了」无法区分。
-   */
-  const onCapacityCommit = useCallback(
-    (value: number) => {
-      const dropped = setCapacity(value);
-      const { appendMessage } = useLogStore.getState();
-      appendMessage(dropped > 0 ? t.capacityDropped(value, dropped) : t.capacityChanged(value));
-    },
-    [setCapacity, t],
-  );
-
   const onClear = useCallback(() => {
     confirm('clear', () => {
       clearAll();
@@ -244,41 +211,6 @@ export function LogPane(): React.JSX.Element {
         </label>
 
         <span className={styles.divider} aria-hidden="true" />
-
-        {/*
-          分帧三者互斥，所以只给一个下拉框：关闭状态下它本身就写着当前模式，
-          不需要用户去比对两个控件谁在生效。空闲时长只在选了「空闲超时」时才出现 ——
-          同一时刻界面上永远只有一个跟分帧有关的可调项。
-        */}
-        <label className="label" htmlFor={modeId}>
-          {t.framing}
-        </label>
-        <select
-          id={modeId}
-          className={`field field--sm ${styles.modeSelect}`}
-          value={effectiveMode}
-          title={t.framingHint[effectiveMode]}
-          onChange={(event) => setFrameMode(event.target.value as FrameMode)}
-        >
-          <option value="raw">{t.frameModeRaw}</option>
-          <option value="idle">{t.frameModeIdle}</option>
-          {/* 换行分帧只在 TXT 视图下有意义：HEX 视图里按 `\n` 切没有意义 */}
-          {view === 'text' ? <option value="line">{t.frameModeLine}</option> : null}
-        </select>
-
-        {effectiveMode === 'idle' ? (
-          <>
-            <IdleFrameInput
-              id={idleId}
-              label={t.idleFrame}
-              value={idleFrameMs}
-              onCommit={setIdleFrameMs}
-            />
-            <span className="label">{t.idleFrameUnit}</span>
-          </>
-        ) : null}
-
-        <span className={styles.frameHint}>{t.framingHint[effectiveMode]}</span>
 
         <button
           type="button"
@@ -333,18 +265,6 @@ export function LogPane(): React.JSX.Element {
           </label>
 
           <span className={styles.divider} aria-hidden="true" />
-
-          <label className="label" htmlFor={capacityId}>
-            {t.logCapacity}
-          </label>
-          <CapacityInput
-            id={capacityId}
-            label={t.logCapacity}
-            title={t.logCapacityHint(LOG_CAPACITY_MIN)}
-            value={capacity}
-            onCommit={onCapacityCommit}
-          />
-          <span className="label">{t.logCapacityUnit}</span>
 
           <button
             type="button"

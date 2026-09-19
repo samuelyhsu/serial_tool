@@ -58,7 +58,9 @@ const textFormatter = new FrameFormatter('text');
 let nextId = 1;
 let pending: LogEntry[] = [];
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
-let throughputWindow = 0;
+let rxWindow = 0;
+let txWindow = 0;
+let lastRxTime = 0;
 
 export function entryHex(entry: LogEntry): string {
   if (entry.bytes === null) return '';
@@ -78,6 +80,8 @@ interface LogState {
   version: number;
   /** 环形缓冲容量。超出后自动丢弃最旧的记录。 */
   capacity: number;
+  /** 缓冲里现存的条数。涨到 capacity 就意味着最旧的正在被丢弃。 */
+  size: number;
   rxBytes: number;
   txBytes: number;
   rxFrames: number;
@@ -95,6 +99,14 @@ interface LogState {
   appendNotice: (notice: SessionNotice) => void;
   appendMessage: (text: string) => void;
   addThroughput: (direction: Direction, byteCount: number) => void;
+  /**
+   * 过滤命中数，由接收区渲染后回推。null 表示当前没有过滤词。
+   *
+   * 它本该由状态栏自己算，但那要再扫一遍缓冲，而接收区刚刚扫过同一批条目 ——
+   * 选择器是单槽记忆化的，两处各持一份查询条件只会互相把对方的缓存顶掉。
+   */
+  filterMatches: FilterMatches | null;
+  setFilterMatches: (value: FilterMatches | null) => void;
   /**
    * 改变缓冲容量，返回因缩容被丢弃的记录条数。
    *
@@ -116,6 +128,7 @@ interface LogState {
 export const useLogStore = create<LogState>()((set, get) => ({
   version: 0,
   capacity: ring.capacity,
+  size: 0,
   rxBytes: 0,
   txBytes: 0,
   rxFrames: 0,
@@ -173,8 +186,14 @@ export const useLogStore = create<LogState>()((set, get) => ({
   },
 
   addThroughput: (direction, byteCount) => {
-    if (direction === 'rx') throughputWindow += byteCount;
+    if (direction === 'rx') rxWindow += byteCount;
+    else txWindow += byteCount;
   },
+
+  filterMatches: null,
+
+  setFilterMatches: (value) =>
+    set((state) => (sameMatches(state.filterMatches, value) ? state : { filterMatches: value })),
 
   setCapacity: (value) => {
     if (!isValidLogCapacity(value) || value === ring.capacity) return 0;
@@ -184,7 +203,7 @@ export const useLogStore = create<LogState>()((set, get) => ({
     const dropped = Math.max(0, ring.size - value);
     ring.resize(value);
     saveSoon(LOG_CAPACITY_KEY, value);
-    set((state) => ({ version: state.version + 1, capacity: value }));
+    set((state) => ({ version: state.version + 1, capacity: value, size: ring.size }));
     return dropped;
   },
 
@@ -192,9 +211,12 @@ export const useLogStore = create<LogState>()((set, get) => ({
     ring.clear();
     pending = [];
     textFormatter.reset();
-    throughputWindow = 0;
+    rxWindow = 0;
+    txWindow = 0;
+    lastRxTime = 0;
     set((state) => ({
       version: state.version + 1,
+      size: 0,
       rxBytes: 0,
       txBytes: 0,
       rxFrames: 0,
@@ -231,6 +253,9 @@ function flushNow(): void {
     if (entry.kind === 'rx') {
       rxBytes += entry.bytes?.length ?? 0;
       rxFrames += 1;
+      // 取帧自身的时刻而不是此刻：VS Code 里帧是宿主攒批送来的，回放历史快照时
+      // 用「现在」会把一段几分钟前的日志说成刚刚收到，静默时长直接归零
+      lastRxTime = Math.max(lastRxTime, entry.time.getTime());
     } else if (entry.kind === 'tx') {
       txBytes += entry.bytes?.length ?? 0;
       txFrames += 1;
@@ -239,6 +264,7 @@ function flushNow(): void {
 
   useLogStore.setState((state) => ({
     version: state.version + 1,
+    size: ring.size,
     rxBytes: state.rxBytes + rxBytes,
     txBytes: state.txBytes + txBytes,
     rxFrames: state.rxFrames + rxFrames,
@@ -256,11 +282,31 @@ export function flushPendingEntries(): void {
   flushNow();
 }
 
-/** 取走并清零接收速率统计窗口，由状态栏每秒调用一次。 */
-export function consumeThroughputWindow(): number {
-  const bytes = throughputWindow;
-  throughputWindow = 0;
-  return bytes;
+/**
+ * 取走并清零收发速率统计窗口，由状态栏每秒调用一次。
+ *
+ * 两个方向分开数：周期发送跑起来时，一个合计读数说不清那些字节是自己发出去的
+ * 还是对端回的 —— 而这恰恰是「设备到底有没有应答」的判据。
+ */
+export function consumeThroughputWindow(): ThroughputWindow {
+  const window: ThroughputWindow = { rx: rxWindow, tx: txWindow };
+  rxWindow = 0;
+  txWindow = 0;
+  return window;
+}
+
+export interface ThroughputWindow {
+  rx: number;
+  tx: number;
+}
+
+/**
+ * 最后一帧接收数据的时刻（毫秒），从未收到过则为 0。
+ *
+ * 状态栏据此显示静默时长：字节计数停着不动时，人眼分不出是链路断了还是对端本来就慢。
+ */
+export function lastRxAt(): number {
+  return lastRxTime;
 }
 
 /**
@@ -310,8 +356,21 @@ export interface LogRow {
   segments: RowSegment[];
 }
 
+/** 过滤命中数。`partial` 说明扫描被渲染上限截断了，真实命中只会更多。 */
+export interface FilterMatches {
+  count: number;
+  partial: boolean;
+}
+
+function sameMatches(a: FilterMatches | null, b: FilterMatches | null): boolean {
+  if (a === null || b === null) return a === b;
+  return a.count === b.count && a.partial === b.partial;
+}
+
 export interface LogSelection {
   rows: LogRow[];
+  /** 已扫描范围内命中过滤词的行数；没有过滤词时为 null。 */
+  matches: FilterMatches | null;
   /** 正则写错了的话是那句错误，界面据此把输入框标红。子串模式恒为 null。 */
   filterError: string | null;
   /**
@@ -343,8 +402,15 @@ export interface RowQuery {
   limit: number;
 }
 
+const EMPTY_SELECTION: LogSelection = {
+  rows: [],
+  matches: null,
+  hiddenEarlier: 0,
+  filterError: null,
+};
+
 let cacheKey = '';
-let cacheSelection: LogSelection = { rows: [], hiddenEarlier: 0, filterError: null };
+let cacheSelection: LogSelection = EMPTY_SELECTION;
 
 /**
  * 计算要渲染的行 —— 缺陷 D7 的核心修复。
@@ -375,6 +441,7 @@ export function selectRows(query: RowQuery): LogSelection {
   // 而不是把日志清空 —— 一边打字一边看着行数忽然归零只会让人以为数据没了
   const matcher = compiled.ok ? compiled.matcher : null;
   const rows: LogRow[] = [];
+  let hits = 0;
 
   let scanned = ring.size - 1;
   // 暂停期间先把上界之后的条目跳过去。它们仍在缓冲里，只是这一刻不该出现在画面上
@@ -387,6 +454,7 @@ export function selectRows(query: RowQuery): LogSelection {
     const body = entryBody(entry, query.view, messages);
     const spans = matcher?.find(body) ?? [];
     if (matcher && query.onlyMatch && spans.length === 0) continue;
+    if (spans.length > 0) hits += 1;
 
     rows.push({
       id: entry.id,
@@ -401,9 +469,12 @@ export function selectRows(query: RowQuery): LogSelection {
   rows.reverse();
   // 循环因 limit 提前停下时 scanned 还指着未检查的那条，剩下的都比已渲染的更早。
   // 它们仍在缓冲里、导出时拿得到，只是没渲染。
+  const hiddenEarlier = Math.max(0, scanned + 1);
   const selection: LogSelection = {
     rows,
-    hiddenEarlier: Math.max(0, scanned + 1),
+    // 扫描在凑够 limit 行时就停了，更早的还没看过 —— 那时给出的是个下界，不是总数
+    matches: matcher === null ? null : { count: hits, partial: hiddenEarlier > 0 },
+    hiddenEarlier,
     filterError: compiled.ok ? null : compiled.error,
   };
   cacheKey = key;
@@ -444,14 +515,18 @@ export function __resetLogStoreForTests(): void {
     flushTimer = null;
   }
   nextId = 1;
-  throughputWindow = 0;
+  rxWindow = 0;
+  txWindow = 0;
+  lastRxTime = 0;
   cacheKey = '';
-  cacheSelection = { rows: [], hiddenEarlier: 0, filterError: null };
+  cacheSelection = EMPTY_SELECTION;
   textFormatter.reset();
   ring.resize(DEFAULT_LOG_CAPACITY);
   useLogStore.setState({
     version: 0,
     capacity: DEFAULT_LOG_CAPACITY,
+    size: 0,
+    filterMatches: null,
     rxBytes: 0,
     txBytes: 0,
     rxFrames: 0,

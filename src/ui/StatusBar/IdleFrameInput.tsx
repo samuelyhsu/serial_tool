@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { IDLE_FRAME_MS_MAX } from '@/store/uiStore';
-import styles from './LogPane.module.css';
+import styles from './StatusBar.module.css';
 
 interface Props {
   id: string;

@@ -181,6 +181,11 @@ export const en: Messages = {
   uptime: 'Uptime',
   noTimer: 'No periodic task',
   queued: (bytes) => `${bytes} B queued`,
+  silentFor: (text) => `silent ${text}`,
+  noRx: 'no data yet',
+  bufferUsage: (used, capacity) =>
+    `${used} of ${capacity} entries buffered; the oldest are dropped once full`,
+  filterMatches: (count, partial) => `${partial ? `${count}+` : count} hits`,
 
   unsupportedTitle: 'This browser has no Web Serial',
   unsupportedBody:

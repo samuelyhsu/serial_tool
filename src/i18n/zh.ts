@@ -169,6 +169,11 @@ export const zh: Messages = {
   uptime: '运行',
   noTimer: '无周期任务',
   queued: (bytes) => `积压 ${bytes} B`,
+  silentFor: (text) => `静默 ${text}`,
+  noRx: '未收到数据',
+  bufferUsage: (used, capacity) =>
+    `日志缓冲已存 ${used} 条，容量 ${capacity} 条；存满后自动丢弃最旧的`,
+  filterMatches: (count, partial) => `命中 ${partial ? `${count}+` : count}`,
 
   unsupportedTitle: '此浏览器不支持 Web Serial',
   unsupportedBody:

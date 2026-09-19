@@ -205,6 +205,19 @@ export interface Messages {
   readonly noTimer: string;
   /** 写队列积压。只在真的堵着时才显示，是背压最直接的观测点。 */
   readonly queued: (bytes: number) => string;
+  /**
+   * 距上一帧接收数据过了多久。
+   *
+   * 字节计数停着不动时，「链路断了」和「对端本来就慢」看起来一模一样，
+   * 这个读数是两者唯一的区别。
+   */
+  readonly silentFor: (text: string) => string;
+  /** 一直没收到过数据时代替静默时长显示。 */
+  readonly noRx: string;
+  /** 缓冲占用的说明，挂在「已用 / 容量」那组读数上。 */
+  readonly bufferUsage: (used: number, capacity: number) => string;
+  /** 过滤命中数。`partial` 为真时扫描被渲染上限截断，给出的是下界。 */
+  readonly filterMatches: (count: number, partial: boolean) => string;
 
   // 浏览器支持
   readonly unsupportedTitle: string;
